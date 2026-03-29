@@ -69,67 +69,10 @@ onUpdated(() => {
   background-color: #ffffff;
 }
 
-.dark .preview-container {
-  background-color: #0f172a;
-}
-
 .preview-content {
   max-width: 900px;
   margin: 0 auto;
   padding: 2rem;
   min-height: 100%;
-}
-
-.dark .preview-content {
-  color: #e2e8f0;
-}
-
-.dark .preview-content :deep(h1),
-.dark .preview-content :deep(h2),
-.dark .preview-content :deep(h3),
-.dark .preview-content :deep(h4),
-.dark .preview-content :deep(h5),
-.dark .preview-content :deep(h6) {
-  color: #f1f5f9;
-  border-color: #334155;
-}
-
-.dark .preview-content :deep(code) {
-  background-color: #1e293b;
-}
-
-.dark .preview-content :deep(pre) {
-  background-color: #1e293b;
-}
-
-.dark .preview-content :deep(blockquote) {
-  border-color: #475569;
-  color: #94a3b8;
-}
-
-.dark .preview-content :deep(table th),
-.dark .preview-content :deep(table td) {
-  border-color: #475569;
-}
-
-.dark .preview-content :deep(table tr) {
-  background-color: #1e293b;
-}
-
-.dark .preview-content :deep(table tr:nth-child(2n)) {
-  background-color: #0f172a;
-}
-
-.dark .preview-content :deep(hr) {
-  background-color: #334155;
-}
-
-.dark .preview-content :deep(.table-of-contents) {
-  background-color: #1e293b;
-  border-color: #334155;
-}
-
-.dark .preview-content :deep(a) {
-  color: #60a5fa;
 }
 </style>

@@ -3,7 +3,6 @@
     <Toolbar
       @export-html="exportHTML"
       @export-pdf="exportPDF"
-      @toggle-theme="toggleTheme"
       @open-file="openFile"
       @save-file="saveFile"
     />
@@ -28,7 +27,6 @@ import Preview from './components/Preview.vue'
 import Toolbar from './components/Toolbar.vue'
 import { useMarkdown } from './composables/useMarkdown'
 import { usePDF } from './composables/usePDF'
-import { useTheme } from './composables/useTheme'
 import { save, open, message } from '@tauri-apps/plugin-dialog'
 import { writeTextFile, readTextFile } from '@tauri-apps/plugin-fs'
 import exampleContent from './assets/example.md?raw'
@@ -37,7 +35,6 @@ import exampleContent from './assets/example.md?raw'
 const content = ref(exampleContent)
 const { render } = useMarkdown()
 const { exportToPDF } = usePDF()
-const { isDark, toggle: toggleTheme } = useTheme()
 const previewRef = ref<InstanceType<typeof Preview>>()
 
 // 计算渲染后的 HTML
@@ -142,15 +139,7 @@ async function saveFile() {
 
 // 初始化
 onMounted(() => {
-  // 应用主题
-  if (isDark.value) {
-    document.documentElement.classList.add('dark')
-  }
-
-  // 加载 example.md
-  if (exampleContent) {
-    content.value = exampleContent
-  }
+  // 应用已加载
 })
 </script>
 

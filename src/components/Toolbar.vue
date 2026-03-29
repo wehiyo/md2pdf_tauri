@@ -57,39 +57,14 @@
     </div>
 
     <div class="toolbar-right">
-      <button
-        class="btn btn-icon"
-        @click="$emit('toggle-theme')"
-        title="切换主题"
-      >
-        <svg v-if="isDark" class="btn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-          <circle cx="12" cy="12" r="5"/>
-          <line x1="12" y1="1" x2="12" y2="3"/>
-          <line x1="12" y1="21" x2="12" y2="23"/>
-          <line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/>
-          <line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/>
-          <line x1="1" y1="12" x2="3" y2="12"/>
-          <line x1="21" y1="12" x2="23" y2="12"/>
-          <line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/>
-          <line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/>
-        </svg>
-        <svg v-else class="btn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-          <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/>
-        </svg>
-      </button>
     </div>
   </div>
 </template>
 
 <script setup lang="ts">
-import { useTheme } from '../composables/useTheme'
-
-const { isDark } = useTheme()
-
 defineEmits<{
   'export-html': []
   'export-pdf': []
-  'toggle-theme': []
   'open-file': []
   'save-file': []
 }>()
@@ -106,11 +81,6 @@ defineEmits<{
   border-bottom: 1px solid #e2e8f0;
 }
 
-.dark .toolbar {
-  background-color: #1e293b;
-  border-bottom-color: #334155;
-}
-
 .toolbar-left {
   display: flex;
   align-items: center;
@@ -123,10 +93,6 @@ defineEmits<{
   font-weight: 600;
   font-size: 1.125rem;
   color: #1f2937;
-}
-
-.dark .logo {
-  color: #f1f5f9;
 }
 
 .logo-icon {
@@ -173,42 +139,8 @@ defineEmits<{
   color: #475569;
 }
 
-.dark .btn-secondary {
-  background-color: #334155;
-  color: #cbd5e1;
-}
-
 .btn-secondary:hover {
   background-color: #e2e8f0;
-}
-
-.dark .btn-secondary:hover {
-  background-color: #475569;
-}
-
-.btn-icon {
-  width: 36px;
-  height: 36px;
-  padding: 0;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  background-color: transparent;
-  color: #64748b;
-}
-
-.dark .btn-icon {
-  color: #94a3b8;
-}
-
-.btn-icon:hover {
-  background-color: #f1f5f9;
-  color: #1f2937;
-}
-
-.dark .btn-icon:hover {
-  background-color: #334155;
-  color: #f1f5f9;
 }
 
 .btn svg {
@@ -216,19 +148,10 @@ defineEmits<{
   height: 16px;
 }
 
-.btn-icon svg {
-  width: 20px;
-  height: 20px;
-}
-
 .divider {
   width: 1px;
   height: 24px;
   background-color: #e2e8f0;
   margin: 0 0.5rem;
-}
-
-.dark .divider {
-  background-color: #334155;
 }
 </style>
