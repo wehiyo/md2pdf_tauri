@@ -40,7 +40,11 @@
             "fs:default",
             "fs:allow-read-text-file",
             "fs:allow-write-text-file",
-            "fs:allow-read-dir"
+            "fs:allow-read-dir",
+            "fs:allow-write-file",
+            "fs:allow-remove",
+            "fs:allow-temp-write",
+            "fs:allow-temp-read"
           ]
         }
       ]

@@ -1,6 +1,7 @@
 import MarkdownIt from 'markdown-it'
 import footnote from 'markdown-it-footnote'
-import taskLists from 'markdown-it-task-lists'
+// taskLists 插件暂时禁用
+// import taskLists from 'markdown-it-task-lists'
 import sup from 'markdown-it-sup'
 import sub from 'markdown-it-sub'
 import abbr from 'markdown-it-abbr'
@@ -131,7 +132,7 @@ md.renderer.rules.fence = (tokens, idx, options, env, self) => {
 }
 
 // 处理行内数学公式
-md.renderer.rules.text = (tokens, idx, options, env, self) => {
+md.renderer.rules.text = (tokens, idx, _options, _env, _self) => {
   let content = tokens[idx].content
 
   // 匹配 $...$ 格式的行内公式
