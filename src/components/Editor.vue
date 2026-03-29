@@ -60,3 +60,4 @@ const content = computed({
 .editor::placeholder {
   color: #9ca3af;
 }
+</style>

@@ -5,7 +5,6 @@ import sup from 'markdown-it-sup'
 import sub from 'markdown-it-sub'
 import abbr from 'markdown-it-abbr'
 import deflist from 'markdown-it-deflist'
-import emoji from 'markdown-it-emoji'
 import anchor from 'markdown-it-anchor'
 import toc from 'markdown-it-table-of-contents'
 import hljs from 'highlight.js'
@@ -31,14 +30,16 @@ const md = new MarkdownIt({
 
 // 使用插件
 md.use(footnote)
-md.use(taskLists, { enabled: true })
+// 暂时禁用 task-lists 插件
+// md.use(taskLists, { enabled: true })
 md.use(sup)
 md.use(sub)
 md.use(abbr)
 md.use(deflist)
-md.use(emoji)
+// 暂时禁用 emoji 插件以避免导入问题
+// md.use(emoji)
 md.use(anchor, {
-  permalink: anchor.permalink.headerAnchor(),
+  permalink: true,
   level: [1, 2, 3]
 })
 md.use(toc, {
@@ -46,7 +47,63 @@ md.use(toc, {
   containerClass: 'table-of-contents'
 })
 
-// 自定义 Mermaid 代码块渲染
+// 添加 $$ 块级公式解析规则
+md.block.ruler.before('fence', 'math_block', function math_block(state, startLine, endLine, silent) {
+  const marker = '$$'
+  const pos = state.bMarks[startLine] + state.tShift[startLine]
+  const max = state.eMarks[startLine]
+
+  // 检查当前行是否以 $$ 开头
+  if (pos + marker.length > max || state.src.substring(pos, pos + marker.length) !== marker) {
+    return false
+  }
+
+  // 查找结束标记 $$
+  let nextLine = startLine + 1
+  let contentEnd = -1
+
+  while (nextLine < endLine) {
+    const linePos = state.bMarks[nextLine] + state.tShift[nextLine]
+    const lineMax = state.eMarks[nextLine]
+
+    if (linePos < lineMax && state.src.substring(linePos, linePos + marker.length) === marker) {
+      contentEnd = nextLine
+      break
+    }
+    nextLine++
+  }
+
+  if (contentEnd < 0) {
+    return false
+  }
+
+  if (!silent) {
+    const token = state.push('math_block', 'div', 0)
+    token.content = state.src.substring(
+      state.bMarks[startLine] + state.tShift[startLine] + marker.length,
+      state.bMarks[contentEnd] + state.tShift[contentEnd]
+    ).trim()
+    token.map = [startLine, contentEnd + 1]
+  }
+
+  state.line = contentEnd + 1
+  return true
+})
+
+// 渲染 math_block
+md.renderer.rules.math_block = (tokens, idx) => {
+  const content = tokens[idx].content
+  try {
+    return katex.renderToString(content, {
+      displayMode: true,
+      throwOnError: false
+    })
+  } catch (error) {
+    return `<pre class="error">${content}</pre>`
+  }
+}
+
+// 自定义 fence 渲染器处理 Mermaid 和代码块
 const defaultFence = md.renderer.rules.fence?.bind(md.renderer.rules)
 md.renderer.rules.fence = (tokens, idx, options, env, self) => {
   const token = tokens[idx]
@@ -74,7 +131,6 @@ md.renderer.rules.fence = (tokens, idx, options, env, self) => {
 }
 
 // 处理行内数学公式
-const defaultTextRenderer = md.renderer.rules.text?.bind(md.renderer.rules)
 md.renderer.rules.text = (tokens, idx, options, env, self) => {
   let content = tokens[idx].content
 
@@ -90,20 +146,7 @@ md.renderer.rules.text = (tokens, idx, options, env, self) => {
     }
   })
 
-  // 匹配 $$...$$ 格式的块级公式
-  content = content.replace(/\$\$([^$]+)\$\$/g, (match, formula) => {
-    try {
-      return katex.renderToString(formula, {
-        displayMode: true,
-        throwOnError: false
-      })
-    } catch (error) {
-      return match
-    }
-  })
-
-  tokens[idx].content = content
-  return defaultTextRenderer?.(tokens, idx, options, env, self) || content
+  return content
 }
 
 export function useMarkdown() {

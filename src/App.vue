@@ -236,3 +236,4 @@ onMounted(() => {
 .dark .editor-pane {
   border-right-color: #334155;
 }
+</style>

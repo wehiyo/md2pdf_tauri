@@ -6,7 +6,7 @@
   "build": {
     "beforeDevCommand": "npm run dev",
     "beforeBuildCommand": "npm run build",
-    "devUrl": "http://localhost:1420",
+    "devUrl": "http://localhost:5173",
     "frontendDist": "../dist"
   },
   "app": {
@@ -40,11 +40,7 @@
             "fs:default",
             "fs:allow-read-text-file",
             "fs:allow-write-text-file",
-            "fs:allow-read-dir",
-            "fs:allow-home-dir",
-            "fs:allow-desktop-dir",
-            "fs:allow-download-dir",
-            "fs:allow-document-dir"
+            "fs:allow-read-dir"
           ]
         }
       ]
