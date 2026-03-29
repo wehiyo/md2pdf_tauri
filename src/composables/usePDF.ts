@@ -351,15 +351,22 @@ export function usePDF() {
     }
 
     /* 页码元素样式 */
-    .page-number {
+    .page-footer {
       position: absolute;
+      bottom: -2.3cm;
       left: 0;
       right: 0;
-      text-align: center;
+      height: 1cm;
+      display: flex;
+      align-items: center;
+      justify-content: flex-end;
+      padding-right: 0;
+    }
+
+    .page-number {
       font-size: 10pt;
       color: #6b7280;
-      pointer-events: none;
-      height: 20px;
+      padding-right: 0.5cm;
     }
 
     .cover-page {
@@ -556,23 +563,35 @@ export function usePDF() {
 
         // 为目录页添加罗马数字页码
         for (let i = 0; i < tocPageCount; i++) {
-          const pageNum = document.createElement('div');
+          const pageFooter = document.createElement('div');
+          pageFooter.className = 'page-footer';
+
+          const pageNum = document.createElement('span');
           pageNum.className = 'page-number';
           pageNum.textContent = toRoman(i + 1);
+
+          pageFooter.appendChild(pageNum);
+
           // 计算页码在文档中的绝对位置
           const pageTop = coverHeight + (i * CONTENT_HEIGHT);
-          pageNum.style.top = (pageTop + CONTENT_HEIGHT - 20) + 'px';
-          document.body.appendChild(pageNum);
+          pageFooter.style.top = (pageTop + CONTENT_HEIGHT + 10) + 'px';
+          document.body.appendChild(pageFooter);
         }
 
         // 为正文页添加阿拉伯数字页码
         for (let i = 0; i < contentPageCount; i++) {
-          const pageNum = document.createElement('div');
+          const pageFooter = document.createElement('div');
+          pageFooter.className = 'page-footer';
+
+          const pageNum = document.createElement('span');
           pageNum.className = 'page-number';
           pageNum.textContent = (i + 1);
+
+          pageFooter.appendChild(pageNum);
+
           const pageTop = coverHeight + tocHeight + (i * CONTENT_HEIGHT);
-          pageNum.style.top = (pageTop + CONTENT_HEIGHT - 20) + 'px';
-          document.body.appendChild(pageNum);
+          pageFooter.style.top = (pageTop + CONTENT_HEIGHT + 10) + 'px';
+          document.body.appendChild(pageFooter);
         }
       }
     })();
