@@ -1,5 +1,4 @@
 import { save, message } from '@tauri-apps/plugin-dialog'
-import { PDFDocument, PDFPage, rgb, StandardFonts } from 'pdf-lib'
 
 export function usePDF() {
   /**
@@ -14,13 +13,13 @@ export function usePDF() {
       const tocData = extractTOC(htmlContent)
 
       // 第一步：创建 iframe 并计算真实页码
-      const { pageNumbers, totalPages } = await calculatePageNumbers(contentWithoutToc, tocData, title)
+      const { pageNumbers, totalPages, tocPages } = await calculatePageNumbers(contentWithoutToc, tocData, title)
 
       // 第二步：生成带真实页码的目录
       const tocHtml = generateTOCHtmlWithRealPageNumbers(tocData, pageNumbers)
 
       // 第三步：生成最终 HTML 并打印
-      await generateAndPrintPDF(contentWithoutToc, tocHtml, tocData, title, pageNumbers)
+      await generateAndPrintPDF(contentWithoutToc, tocHtml, tocData, title, pageNumbers, tocPages)
 
     } catch (error) {
       console.error('导出 PDF 失败:', error)
@@ -36,7 +35,7 @@ export function usePDF() {
     contentWithoutToc: string,
     tocData: Array<{ level: number; text: string; id: string }>,
     title: string
-  ): Promise<{ pageNumbers: Map<string, number>, totalPages: number }> {
+  ): Promise<{ pageNumbers: Map<string, number>, totalPages: number, tocPages: number }> {
     return new Promise((resolve) => {
       // 创建测量用的 iframe
       const iframe = document.createElement('iframe')
@@ -53,7 +52,7 @@ export function usePDF() {
       const iframeDoc = iframe.contentDocument || iframe.contentWindow?.document
       if (!iframeDoc) {
         document.body.removeChild(iframe)
-        resolve({ pageNumbers: new Map(), totalPages: 0 })
+        resolve({ pageNumbers: new Map(), totalPages: 0, tocPages: 0 })
         return
       }
 
@@ -70,8 +69,8 @@ export function usePDF() {
         // 可用高度约：297mm - 20mm - 25mm = 252mm ≈ 715px (at 96dpi)
         const pageHeight = 715
 
-        // 封面页占 1 页（强制分页）
-        // 目录页：需要计算
+        // 封面页（无页码）
+        // 目录页：需要计算页数（使用罗马数字 i, ii, iii...）
         const tocElement = iframeDoc.querySelector('.toc-page')
         let tocPages = 1
         if (tocElement) {
@@ -80,11 +79,10 @@ export function usePDF() {
           if (tocPages < 1) tocPages = 1
         }
 
-        // 正文从第 (1 + tocPages + 1) 页开始
-        // 封面(1) + 目录(tocPages) + 正文开始
-        const contentStartPage = 2 + tocPages
+        // 正文从第 1 页开始（阿拉伯数字）
+        // 封面 + 目录 之后，正文重新开始编号
 
-        // 计算每个标题的真实页码
+        // 计算每个标题的真实正文页码（从 1 开始）
         const mainContent = iframeDoc.querySelector('.main-content')
         if (mainContent) {
           const contentRect = mainContent.getBoundingClientRect()
@@ -95,7 +93,8 @@ export function usePDF() {
             if (element) {
               const elementRect = element.getBoundingClientRect()
               const relativeTop = elementRect.top - contentTop
-              const pageNumber = Math.floor(relativeTop / pageHeight) + contentStartPage
+              // 正文页码从 1 开始
+              const pageNumber = Math.floor(relativeTop / pageHeight) + 1
               pageNumbers.set(heading.id, pageNumber)
             }
           })
@@ -104,7 +103,7 @@ export function usePDF() {
         // 估算总页数
         const mainContentHeight = mainContent?.getBoundingClientRect().height || 0
         const contentPages = Math.ceil(mainContentHeight / pageHeight)
-        const totalPages = contentStartPage + contentPages - 1
+        const totalPages = tocPages + contentPages
 
         // 清理 iframe
         setTimeout(() => {
@@ -113,7 +112,7 @@ export function usePDF() {
           }
         }, 100)
 
-        resolve({ pageNumbers, totalPages })
+        resolve({ pageNumbers, totalPages, tocPages })
       }
 
       // 等待资源加载
@@ -307,7 +306,8 @@ export function usePDF() {
     tocHtml: string,
     tocData: Array<{ level: number; text: string; id: string }>,
     title: string,
-    pageNumbers: Map<string, number>
+    pageNumbers: Map<string, number>,
+    tocPages: number
   ): Promise<void> {
     // 生成带分页锚点的正文
     const contentWithPageAnchors = addPageAnchors(contentWithoutToc, tocData)
@@ -340,7 +340,20 @@ export function usePDF() {
 
     @page toc {
       margin: 2cm 2.5cm 2.5cm 2.5cm;
-      @bottom-right { content: none; }
+      @bottom-right {
+        content: counter(page, lower-roman);
+        font-size: 10pt;
+        color: #6b7280;
+      }
+    }
+
+    @page content {
+      margin: 2cm 2.5cm 2.5cm 2.5cm;
+      @bottom-right {
+        content: counter(page);
+        font-size: 10pt;
+        color: #6b7280;
+      }
     }
 
     body {
@@ -389,6 +402,8 @@ export function usePDF() {
       page-break-before: always;
       page-break-after: always;
       padding: 0;
+      /* 目录页使用罗马数字计数器，从 i 开始 */
+      counter-reset: page ${tocPages > 0 ? 0 : 0};
     }
 
     .toc-page h2 {
@@ -462,7 +477,10 @@ export function usePDF() {
     }
 
     .main-content {
+      page: content;
       page-break-before: always;
+      /* 正文页从 1 开始计数 */
+      counter-reset: page 0;
     }
 
     .main-content h1:first-child {
