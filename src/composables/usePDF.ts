@@ -357,6 +357,8 @@ export function usePDF() {
     }
 
     body {
+      /* 全局页码计数器初始化为 0 */
+      counter-reset: page 0;
       font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
       font-size: 11pt;
       line-height: 1.6;
