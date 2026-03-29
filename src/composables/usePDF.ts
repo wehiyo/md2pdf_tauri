@@ -353,7 +353,6 @@ export function usePDF() {
     /* 页码元素样式 */
     .page-footer {
       position: absolute;
-      bottom: -2.3cm;
       left: 0;
       right: 0;
       height: 1cm;
@@ -366,7 +365,7 @@ export function usePDF() {
     .page-number {
       font-size: 10pt;
       color: #6b7280;
-      padding-right: 0.5cm;
+      padding-right: 0;
     }
 
     .cover-page {
@@ -542,26 +541,25 @@ export function usePDF() {
       function insertPageNumbers() {
         // A4 页面高度（像素，96dpi）= 297mm * 3.7795 ≈ 1123px
         const A4_HEIGHT = 1123;
-        // 页边距：上 2cm ≈ 76px，下 2.5cm ≈ 95px
-        // 可用内容高度 ≈ 1123 - 76 - 95 = 952px
-        const CONTENT_HEIGHT = 952;
+        // 页脚距离页面底部的偏移（在页边距区域内）
+        const FOOTER_OFFSET = 70; // 距离页面底部约 70px
 
         // 封面页高度
         const coverPage = document.querySelector('.cover-page');
         const coverHeight = coverPage ? coverPage.offsetHeight : A4_HEIGHT;
-        const coverPages = Math.ceil(coverHeight / CONTENT_HEIGHT) || 1;
 
         // 目录页
         const tocPage = document.querySelector('.toc-page');
         const tocHeight = tocPage ? tocPage.offsetHeight : 0;
-        const tocPageCount = Math.max(1, Math.ceil(tocHeight / CONTENT_HEIGHT));
+        const tocPageCount = Math.max(1, Math.ceil(tocHeight / A4_HEIGHT));
 
         // 正文页
         const mainContent = document.querySelector('.main-content');
         const contentHeight = mainContent ? mainContent.offsetHeight : 0;
-        const contentPageCount = Math.max(1, Math.ceil(contentHeight / CONTENT_HEIGHT));
+        const contentPageCount = Math.max(1, Math.ceil(contentHeight / A4_HEIGHT));
 
         // 为目录页添加罗马数字页码
+        // 目录页从第 2 页开始（第 1 页是封面）
         for (let i = 0; i < tocPageCount; i++) {
           const pageFooter = document.createElement('div');
           pageFooter.className = 'page-footer';
@@ -572,13 +570,16 @@ export function usePDF() {
 
           pageFooter.appendChild(pageNum);
 
-          // 计算页码在文档中的绝对位置
-          const pageTop = coverHeight + (i * CONTENT_HEIGHT);
-          pageFooter.style.top = (pageTop + CONTENT_HEIGHT + 10) + 'px';
+          // 计算页码位置：页面底部 - 偏移量
+          // 第 2 页开始是目录
+          const pageBottom = (1 + i + 1) * A4_HEIGHT;
+          pageFooter.style.top = (pageBottom - FOOTER_OFFSET) + 'px';
           document.body.appendChild(pageFooter);
         }
 
         // 为正文页添加阿拉伯数字页码
+        // 正文页从目录之后开始
+        const contentStartPage = 1 + tocPageCount; // 封面(1) + 目录页数
         for (let i = 0; i < contentPageCount; i++) {
           const pageFooter = document.createElement('div');
           pageFooter.className = 'page-footer';
@@ -589,8 +590,8 @@ export function usePDF() {
 
           pageFooter.appendChild(pageNum);
 
-          const pageTop = coverHeight + tocHeight + (i * CONTENT_HEIGHT);
-          pageFooter.style.top = (pageTop + CONTENT_HEIGHT + 10) + 'px';
+          const pageBottom = (contentStartPage + i + 1) * A4_HEIGHT;
+          pageFooter.style.top = (pageBottom - FOOTER_OFFSET) + 'px';
           document.body.appendChild(pageFooter);
         }
       }
