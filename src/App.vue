@@ -158,7 +158,10 @@ async function exportHTML() {
 
 // 导出 PDF
 async function exportPDF() {
-  await exportToPDF(renderedHtml.value)
+  // 从预览区域获取已渲染的 HTML（包含 Mermaid SVG）
+  const previewElement = document.querySelector('.preview-content')
+  const previewContent = previewElement?.innerHTML || renderedHtml.value
+  await exportToPDF(previewContent)
 }
 
 // 打开文件
