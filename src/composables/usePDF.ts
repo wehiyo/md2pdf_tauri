@@ -13,11 +13,11 @@ export function usePDF() {
         .replace(/<div class="table-of-contents">.*?<\/div>/gs, '')
         .replace(/\[\[toc\]\]/gi, '')
 
-      // 生成目录数据（用于分页锚点）
-      const tocData = extractTOC(contentWithoutToc)
+      // 提取标题数据（h1-h4，用于分页和书签）
+      const headings = extractHeadings(contentWithoutToc)
 
       // 生成 PDF
-      await generatePDF(contentWithoutToc, tocData, title)
+      await generatePDF(contentWithoutToc, headings, title)
 
     } catch (error) {
       console.error('导出 PDF 失败:', error)
@@ -30,10 +30,10 @@ export function usePDF() {
    */
   async function generatePDF(
     contentWithoutToc: string,
-    tocData: Array<{ level: number; text: string; id: string }>,
+    headings: Array<{ level: number; text: string; id: string }>,
     title: string
   ): Promise<void> {
-    const contentWithPageAnchors = addPageAnchors(contentWithoutToc, tocData)
+    const contentWithPageAnchors = addPageAnchors(contentWithoutToc, headings)
 
     // 创建 HTML 文档（封面 + 正文，无目录页）
     const fullHtml = `<!DOCTYPE html>
@@ -64,7 +64,7 @@ export function usePDF() {
     .main-content h1:first-child { margin-top: 0; }
     .markdown-body { max-width: none; }
 
-    h1, h2, h3 { page-break-after: avoid; }
+    h1, h2, h3, h4 { page-break-after: avoid; }
     pre, blockquote, table, figure, img, svg, .mermaid { page-break-inside: avoid; }
     * { -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
   </style>
@@ -83,7 +83,7 @@ export function usePDF() {
 </html>`
 
     // 提示用户并打开打印对话框
-    await message('即将打开打印对话框。\n\n请在打印对话框中选择"Microsoft Print to PDF"保存 PDF 文件。\n保存完成后，请选择刚才保存的 PDF 文件，程序将为其添加页码。', {
+    await message('即将打开打印对话框。\n\n请在打印对话框中选择"Microsoft Print to PDF"保存 PDF 文件。\n保存完成后，请选择刚才保存的 PDF 文件，程序将为其添加页码和书签。', {
       title: '导出 PDF',
       kind: 'info'
     })
@@ -113,6 +113,9 @@ export function usePDF() {
     // 等待内容渲染
     await new Promise(resolve => setTimeout(resolve, 2000))
 
+    // 计算标题所在页码
+    const bookmarkData = calculateBookmarkPages(iframeDoc, headings)
+
     // 打开打印对话框
     const iframeWindow = iframe.contentWindow
     if (iframeWindow) {
@@ -135,30 +138,66 @@ export function usePDF() {
     })
 
     if (!selectedPdf || typeof selectedPdf !== 'string') {
-      await message('未选择 PDF 文件，无法添加页码。', { title: '取消', kind: 'warning' })
+      await message('未选择 PDF 文件，无法添加页码和书签。', { title: '取消', kind: 'warning' })
       return
     }
 
-    // 添加页码并覆盖原文件
+    // 添加页码和书签
     try {
       const pdfBytes = await readFile(selectedPdf)
-      const pdfWithNumbers = await addPageNumbersToPDF(pdfBytes)
-      await writeFile(selectedPdf, pdfWithNumbers)
-      await message(`PDF 已保存并添加页码：${selectedPdf}`, { title: '成功', kind: 'info' })
+      const pdfWithEnhancements = await enhancePDF(pdfBytes, bookmarkData)
+      await writeFile(selectedPdf, pdfWithEnhancements)
+      await message(`PDF 已保存，包含页码和书签：${selectedPdf}`, { title: '成功', kind: 'info' })
     } catch (error) {
-      console.error('添加页码失败:', error)
-      await message('添加页码失败：' + String(error), { title: '错误', kind: 'error' })
+      console.error('PDF 增强失败:', error)
+      await message('PDF 增强失败：' + String(error), { title: '错误', kind: 'error' })
     }
+  }
+
+  /**
+   * 计算标题所在的页码
+   */
+  function calculateBookmarkPages(
+    iframeDoc: Document,
+    headings: Array<{ level: number; text: string; id: string }>
+  ): Array<{ level: number; text: string; pageNumber: number }> {
+    const result: Array<{ level: number; text: string; pageNumber: number }> = []
+    const pageHeight = 715 // A4 可打印区域高度（像素）
+    const mainContent = iframeDoc.querySelector('.main-content')
+
+    if (!mainContent) return result
+
+    const contentRect = mainContent.getBoundingClientRect()
+    const contentTop = contentRect.top
+
+    headings.forEach((heading) => {
+      const element = iframeDoc.getElementById(heading.id)
+      if (element) {
+        const elementRect = element.getBoundingClientRect()
+        const relativeTop = elementRect.top - contentTop
+        // 封面页是第 0 页，正文从第 1 页开始（PDF 页码索引）
+        const pageNumber = Math.floor(relativeTop / pageHeight) + 1
+        result.push({
+          level: heading.level,
+          text: heading.text,
+          pageNumber: pageNumber
+        })
+      }
+    })
+
+    return result
   }
 
   return { exportToPDF }
 }
 
 /**
- * 使用 pdf-lib 为 PDF 添加页码
- * 封面页无页码，正文页从第1页开始
+ * 使用 pdf-lib 为 PDF 添加页码和书签
  */
-async function addPageNumbersToPDF(pdfBytes: Uint8Array): Promise<Uint8Array> {
+async function enhancePDF(
+  pdfBytes: Uint8Array,
+  bookmarkData: Array<{ level: number; text: string; pageNumber: number }>
+): Promise<Uint8Array> {
   const pdfDoc = await PDFDocument.load(pdfBytes)
   const pages = pdfDoc.getPages()
   const font = await pdfDoc.embedFont(StandardFonts.Helvetica)
@@ -167,18 +206,17 @@ async function addPageNumbersToPDF(pdfBytes: Uint8Array): Promise<Uint8Array> {
   const pageWidth = 595.28
 
   // 页码位置参数
-  const marginRight = 70 // 右边距 (约 2.5cm)
-  const marginBottom = 57 // 下边距 (约 2cm)
+  const marginRight = 70
+  const marginBottom = 57
   const fontSize = 10
 
+  // 添加页码
   for (let i = 0; i < pages.length; i++) {
     // 封面页（第 0 页）不添加页码
     if (i === 0) continue
 
     const page = pages[i]
-
-    // 正文页码从 1 开始
-    const pageNum = i // i=1 对应第1页，i=2 对应第2页...
+    const pageNum = i
     const text = `- ${pageNum} -`
     const textWidth = font.widthOfTextAtSize(text, fontSize)
     const x = pageWidth - marginRight - textWidth
@@ -189,16 +227,103 @@ async function addPageNumbersToPDF(pdfBytes: Uint8Array): Promise<Uint8Array> {
       y,
       size: fontSize,
       font,
-      color: rgb(0.42, 0.45, 0.5) // #6b7280
+      color: rgb(0.42, 0.45, 0.5)
     })
+  }
+
+  // 添加书签
+  if (bookmarkData.length > 0) {
+    addPDFOutlines(pdfDoc, bookmarkData)
   }
 
   return pdfDoc.save()
 }
 
-function extractTOC(htmlContent: string): Array<{ level: number; text: string; id: string }> {
+/**
+ * 使用 pdf-lib 底层 API 添加 PDF 大纲（书签）
+ * 目前仅支持一级书签（h1 标题）
+ */
+function addPDFOutlines(
+  pdfDoc: PDFDocument,
+  bookmarkData: Array<{ level: number; text: string; pageNumber: number }>
+): void {
+  const context = pdfDoc.context
+  const pages = pdfDoc.getPages()
+
+  // 只处理一级书签（h1）
+  const level1Items = bookmarkData.filter(item => item.level === 1)
+
+  if (level1Items.length === 0) return
+
+  // 使用 any 类型绕过 TypeScript 的类型检查，因为 pdf-lib 的底层 API 类型定义不完整
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const catalog = pdfDoc.catalog as any
+
+  // 创建大纲字典
+  const outlinesDict = context.obj({})
+  const outlinesRef = context.register(outlinesDict)
+
+  // 存储大纲项引用
+  const itemRefs: ReturnType<typeof context.register>[] = []
+
+  // 创建每个大纲项
+  for (const item of level1Items) {
+    const page = pages[item.pageNumber]
+    if (!page) continue
+
+    // 创建目标数组
+    const destArray = context.obj([
+      page.ref,
+      'XYZ',
+      null,
+      null,
+      null
+    ])
+
+    // 创建大纲项字典
+    const itemDict = context.obj({
+      Title: item.text, // context.obj 会自动将字符串转为 PDFName，但我们需要 PDFString
+      Dest: destArray,
+      Parent: outlinesRef
+    })
+
+    const itemRef = context.register(itemDict)
+    itemRefs.push(itemRef)
+  }
+
+  if (itemRefs.length === 0) return
+
+  // 设置大纲项之间的链接
+  for (let i = 0; i < itemRefs.length; i++) {
+    const itemDict = context.lookup(itemRefs[i])
+    if (itemDict && typeof itemDict === 'object' && 'set' in itemDict) {
+      const dict = itemDict as { set: (key: string, value: unknown) => void }
+      if (i > 0) {
+        dict.set('Prev', itemRefs[i - 1])
+      }
+      if (i < itemRefs.length - 1) {
+        dict.set('Next', itemRefs[i + 1])
+      }
+    }
+  }
+
+  // 设置根大纲
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const outlinesAny = outlinesDict as any
+  outlinesAny.set('First', itemRefs[0])
+  outlinesAny.set('Last', itemRefs[itemRefs.length - 1])
+  outlinesAny.set('Count', itemRefs.length)
+
+  // 设置目录中的 Outlines
+  catalog.set('Outlines', outlinesRef)
+}
+
+/**
+ * 提取 h1-h4 标题
+ */
+function extractHeadings(htmlContent: string): Array<{ level: number; text: string; id: string }> {
   const headings: Array<{ level: number; text: string; id: string }> = []
-  const headingRegex = /<h([123])[^>]*id="([^"]*)"[^>]*>(.*?)<\/h\1>/g
+  const headingRegex = /<h([1-4])[^>]*id="([^"]*)"[^>]*>(.*?)<\/h\1>/g
   let match
 
   while ((match = headingRegex.exec(htmlContent)) !== null) {
@@ -212,9 +337,9 @@ function extractTOC(htmlContent: string): Array<{ level: number; text: string; i
   return headings
 }
 
-function addPageAnchors(htmlContent: string, tocData: Array<{ level: number; text: string; id: string }>): string {
+function addPageAnchors(htmlContent: string, headings: Array<{ level: number; text: string; id: string }>): string {
   let result = htmlContent
-  tocData.forEach((heading, index) => {
+  headings.forEach((heading, index) => {
     if (heading.level === 1) {
       const h1Regex = new RegExp(`<h1[^>]*id="${heading.id}"[^>]*>`, 'g')
       if (index > 0) {
@@ -236,10 +361,11 @@ function escapeHtml(text: string): string {
 function getMarkdownStyles(): string {
   return `
 .markdown-body { line-height: 1.6; color: #1f2937; }
-.markdown-body h1, .markdown-body h2, .markdown-body h3 { margin-top: 1.5em; margin-bottom: 0.75em; font-weight: 600; line-height: 1.25; color: #111827; }
+.markdown-body h1, .markdown-body h2, .markdown-body h3, .markdown-body h4 { margin-top: 1.5em; margin-bottom: 0.75em; font-weight: 600; line-height: 1.25; color: #111827; }
 .markdown-body h1 { font-size: 2em; border-bottom: 2px solid #e5e7eb; padding-bottom: 0.3em; }
 .markdown-body h2 { font-size: 1.5em; border-bottom: 1px solid #e5e7eb; padding-bottom: 0.3em; }
 .markdown-body h3 { font-size: 1.25em; }
+.markdown-body h4 { font-size: 1.1em; }
 .markdown-body p { margin-top: 0; margin-bottom: 1em; }
 .markdown-body a { color: #3b82f6; text-decoration: none; }
 .markdown-body a:hover { text-decoration: underline; }
