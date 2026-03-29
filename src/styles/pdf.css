@@ -1,0 +1,86 @@
+/* PDF 打印样式 */
+@media print {
+  @page {
+    margin: 2cm 2.5cm;
+    size: A4;
+  }
+
+  body {
+    font-size: 12pt;
+    line-height: 1.5;
+    color: #000;
+  }
+
+  /* 确保背景色和颜色打印 */
+  * {
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
+    color-adjust: exact !important;
+  }
+
+  /* 分页控制 */
+  h1, h2, h3 {
+    page-break-after: avoid;
+  }
+
+  h1, h2 {
+    page-break-before: auto;
+  }
+
+  pre, blockquote, table, figure, img, svg, .mermaid {
+    page-break-inside: avoid;
+  }
+
+  /* 代码块在打印时的优化 */
+  pre {
+    border: 1px solid #ddd;
+    background-color: #f8f9fa !important;
+  }
+
+  code {
+    background-color: #f1f3f4 !important;
+  }
+
+  /* 表格打印优化 */
+  table {
+    border-collapse: collapse;
+  }
+
+  table th,
+  table td {
+    border: 1px solid #000;
+  }
+
+  /* 链接在打印时显示 URL */
+  a[href]:after {
+    content: " (" attr(href) ")";
+    font-size: 90%;
+    color: #666;
+  }
+
+  a[href^="#"]:after {
+    content: "";
+  }
+
+  /* 隐藏不需要打印的元素 */
+  .no-print {
+    display: none !important;
+  }
+
+  /* 数学公式打印优化 */
+  .katex {
+    font-size: 1em;
+  }
+
+  /* 确保图片完整显示 */
+  img {
+    max-width: 100% !important;
+    height: auto !important;
+  }
+
+  /* 图表打印 */
+  .mermaid svg {
+    max-width: 100%;
+    height: auto;
+  }
+}
