@@ -13,13 +13,13 @@ export function usePDF() {
       const tocData = extractTOC(htmlContent)
 
       // 第一步：创建 iframe 并计算真实页码
-      const { pageNumbers, totalPages, tocPages } = await calculatePageNumbers(contentWithoutToc, tocData, title)
+      const { pageNumbers, tocPages, contentPages } = await calculatePageNumbers(contentWithoutToc, tocData, title)
 
       // 第二步：生成带真实页码的目录
       const tocHtml = generateTOCHtmlWithRealPageNumbers(tocData, pageNumbers)
 
       // 第三步：生成最终 HTML 并打印
-      await generateAndPrintPDF(contentWithoutToc, tocHtml, tocData, title, pageNumbers, tocPages)
+      await generateAndPrintPDF(contentWithoutToc, tocHtml, tocData, title, pageNumbers, tocPages, contentPages)
 
     } catch (error) {
       console.error('导出 PDF 失败:', error)
@@ -35,7 +35,7 @@ export function usePDF() {
     contentWithoutToc: string,
     tocData: Array<{ level: number; text: string; id: string }>,
     title: string
-  ): Promise<{ pageNumbers: Map<string, number>, totalPages: number, tocPages: number }> {
+  ): Promise<{ pageNumbers: Map<string, number>, totalPages: number, tocPages: number, contentPages: number }> {
     return new Promise((resolve) => {
       // 创建测量用的 iframe
       const iframe = document.createElement('iframe')
@@ -52,7 +52,7 @@ export function usePDF() {
       const iframeDoc = iframe.contentDocument || iframe.contentWindow?.document
       if (!iframeDoc) {
         document.body.removeChild(iframe)
-        resolve({ pageNumbers: new Map(), totalPages: 0, tocPages: 0 })
+        resolve({ pageNumbers: new Map(), totalPages: 0, tocPages: 0, contentPages: 0 })
         return
       }
 
@@ -103,7 +103,7 @@ export function usePDF() {
         // 估算总页数
         const mainContentHeight = mainContent?.getBoundingClientRect().height || 0
         const contentPages = Math.ceil(mainContentHeight / pageHeight)
-        const totalPages = tocPages + contentPages
+        const totalPages = 1 + tocPages + contentPages // 封面 + 目录 + 正文
 
         // 清理 iframe
         setTimeout(() => {
@@ -112,7 +112,7 @@ export function usePDF() {
           }
         }, 100)
 
-        resolve({ pageNumbers, totalPages, tocPages })
+        resolve({ pageNumbers, totalPages, tocPages, contentPages })
       }
 
       // 等待资源加载
@@ -307,7 +307,8 @@ export function usePDF() {
     tocData: Array<{ level: number; text: string; id: string }>,
     title: string,
     pageNumbers: Map<string, number>,
-    tocPages: number
+    tocPages: number,
+    contentPages: number
   ): Promise<void> {
     // 生成带分页锚点的正文
     const contentWithPageAnchors = addPageAnchors(contentWithoutToc, tocData)
@@ -326,22 +327,16 @@ export function usePDF() {
     @page {
       margin: 2cm 2.5cm 2.5cm 2.5cm;
       size: A4;
-      @bottom-right {
-        content: counter(page);
-        font-size: 10pt;
-        color: #6b7280;
-      }
     }
 
     @page cover {
       margin: 0;
-      @bottom-right { content: none; }
     }
 
     @page toc {
       margin: 2cm 2.5cm 2.5cm 2.5cm;
-      @bottom-right {
-        content: counter(page, lower-roman);
+      @bottom-center {
+        content: counter(toc-page, lower-roman);
         font-size: 10pt;
         color: #6b7280;
       }
@@ -349,29 +344,14 @@ export function usePDF() {
 
     @page content {
       margin: 2cm 2.5cm 2.5cm 2.5cm;
-      @bottom-right {
-        content: counter(page);
+      @bottom-center {
+        content: counter(content-page);
         font-size: 10pt;
         color: #6b7280;
       }
     }
 
-    /*
-     * 页码控制策略：
-     * 1. 封面：使用 page: cover，不显示页码
-     * 2. 目录：使用 page: toc，显示罗马数字 (i, ii...)
-     * 3. 正文：使用 page: content，显示阿拉伯数字 (1, 2...)
-     *
-     * 关键：封面页需要"消耗"一个页码但不显示，
-     * 通过在 cover 页面使用 counter-increment: page 实现
-     */
-
     body {
-      /* 初始化页码为 -1，这样：
-       * 封面页 = 第 0 页（不显示）
-       * 目录页 = 第 1 页（显示 i）
-       */
-      counter-reset: page -1;
       font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
       font-size: 11pt;
       line-height: 1.6;
@@ -417,6 +397,9 @@ export function usePDF() {
       page-break-before: always;
       page-break-after: always;
       padding: 0;
+      position: relative;
+      /* 目录页使用独立的 toc-page 计数器，从 1 开始 */
+      counter-reset: toc-page 0;
     }
 
     .toc-page h2 {
@@ -492,8 +475,9 @@ export function usePDF() {
     .main-content {
       page: content;
       page-break-before: always;
-      /* 正文页重置为第 1 页 */
-      counter-reset: page 1;
+      position: relative;
+      /* 正文页使用独立的 content-page 计数器，从 1 开始 */
+      counter-reset: content-page 0;
     }
 
     .main-content h1:first-child {
@@ -520,12 +504,12 @@ export function usePDF() {
     <div class="meta">${new Date().toLocaleDateString('zh-CN')}</div>
   </div>
 
-  <div class="toc-page">
+  <div class="toc-page" data-toc-pages="${tocPages}">
     <h2>目 录</h2>
     ${tocHtml}
   </div>
 
-  <div class="main-content markdown-body">
+  <div class="main-content markdown-body" data-content-pages="${contentPages}">
     ${contentWithPageAnchors}
   </div>
 </body>
