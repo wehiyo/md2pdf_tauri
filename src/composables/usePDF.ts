@@ -356,9 +356,22 @@ export function usePDF() {
       }
     }
 
+    /*
+     * 页码控制策略：
+     * 1. 封面：使用 page: cover，不显示页码
+     * 2. 目录：使用 page: toc，显示罗马数字 (i, ii...)
+     * 3. 正文：使用 page: content，显示阿拉伯数字 (1, 2...)
+     *
+     * 关键：封面页需要"消耗"一个页码但不显示，
+     * 通过在 cover 页面使用 counter-increment: page 实现
+     */
+
     body {
-      /* 全局页码计数器初始化为 0 */
-      counter-reset: page 0;
+      /* 初始化页码为 -1，这样：
+       * 封面页 = 第 0 页（不显示）
+       * 目录页 = 第 1 页（显示 i）
+       */
+      counter-reset: page -1;
       font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
       font-size: 11pt;
       line-height: 1.6;
@@ -404,8 +417,6 @@ export function usePDF() {
       page-break-before: always;
       page-break-after: always;
       padding: 0;
-      /* 目录页使用罗马数字计数器，从 i 开始 */
-      counter-reset: page ${tocPages > 0 ? 0 : 0};
     }
 
     .toc-page h2 {
@@ -481,8 +492,8 @@ export function usePDF() {
     .main-content {
       page: content;
       page-break-before: always;
-      /* 正文页从 1 开始计数 */
-      counter-reset: page 0;
+      /* 正文页重置为第 1 页 */
+      counter-reset: page 1;
     }
 
     .main-content h1:first-child {
