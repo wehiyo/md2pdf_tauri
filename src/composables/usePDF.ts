@@ -1,4 +1,5 @@
 import { save, message } from '@tauri-apps/plugin-dialog'
+import { PDFDocument, PDFPage, rgb, StandardFonts } from 'pdf-lib'
 
 export function usePDF() {
   /**
@@ -6,7 +7,38 @@ export function usePDF() {
    */
   async function exportToPDF(htmlContent: string, title: string = '文档'): Promise<void> {
     try {
-      // 创建隐藏的 iframe 用于打印
+      // 提取正文内容（移除内嵌目录）
+      const contentWithoutToc = htmlContent.replace(/<div class="table-of-contents">.*?<\/div>/s, '')
+
+      // 生成目录数据
+      const tocData = extractTOC(htmlContent)
+
+      // 第一步：创建 iframe 并计算真实页码
+      const { pageNumbers, totalPages } = await calculatePageNumbers(contentWithoutToc, tocData, title)
+
+      // 第二步：生成带真实页码的目录
+      const tocHtml = generateTOCHtmlWithRealPageNumbers(tocData, pageNumbers)
+
+      // 第三步：生成最终 HTML 并打印
+      await generateAndPrintPDF(contentWithoutToc, tocHtml, tocData, title, pageNumbers)
+
+    } catch (error) {
+      console.error('导出 PDF 失败:', error)
+      await message('导出失败：' + String(error), { title: '错误', kind: 'error' })
+    }
+  }
+
+  /**
+   * 计算真实页码
+   * 创建隐藏 iframe，根据 A4 页面高度计算每个章节的真实页码
+   */
+  async function calculatePageNumbers(
+    contentWithoutToc: string,
+    tocData: Array<{ level: number; text: string; id: string }>,
+    title: string
+  ): Promise<{ pageNumbers: Map<string, number>, totalPages: number }> {
+    return new Promise((resolve) => {
+      // 创建测量用的 iframe
       const iframe = document.createElement('iframe')
       iframe.style.position = 'fixed'
       iframe.style.left = '-9999px'
@@ -15,20 +47,85 @@ export function usePDF() {
       iframe.style.height = '297mm'
       document.body.appendChild(iframe)
 
-      // 提取正文内容（移除内嵌目录）
-      const contentWithoutToc = htmlContent.replace(/<div class="table-of-contents">.*?<\/div>/s, '')
+      // 生成用于测量的 HTML（不带目录页码，用于计算正文位置）
+      const measureHtml = generateMeasureHtml(contentWithoutToc, title)
 
-      // 生成目录数据
-      const tocData = extractTOC(htmlContent)
+      const iframeDoc = iframe.contentDocument || iframe.contentWindow?.document
+      if (!iframeDoc) {
+        document.body.removeChild(iframe)
+        resolve({ pageNumbers: new Map(), totalPages: 0 })
+        return
+      }
 
-      // 生成带页码锚点的正文
-      const contentWithPageAnchors = addPageAnchors(contentWithoutToc, tocData)
+      iframeDoc.open()
+      iframeDoc.write(measureHtml)
+      iframeDoc.close()
 
-      // 生成目录 HTML
-      const tocHtml = generateTOCHtml(tocData)
+      // 等待渲染完成并计算页码
+      const calculate = () => {
+        const pageNumbers = new Map<string, number>()
 
-      // 创建完整的 HTML 文档
-      const fullHtml = `<!DOCTYPE html>
+        // A4 页面可打印区域高度（210mm x 297mm，减去边距）
+        // 页边距：上 2cm，下 2.5cm，左右 2.5cm
+        // 可用高度约：297mm - 20mm - 25mm = 252mm ≈ 715px (at 96dpi)
+        const pageHeight = 715
+
+        // 封面页占 1 页（强制分页）
+        // 目录页：需要计算
+        const tocElement = iframeDoc.querySelector('.toc-page')
+        let tocPages = 1
+        if (tocElement) {
+          const tocHeight = tocElement.getBoundingClientRect().height
+          tocPages = Math.ceil(tocHeight / pageHeight)
+          if (tocPages < 1) tocPages = 1
+        }
+
+        // 正文从第 (1 + tocPages + 1) 页开始
+        // 封面(1) + 目录(tocPages) + 正文开始
+        const contentStartPage = 2 + tocPages
+
+        // 计算每个标题的真实页码
+        const mainContent = iframeDoc.querySelector('.main-content')
+        if (mainContent) {
+          const contentRect = mainContent.getBoundingClientRect()
+          const contentTop = contentRect.top
+
+          tocData.forEach((heading) => {
+            const element = iframeDoc.getElementById(heading.id)
+            if (element) {
+              const elementRect = element.getBoundingClientRect()
+              const relativeTop = elementRect.top - contentTop
+              const pageNumber = Math.floor(relativeTop / pageHeight) + contentStartPage
+              pageNumbers.set(heading.id, pageNumber)
+            }
+          })
+        }
+
+        // 估算总页数
+        const mainContentHeight = mainContent?.getBoundingClientRect().height || 0
+        const contentPages = Math.ceil(mainContentHeight / pageHeight)
+        const totalPages = contentStartPage + contentPages - 1
+
+        // 清理 iframe
+        setTimeout(() => {
+          if (iframe.parentNode) {
+            document.body.removeChild(iframe)
+          }
+        }, 100)
+
+        resolve({ pageNumbers, totalPages })
+      }
+
+      // 等待资源加载
+      setTimeout(calculate, 2000)
+    })
+  }
+
+  /**
+   * 生成用于测量页码的 HTML（简化版，不显示页码）
+   */
+  function generateMeasureHtml(contentWithoutToc: string, title: string): string {
+    return `<!DOCTYPE html>
 <html>
 <head>
   <meta charset="UTF-8">
@@ -38,31 +135,17 @@ export function usePDF() {
   <style>
     ${getMarkdownStyles()}
 
-    /* 基础页面设置 */
     @page {
       margin: 2cm 2.5cm 2.5cm 2.5cm;
       size: A4;
-      @bottom-right {
-        content: counter(page);
-        font-size: 10pt;
-        color: #6b7280;
-      }
     }
 
-    /* 封面页无页码 */
     @page cover {
       margin: 0;
-      @bottom-right {
-        content: none;
-      }
     }
 
-    /* 目录页无页码 */
     @page toc {
       margin: 2cm 2.5cm 2.5cm 2.5cm;
-      @bottom-right {
-        content: none;
-      }
     }
 
     body {
@@ -74,7 +157,6 @@ export function usePDF() {
       padding: 0;
     }
 
-    /* 封面页 */
     .cover-page {
       page: cover;
       display: flex;
@@ -107,7 +189,201 @@ export function usePDF() {
       color: #9ca3af;
     }
 
-    /* 目录页 */
+    .toc-page {
+      page: toc;
+      page-break-before: always;
+      page-break-after: always;
+      padding: 0;
+    }
+
+    .toc-page h2 {
+      font-size: 1.8em;
+      text-align: center;
+      margin: 0 0 2em 0;
+      border-bottom: 2px solid #1f2937;
+      padding-bottom: 0.5em;
+    }
+
+    .toc-list {
+      list-style: none;
+      padding: 0;
+      margin: 0;
+    }
+
+    .toc-item {
+      display: flex;
+      align-items: baseline;
+      margin-bottom: 0.6em;
+      line-height: 1.4;
+    }
+
+    .toc-text {
+      flex-shrink: 0;
+    }
+
+    .toc-dots {
+      flex: 1;
+      border-bottom: 1px dotted #d1d5db;
+      margin: 0 0.5em;
+      min-width: 1em;
+      height: 0.8em;
+    }
+
+    .toc-page-number {
+      color: #6b7280;
+      min-width: 2em;
+      text-align: right;
+      font-variant-numeric: tabular-nums;
+    }
+
+    .main-content {
+      page-break-before: always;
+    }
+
+    h1, h2, h3 { page-break-after: avoid; }
+    pre, blockquote, table, figure, img, svg, .mermaid { page-break-inside: avoid; }
+  </style>
+</head>
+<body>
+  <div class="cover-page">
+    <h1>${escapeHtml(title)}</h1>
+    <div class="subtitle">MD2PDF 生成文档</div>
+    <div class="meta">${new Date().toLocaleDateString('zh-CN')}</div>
+  </div>
+
+  <div class="toc-page">
+    <h2>目 录</h2>
+    <ul class="toc-list">
+      <li class="toc-item"><span class="toc-text">占位</span><span class="toc-dots"></span><span class="toc-page-number">1</span></li>
+    </ul>
+  </div>
+
+  <div class="main-content markdown-body">
+    ${contentWithoutToc}
+  </div>
+</body>
+</html>`
+  }
+
+  /**
+   * 生成带真实页码的目录 HTML
+   */
+  function generateTOCHtmlWithRealPageNumbers(
+    headings: Array<{ level: number; text: string; id: string }>,
+    pageNumbers: Map<string, number>
+  ): string {
+    if (headings.length === 0) {
+      return '<p style="text-align: center; color: #9ca3af;">无目录</p>'
+    }
+
+    let html = '<ul class="toc-list">'
+
+    headings.forEach((heading) => {
+      const displayText = escapeHtml(heading.text)
+      const anchorRef = `#${heading.id}`
+      const pageNum = pageNumbers.get(heading.id) || 1
+
+      html += `
+        <li class="toc-item level-${heading.level}">
+          <a href="${anchorRef}" class="toc-link">
+            <span class="toc-text">${displayText}</span>
+            <span class="toc-dots"></span>
+            <span class="toc-page-number">${pageNum}</span>
+          </a>
+        </li>
+      `
+    })
+
+    html += '</ul>'
+
+    return html
+  }
+
+  /**
+   * 生成最终 PDF
+   */
+  async function generateAndPrintPDF(
+    contentWithoutToc: string,
+    tocHtml: string,
+    tocData: Array<{ level: number; text: string; id: string }>,
+    title: string,
+    pageNumbers: Map<string, number>
+  ): Promise<void> {
+    // 生成带分页锚点的正文
+    const contentWithPageAnchors = addPageAnchors(contentWithoutToc, tocData)
+
+    // 创建完整的 HTML 文档
+    const fullHtml = `<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <title>${escapeHtml(title)}</title>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css">
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/highlight.js@11.9.0/styles/github.min.css">
+  <style>
+    ${getMarkdownStyles()}
+
+    @page {
+      margin: 2cm 2.5cm 2.5cm 2.5cm;
+      size: A4;
+      @bottom-right {
+        content: counter(page);
+        font-size: 10pt;
+        color: #6b7280;
+      }
+    }
+
+    @page cover {
+      margin: 0;
+      @bottom-right { content: none; }
+    }
+
+    @page toc {
+      margin: 2cm 2.5cm 2.5cm 2.5cm;
+      @bottom-right { content: none; }
+    }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      font-size: 11pt;
+      line-height: 1.6;
+      color: #1f2937;
+      margin: 0;
+      padding: 0;
+    }
+
+    .cover-page {
+      page: cover;
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      align-items: center;
+      min-height: 100vh;
+      text-align: center;
+      padding: 2cm;
+      box-sizing: border-box;
+    }
+
+    .cover-page h1 {
+      font-size: 2.5em;
+      font-weight: 700;
+      color: #1f2937;
+      margin: 0 0 0.5em 0;
+      line-height: 1.3;
+      border: none;
+    }
+
+    .cover-page .subtitle {
+      font-size: 1.2em;
+      color: #6b7280;
+    }
+
+    .cover-page .meta {
+      margin-top: 3em;
+      font-size: 1em;
+      color: #9ca3af;
+    }
+
     .toc-page {
       page: toc;
       page-break-before: always;
@@ -145,20 +421,8 @@ export function usePDF() {
       cursor: pointer;
     }
 
-    .toc-link:hover {
-      color: inherit;
-    }
-
     .toc-link:hover .toc-text {
       color: #3b82f6;
-    }
-
-    .toc-link:hover .toc-dots {
-      border-bottom-color: #3b82f6;
-    }
-
-    .toc-link:active {
-      color: inherit;
     }
 
     .toc-item.level-1 {
@@ -179,14 +443,15 @@ export function usePDF() {
     }
 
     .toc-text {
-      flex: 1;
+      flex-shrink: 0;
     }
 
     .toc-dots {
       flex: 1;
       border-bottom: 1px dotted #d1d5db;
-      margin: 0 0.3em;
+      margin: 0 0.5em;
       min-width: 1em;
+      height: 0.8em;
     }
 
     .toc-page-number {
@@ -196,7 +461,6 @@ export function usePDF() {
       font-variant-numeric: tabular-nums;
     }
 
-    /* 正文 */
     .main-content {
       page-break-before: always;
     }
@@ -209,13 +473,8 @@ export function usePDF() {
       max-width: none;
     }
 
-    h1, h2, h3 {
-      page-break-after: avoid;
-    }
-
-    pre, blockquote, table, figure, img, svg, .mermaid {
-      page-break-inside: avoid;
-    }
+    h1, h2, h3 { page-break-after: avoid; }
+    pre, blockquote, table, figure, img, svg, .mermaid { page-break-inside: avoid; }
 
     * {
       -webkit-print-color-adjust: exact !important;
@@ -224,97 +483,56 @@ export function usePDF() {
   </style>
 </head>
 <body>
-  <!-- 封面 -->
   <div class="cover-page">
     <h1>${escapeHtml(title)}</h1>
     <div class="subtitle">MD2PDF 生成文档</div>
     <div class="meta">${new Date().toLocaleDateString('zh-CN')}</div>
   </div>
 
-  <!-- 目录 -->
   <div class="toc-page">
     <h2>目 录</h2>
     ${tocHtml}
   </div>
 
-  <!-- 正文 -->
   <div class="main-content markdown-body">
     ${contentWithPageAnchors}
   </div>
-
-  <script>
-    // 打印前计算目录页码
-    function updateTOCPageNumbers() {
-      const tocLinks = document.querySelectorAll('.toc-link');
-      const mainContent = document.querySelector('.main-content');
-
-      if (!mainContent) return;
-
-      // A4 页面可打印区域高度（约 257mm = 970px at 96dpi，减去边距）
-      const pageHeight = 970;
-      const contentTop = mainContent.getBoundingClientRect().top + window.scrollY;
-
-      tocLinks.forEach((link) => {
-        const href = link.getAttribute('href');
-        if (!href) return;
-
-        const targetId = href.substring(1);
-        const target = document.getElementById(targetId);
-        const pageNumEl = link.querySelector('.toc-page-number');
-
-        if (target && pageNumEl) {
-          const targetTop = target.getBoundingClientRect().top + window.scrollY;
-          // 计算相对于正文开始位置的距离
-          const relativeTop = targetTop - contentTop;
-          // 计算页码（从第 1 页开始）
-          const pageNumber = Math.floor(relativeTop / pageHeight) + 1;
-          pageNumEl.textContent = Math.max(1, pageNumber);
-        }
-      });
-    }
-
-    // 页面加载完成后更新页码
-    window.addEventListener('load', () => {
-      // 等待 Mermaid 和 KaTeX 渲染完成
-      setTimeout(updateTOCPageNumbers, 2000);
-    });
-    // 额外延迟确保布局稳定
-    setTimeout(updateTOCPageNumbers, 3000);
-  <\/script>
 </body>
 </html>`
 
-      // 写入 iframe
-      const iframeDoc = iframe.contentDocument || iframe.contentWindow?.document
-      if (iframeDoc) {
-        iframeDoc.open()
-        iframeDoc.write(fullHtml)
-        iframeDoc.close()
+    // 创建 iframe 并打印
+    const iframe = document.createElement('iframe')
+    iframe.style.position = 'fixed'
+    iframe.style.left = '-9999px'
+    iframe.style.top = '0'
+    iframe.style.width = '210mm'
+    iframe.style.height = '297mm'
+    document.body.appendChild(iframe)
 
-        // 等待资源加载和 JavaScript 计算页码
-        await new Promise(resolve => setTimeout(resolve, 3500))
+    const iframeDoc = iframe.contentDocument || iframe.contentWindow?.document
+    if (iframeDoc) {
+      iframeDoc.open()
+      iframeDoc.write(fullHtml)
+      iframeDoc.close()
 
-        // 调用 iframe 的打印
-        const iframeWindow = iframe.contentWindow
-        if (iframeWindow) {
-          iframeWindow.focus()
-          iframeWindow.print()
+      await new Promise(resolve => setTimeout(resolve, 2500))
 
-          await message('请在打印对话框中选择"Microsoft Print to PDF"或类似虚拟打印机保存为 PDF 文件', {
-            title: '打印提示',
-            kind: 'info'
-          })
-        }
+      const iframeWindow = iframe.contentWindow
+      if (iframeWindow) {
+        iframeWindow.focus()
+        iframeWindow.print()
 
-        // 延迟删除 iframe
-        setTimeout(() => {
-          document.body.removeChild(iframe)
-        }, 3000)
+        await message('请在打印对话框中选择"Microsoft Print to PDF"或类似虚拟打印机保存为 PDF 文件', {
+          title: '打印提示',
+          kind: 'info'
+        })
       }
 
-    } catch (error) {
-      console.error('导出 PDF 失败:', error)
-      await message('导出失败：' + String(error), { title: '错误', kind: 'error' })
+      setTimeout(() => {
+        if (iframe.parentNode) {
+          document.body.removeChild(iframe)
+        }
+      }, 3000)
     }
   }
 
@@ -329,7 +547,6 @@ export function usePDF() {
 function extractTOC(htmlContent: string): Array<{ level: number; text: string; id: string }> {
   const headings: Array<{ level: number; text: string; id: string }> = []
 
-  // 按顺序匹配所有标题标签
   const headingRegex = /<h([123])[^>]*id="([^"]*)"[^>]*>(.*?)<\/h\1>/g
   let match
 
@@ -338,7 +555,6 @@ function extractTOC(htmlContent: string): Array<{ level: number; text: string; i
     const id = match[2]
     const text = stripHtml(match[3])
 
-    // 跳过目录本身的标题
     if (id && !id.includes('toc') && !id.includes('contents')) {
       headings.push({ level, text, id })
     }
@@ -353,11 +569,9 @@ function extractTOC(htmlContent: string): Array<{ level: number; text: string; i
 function addPageAnchors(htmlContent: string, tocData: Array<{ level: number; text: string; id: string }>): string {
   let result = htmlContent
 
-  // 为每个 h1 标题添加分页标记
   tocData.forEach((heading, index) => {
     if (heading.level === 1) {
       const h1Regex = new RegExp(`<h1[^>]*id="${heading.id}"[^>]*>`, 'g')
-      // 除了第一个 h1（它已经在目录页之后），其他 h1 前添加分页
       if (index > 0) {
         result = result.replace(h1Regex, `<div style="page-break-before: always;"></div><h1 id="${heading.id}">`)
       }
@@ -365,36 +579,6 @@ function addPageAnchors(htmlContent: string, tocData: Array<{ level: number; tex
   })
 
   return result
-}
-
-/**
- * 生成目录 HTML
- */
-function generateTOCHtml(headings: Array<{ level: number; text: string; id: string }>): string {
-  if (headings.length === 0) {
-    return '<p style="text-align: center; color: #9ca3af;">无目录</p>'
-  }
-
-  let html = '<ul class="toc-list">'
-
-  headings.forEach((heading) => {
-    const displayText = escapeHtml(heading.text)
-    const anchorRef = `#${heading.id}`
-
-    html += `
-      <li class="toc-item level-${heading.level}">
-        <a href="${anchorRef}" class="toc-link">
-          <span class="toc-text">${displayText}</span>
-          <span class="toc-dots"></span>
-          <span class="toc-page-number"></span>
-        </a>
-      </li>
-    `
-  })
-
-  html += '</ul>'
-
-  return html
 }
 
 /**
