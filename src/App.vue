@@ -31,75 +31,10 @@ import { usePDF } from './composables/usePDF'
 import { useTheme } from './composables/useTheme'
 import { save, open, message } from '@tauri-apps/plugin-dialog'
 import { writeTextFile, readTextFile } from '@tauri-apps/plugin-fs'
+import exampleContent from './assets/example.md?raw'
 
-// 默认内容
-const defaultContent = `# MD2PDF - Markdown 编辑器
-
-欢迎使用 **MD2PDF**，这是一个专业的 Markdown 编辑器，支持导出 HTML 和 PDF。
-
-## 特性
-
-- 实时预览
-- 支持数学公式：$E = mc^2$
-- 支持代码高亮
-- 支持 Mermaid 图表
-- 支持表格、脚注等科学文档特性
-
-## 数学公式
-
-行内公式：$\\alpha + \\beta = \\gamma$
-
-块级公式：
-
-$$
-\\int_{-\\infty}^{+\\infty} e^{-x^2} dx = \\sqrt{\\pi}
-$$
-
-## 代码示例
-
-\`\`\`javascript
-function hello() {
-  console.log("Hello, World!");
-}
-\`\`\`
-
-## 表格示例
-
-| 名称 | 类型 | 描述 |
-|------|------|------|
-| name | string | 用户名 |
-| age | number | 年龄 |
-| email | string | 邮箱 |
-
-## Mermaid 图表
-
-\`\`\`mermaid
-graph LR
-    A[开始] --> B{判断}
-    B -->|是| C[处理1]
-    B -->|否| D[处理2]
-    C --> E[结束]
-    D --> E
-\`\`\`
-
-## 任务列表
-
-- [x] 创建项目
-- [ ] 实现功能
-- [ ] 测试发布
-
-## 脚注
-
-这是一个带有脚注的文本[^1]。
-
-[^1]: 这是脚注的内容。
-
----
-
-**开始编辑吧！**
-`
-
-const content = ref(defaultContent)
+// 使用 example.md 作为默认内容
+const content = ref(exampleContent)
 const { render } = useMarkdown()
 const { exportToPDF } = usePDF()
 const { isDark, toggle: toggleTheme } = useTheme()
@@ -210,6 +145,11 @@ onMounted(() => {
   // 应用主题
   if (isDark.value) {
     document.documentElement.classList.add('dark')
+  }
+
+  // 加载 example.md
+  if (exampleContent) {
+    content.value = exampleContent
   }
 })
 </script>
