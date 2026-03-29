@@ -1,5 +1,5 @@
 import { message, open } from '@tauri-apps/plugin-dialog'
-import { PDFDocument, StandardFonts, rgb } from 'pdf-lib'
+import { PDFDocument, StandardFonts, rgb, PDFName } from 'pdf-lib'
 import { readFile, writeFile } from '@tauri-apps/plugin-fs'
 
 export function usePDF() {
@@ -255,10 +255,6 @@ function addPDFOutlines(
 
   if (level1Items.length === 0) return
 
-  // 使用 any 类型绕过 TypeScript 的类型检查，因为 pdf-lib 的底层 API 类型定义不完整
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const catalog = pdfDoc.catalog as any
-
   // 创建大纲字典
   const outlinesDict = context.obj({})
   const outlinesRef = context.register(outlinesDict)
@@ -282,7 +278,7 @@ function addPDFOutlines(
 
     // 创建大纲项字典
     const itemDict = context.obj({
-      Title: item.text, // context.obj 会自动将字符串转为 PDFName，但我们需要 PDFString
+      Title: item.text,
       Dest: destArray,
       Parent: outlinesRef
     })
@@ -297,12 +293,13 @@ function addPDFOutlines(
   for (let i = 0; i < itemRefs.length; i++) {
     const itemDict = context.lookup(itemRefs[i])
     if (itemDict && typeof itemDict === 'object' && 'set' in itemDict) {
-      const dict = itemDict as { set: (key: string, value: unknown) => void }
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const dict = itemDict as any
       if (i > 0) {
-        dict.set('Prev', itemRefs[i - 1])
+        dict.set(PDFName.of('Prev'), itemRefs[i - 1])
       }
       if (i < itemRefs.length - 1) {
-        dict.set('Next', itemRefs[i + 1])
+        dict.set(PDFName.of('Next'), itemRefs[i + 1])
       }
     }
   }
@@ -310,12 +307,14 @@ function addPDFOutlines(
   // 设置根大纲
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const outlinesAny = outlinesDict as any
-  outlinesAny.set('First', itemRefs[0])
-  outlinesAny.set('Last', itemRefs[itemRefs.length - 1])
-  outlinesAny.set('Count', itemRefs.length)
+  outlinesAny.set(PDFName.of('First'), itemRefs[0])
+  outlinesAny.set(PDFName.of('Last'), itemRefs[itemRefs.length - 1])
+  outlinesAny.set(PDFName.of('Count'), context.obj(itemRefs.length))
 
   // 设置目录中的 Outlines
-  catalog.set('Outlines', outlinesRef)
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const catalog = pdfDoc.catalog as any
+  catalog.set(PDFName.of('Outlines'), outlinesRef)
 }
 
 /**
