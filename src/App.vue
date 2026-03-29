@@ -93,7 +93,12 @@ async function exportPDF() {
   // 从预览区域获取已渲染的 HTML（包含 Mermaid SVG）
   const previewElement = document.querySelector('.preview-content')
   const previewContent = previewElement?.innerHTML || renderedHtml.value
-  await exportToPDF(previewContent)
+
+  // 提取文档标题（从第一个 h1 或第一行）
+  const h1Match = content.value.match(/^#\s+(.+)$/m)
+  const title = h1Match ? h1Match[1].trim() : '文档'
+
+  await exportToPDF(previewContent, title)
 }
 
 // 打开文件

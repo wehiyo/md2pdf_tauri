@@ -4,7 +4,7 @@ export function usePDF() {
   /**
    * 导出 HTML 为 PDF
    */
-  async function exportToPDF(htmlContent: string): Promise<void> {
+  async function exportToPDF(htmlContent: string, title: string = '文档'): Promise<void> {
     try {
       // 创建隐藏的 iframe 用于打印
       const iframe = document.createElement('iframe')
@@ -15,12 +15,18 @@ export function usePDF() {
       iframe.style.height = '297mm'
       document.body.appendChild(iframe)
 
+      // 提取正文内容（移除内嵌目录）
+      const contentWithoutToc = htmlContent.replace(/<div class="table-of-contents">.*?<\/div>/s, '')
+
+      // 生成目录 HTML
+      const tocHtml = generateTOC(htmlContent)
+
       // 创建完整的 HTML 文档
       const fullHtml = `<!DOCTYPE html>
 <html>
 <head>
   <meta charset="UTF-8">
-  <title>Print</title>
+  <title>${escapeHtml(title)}</title>
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css">
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/highlight.js@11.9.0/styles/github.min.css">
   <style>
@@ -31,6 +37,10 @@ export function usePDF() {
       size: A4;
     }
 
+    @page :first {
+      margin: 0;
+    }
+
     body {
       font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
       font-size: 11pt;
@@ -38,6 +48,103 @@ export function usePDF() {
       color: #1f2937;
       margin: 0;
       padding: 0;
+    }
+
+    /* 封面页 */
+    .cover-page {
+      page-break-after: always;
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      align-items: center;
+      height: 100vh;
+      text-align: center;
+      padding: 2cm;
+    }
+
+    .cover-page h1 {
+      font-size: 2.5em;
+      font-weight: 700;
+      color: #1f2937;
+      margin: 0;
+      line-height: 1.3;
+      border: none;
+    }
+
+    .cover-page .subtitle {
+      font-size: 1.2em;
+      color: #6b7280;
+      margin-top: 1em;
+    }
+
+    /* 目录页 */
+    .toc-page {
+      page-break-after: always;
+      padding: 2cm;
+    }
+
+    .toc-page h2 {
+      font-size: 1.8em;
+      text-align: center;
+      margin-bottom: 2em;
+      border-bottom: 2px solid #1f2937;
+      padding-bottom: 0.5em;
+    }
+
+    .toc-list {
+      list-style: none;
+      padding: 0;
+      margin: 0;
+    }
+
+    .toc-item {
+      display: flex;
+      align-items: baseline;
+      margin-bottom: 0.8em;
+      line-height: 1.4;
+    }
+
+    .toc-item.level-1 {
+      font-weight: 600;
+      font-size: 1.1em;
+    }
+
+    .toc-item.level-2 {
+      padding-left: 1.5em;
+      font-size: 1em;
+    }
+
+    .toc-item.level-3 {
+      padding-left: 3em;
+      font-size: 0.95em;
+      color: #4b5563;
+    }
+
+    .toc-link {
+      flex: 1;
+      text-decoration: none;
+      color: #1f2937;
+      border-bottom: 1px dotted #d1d5db;
+    }
+
+    .toc-link:hover {
+      color: #3b82f6;
+    }
+
+    .toc-page-number {
+      margin-left: 0.5em;
+      color: #6b7280;
+      min-width: 2em;
+      text-align: right;
+    }
+
+    /* 正文 */
+    .main-content {
+      padding: 0;
+    }
+
+    .main-content h1:first-child {
+      margin-top: 0;
     }
 
     .markdown-body {
@@ -59,8 +166,21 @@ export function usePDF() {
   </style>
 </head>
 <body>
-  <div class="markdown-body">
-    ${htmlContent}
+  <!-- 封面 -->
+  <div class="cover-page">
+    <h1>${escapeHtml(title)}</h1>
+    <div class="subtitle">MD2PDF 生成文档</div>
+  </div>
+
+  <!-- 目录 -->
+  <div class="toc-page">
+    <h2>目 录</h2>
+    ${tocHtml}
+  </div>
+
+  <!-- 正文 -->
+  <div class="main-content markdown-body">
+    ${contentWithoutToc}
   </div>
 </body>
 </html>`
@@ -73,7 +193,7 @@ export function usePDF() {
         iframeDoc.close()
 
         // 等待资源加载
-        await new Promise(resolve => setTimeout(resolve, 1000))
+        await new Promise(resolve => setTimeout(resolve, 1500))
 
         // 调用 iframe 的打印
         const iframeWindow = iframe.contentWindow
@@ -102,6 +222,90 @@ export function usePDF() {
   return {
     exportToPDF
   }
+}
+
+/**
+ * 从 HTML 内容生成目录
+ */
+function generateTOC(htmlContent: string): string {
+  const headings: Array<{ level: number; text: string; id: string }> = []
+
+  // 匹配 h1, h2, h3 标签
+  const h1Regex = /<h1[^>]*id="([^"]*)"[^>]*>(.*?)<\/h1>/g
+  const h2Regex = /<h2[^>]*id="([^"]*)"[^>]*>(.*?)<\/h2>/g
+  const h3Regex = /<h3[^>]*id="([^"]*)"[^>]*>(.*?)<\/h3>/g
+
+  // 提取 h1
+  let match
+  while ((match = h1Regex.exec(htmlContent)) !== null) {
+    headings.push({ level: 1, text: stripHtml(match[2]), id: match[1] })
+  }
+
+  // 提取 h2
+  while ((match = h2Regex.exec(htmlContent)) !== null) {
+    headings.push({ level: 2, text: stripHtml(match[2]), id: match[1] })
+  }
+
+  // 提取 h3
+  while ((match = h3Regex.exec(htmlContent)) !== null) {
+    headings.push({ level: 3, text: stripHtml(match[2]), id: match[1] })
+  }
+
+  if (headings.length === 0) {
+    return '<p style="text-align: center; color: #9ca3af;">无目录</p>'
+  }
+
+  // 按出现顺序排序（保持原有顺序）
+  // 生成目录 HTML
+  let tocHtml = '<ul class="toc-list">'
+
+  headings.forEach((heading, index) => {
+    // 页码从正文开始（第3页是正文第一页，所以加3）
+    const pageNumber = estimatePageNumber(headings, index)
+    tocHtml += `
+      <li class="toc-item level-${heading.level}">
+        <a class="toc-link" href="#${heading.id}">${escapeHtml(heading.text)}</a>
+        <span class="toc-page-number">${pageNumber}</span>
+      </li>
+    `
+  })
+
+  tocHtml += '</ul>'
+
+  return tocHtml
+}
+
+/**
+ * 估算页码（简化算法）
+ */
+function estimatePageNumber(headings: Array<{ level: number; text: string; id: string }>, index: number): number {
+  // 封面占1页，目录占1页，正文从第3页开始
+  // 每个一级标题估算1页，二级三级标题在同页
+  let pageCount = 3 // 从第3页开始
+
+  for (let i = 0; i < index; i++) {
+    if (headings[i].level === 1) {
+      pageCount++
+    }
+  }
+
+  return pageCount
+}
+
+/**
+ * 去除 HTML 标签
+ */
+function stripHtml(html: string): string {
+  return html.replace(/<[^>]*>/g, '')
+}
+
+/**
+ * HTML 转义
+ */
+function escapeHtml(text: string): string {
+  const div = document.createElement('div')
+  div.textContent = text
+  return div.innerHTML
 }
 
 /**
