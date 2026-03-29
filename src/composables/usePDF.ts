@@ -335,20 +335,10 @@ export function usePDF() {
 
     @page toc {
       margin: 2cm 2.5cm 2.5cm 2.5cm;
-      @bottom-center {
-        content: counter(toc-page, lower-roman);
-        font-size: 10pt;
-        color: #6b7280;
-      }
     }
 
     @page content {
       margin: 2cm 2.5cm 2.5cm 2.5cm;
-      @bottom-center {
-        content: counter(content-page);
-        font-size: 10pt;
-        color: #6b7280;
-      }
     }
 
     body {
@@ -358,6 +348,16 @@ export function usePDF() {
       color: #1f2937;
       margin: 0;
       padding: 0;
+    }
+
+    /* 页码样式 */
+    .page-num {
+      position: absolute;
+      width: 100%;
+      text-align: center;
+      font-size: 10pt;
+      color: #6b7280;
+      pointer-events: none;
     }
 
     .cover-page {
@@ -398,8 +398,6 @@ export function usePDF() {
       page-break-after: always;
       padding: 0;
       position: relative;
-      /* 目录页使用独立的 toc-page 计数器，从 1 开始 */
-      counter-reset: toc-page 0;
     }
 
     .toc-page h2 {
@@ -476,8 +474,6 @@ export function usePDF() {
       page: content;
       page-break-before: always;
       position: relative;
-      /* 正文页使用独立的 content-page 计数器，从 1 开始 */
-      counter-reset: content-page 0;
     }
 
     .main-content h1:first-child {
@@ -512,6 +508,58 @@ export function usePDF() {
   <div class="main-content markdown-body" data-content-pages="${contentPages}">
     ${contentWithPageAnchors}
   </div>
+
+  <script>
+    // 页码插入脚本
+    (function() {
+      function toRoman(num) {
+        const roman = {M: 1000, CM: 900, D: 500, CD: 400, C: 100, XC: 90, L: 50, XL: 40, X: 10, IX: 9, V: 5, IV: 4, I: 1};
+        let str = '';
+        for (let i of Object.keys(roman)) {
+          const q = Math.floor(num / roman[i]);
+          num -= q * roman[i];
+          str += i.repeat(q);
+        }
+        return str.toLowerCase();
+      }
+
+      // A4 页面高度（像素，96dpi）
+      const PAGE_HEIGHT = 1123; // 297mm ≈ 1123px
+      const CONTENT_HEIGHT = 935; // 297mm - 上下边距(20+25mm) ≈ 935px
+
+      // 为目录页添加页码
+      const tocPage = document.querySelector('.toc-page');
+      if (tocPage) {
+        const tocHeight = tocPage.scrollHeight;
+        const tocPageCount = Math.max(1, Math.ceil(tocHeight / CONTENT_HEIGHT));
+
+        // 在每页底部添加罗马数字页码
+        for (let i = 0; i < tocPageCount; i++) {
+          const pageNum = document.createElement('div');
+          pageNum.className = 'page-num';
+          pageNum.textContent = toRoman(i + 1);
+          pageNum.style.top = ((i + 1) * PAGE_HEIGHT - 30) + 'px';
+          document.body.appendChild(pageNum);
+        }
+      }
+
+      // 为正文页添加页码
+      const mainContent = document.querySelector('.main-content');
+      if (mainContent) {
+        const contentHeight = mainContent.scrollHeight;
+        const contentPageCount = Math.max(1, Math.ceil(contentHeight / CONTENT_HEIGHT));
+
+        // 在每页底部添加阿拉伯数字页码
+        for (let i = 0; i < contentPageCount; i++) {
+          const pageNum = document.createElement('div');
+          pageNum.className = 'page-num';
+          pageNum.textContent = (i + 1);
+          pageNum.style.top = ((tocPageCount + i + 1) * PAGE_HEIGHT - 30) + 'px';
+          document.body.appendChild(pageNum);
+        }
+      }
+    })();
+  <\/script>
 </body>
 </html>`
 
