@@ -41,8 +41,8 @@ md.use(deflist)
 // 暂时禁用 emoji 插件以避免导入问题
 // md.use(emoji)
 md.use(anchor, {
-  permalink: true,
-  level: [1, 2, 3]
+  permalink: false,
+  level: [1, 2, 3, 4]
 })
 // toc 插件已禁用
 // md.use(toc, {
@@ -152,6 +152,57 @@ md.renderer.rules.text = (tokens, idx, _options, _env, _self) => {
   return content
 }
 
+// 标题编号计数器（模块级别）
+const headingCounters = { h2: 0, h3: 0, h4: 0 }
+
+// 重写 heading_open 渲染规则，为 h2-h4 添加编号
+md.renderer.rules.heading_open = (tokens, idx) => {
+  const token = tokens[idx]
+  const level = token.tag as 'h1' | 'h2' | 'h3' | 'h4'
+
+  // 获取 id 属性
+  let id = ''
+  if (token.attrs) {
+    for (const attr of token.attrs) {
+      if (attr[0] === 'id') {
+        id = attr[1]
+        break
+      }
+    }
+  }
+
+  if (level === 'h2') {
+    headingCounters.h2++
+    headingCounters.h3 = 0
+    headingCounters.h4 = 0
+  } else if (level === 'h3') {
+    headingCounters.h3++
+    headingCounters.h4 = 0
+  } else if (level === 'h4') {
+    headingCounters.h4++
+  }
+
+  // 生成编号（仅 h2-h4）
+  let number = ''
+  if (level === 'h2') {
+    number = `${headingCounters.h2}. `
+  } else if (level === 'h3') {
+    number = `${headingCounters.h2}.${headingCounters.h3}. `
+  } else if (level === 'h4') {
+    number = `${headingCounters.h2}.${headingCounters.h3}.${headingCounters.h4}. `
+  }
+
+  // 渲染开标签
+  const idAttr = id ? ` id="${id}"` : ''
+  const numberSpan = number ? `<span class="heading-number">${number}</span>` : ''
+  return `<${level}${idAttr}>${numberSpan}`
+}
+
+// 重写 heading_close 渲染规则
+md.renderer.rules.heading_close = (tokens, idx) => {
+  return `</${tokens[idx].tag}>`
+}
+
 export function useMarkdown() {
   /**
    * 渲染 Markdown 为 HTML
@@ -160,6 +211,11 @@ export function useMarkdown() {
     if (!content.trim()) {
       return '<div class="empty-preview">开始输入 Markdown...</div>'
     }
+
+    // 重置计数器
+    headingCounters.h2 = 0
+    headingCounters.h3 = 0
+    headingCounters.h4 = 0
 
     try {
       return md.render(content)

@@ -297,6 +297,13 @@
   text-align: center;
 }
 
+/* 标题编号 */
+.markdown-body .heading-number {
+  font-weight: 600;
+  color: #3b82f6;
+  margin-right: 0.25em;
+}
+
 /* 锚点 */
 .markdown-body .header-anchor {
   float: left;

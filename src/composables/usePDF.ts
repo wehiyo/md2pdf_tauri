@@ -1,5 +1,5 @@
 import { message, open } from '@tauri-apps/plugin-dialog'
-import { PDFDocument, StandardFonts, rgb, PDFName } from 'pdf-lib'
+import { PDFDocument, StandardFonts, rgb, PDFName, PDFHexString } from 'pdf-lib'
 import { readFile, writeFile } from '@tauri-apps/plugin-fs'
 
 export function usePDF() {
@@ -8,9 +8,10 @@ export function usePDF() {
    */
   async function exportToPDF(htmlContent: string, title: string = '文档'): Promise<void> {
     try {
-      // 移除内嵌目录和 [[toc]] 标记
+      // 移除内嵌目录、[[toc]] 标记及相关内容
       let contentWithoutToc = htmlContent
         .replace(/<div class="table-of-contents">.*?<\/div>/gs, '')
+        .replace(/<p>\s*\[\[toc\]\]\s*<\/p>/gi, '')
         .replace(/\[\[toc\]\]/gi, '')
 
       // 提取标题数据（h1-h4，用于分页和书签）
@@ -155,13 +156,14 @@ export function usePDF() {
   }
 
   /**
-   * 计算标题所在的页码
+ * 计算标题所在的页码（同时根据文本去重）
    */
   function calculateBookmarkPages(
     iframeDoc: Document,
     headings: Array<{ level: number; text: string; id: string }>
   ): Array<{ level: number; text: string; pageNumber: number }> {
     const result: Array<{ level: number; text: string; pageNumber: number }> = []
+    const seenTexts = new Set<string>()
     const pageHeight = 715 // A4 可打印区域高度（像素）
     const mainContent = iframeDoc.querySelector('.main-content')
 
@@ -171,6 +173,10 @@ export function usePDF() {
     const contentTop = contentRect.top
 
     headings.forEach((heading) => {
+      // 根据文本去重，只保留第一个出现的标题
+      if (seenTexts.has(heading.text)) return
+      seenTexts.add(heading.text)
+
       const element = iframeDoc.getElementById(heading.id)
       if (element) {
         const elementRect = element.getBoundingClientRect()
@@ -241,7 +247,7 @@ async function enhancePDF(
 
 /**
  * 使用 pdf-lib 底层 API 添加 PDF 大纲（书签）
- * 目前仅支持一级书签（h1 标题）
+ * 支持 h1-h4 多级书签
  */
 function addPDFOutlines(
   pdfDoc: PDFDocument,
@@ -250,78 +256,139 @@ function addPDFOutlines(
   const context = pdfDoc.context
   const pages = pdfDoc.getPages()
 
-  // 只处理一级书签（h1）
-  const level1Items = bookmarkData.filter(item => item.level === 1)
+  if (bookmarkData.length === 0) return
 
-  if (level1Items.length === 0) return
-
-  // 创建大纲字典
+  // 创建根大纲
   const outlinesDict = context.obj({})
   const outlinesRef = context.register(outlinesDict)
 
-  // 存储大纲项引用
-  const itemRefs: ReturnType<typeof context.register>[] = []
+  // 定义树节点结构
+  interface TreeNode {
+    text: string
+    level: number
+    pageNumber: number
+    ref: ReturnType<typeof context.register>
+    children: TreeNode[]
+  }
 
-  // 创建每个大纲项
-  for (const item of level1Items) {
+  // 构建树形结构
+  const rootChildren: TreeNode[] = []
+  const path: TreeNode[] = [] // 当前路径上的节点栈
+
+  for (const item of bookmarkData) {
     const page = pages[item.pageNumber]
     if (!page) continue
 
-    // 创建目标数组
+    // 创建节点
     const destArray = context.obj([
       page.ref,
-      'XYZ',
+      PDFName.of('XYZ'),
       null,
       null,
       null
     ])
 
-    // 创建大纲项字典
-    const itemDict = context.obj({
-      Title: item.text,
-      Dest: destArray,
-      Parent: outlinesRef
-    })
+    const itemDict = context.obj({})
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const itemDictAny = itemDict as any
+    itemDictAny.set(PDFName.of('Title'), PDFHexString.fromText(item.text))
+    itemDictAny.set(PDFName.of('Dest'), destArray)
 
     const itemRef = context.register(itemDict)
-    itemRefs.push(itemRef)
+
+    const node: TreeNode = {
+      text: item.text,
+      level: item.level,
+      pageNumber: item.pageNumber,
+      ref: itemRef,
+      children: []
+    }
+
+    // 弹出路径中 level >= 当前的节点
+    while (path.length > 0 && path[path.length - 1].level >= node.level) {
+      path.pop()
+    }
+
+    // 添加到父节点的 children 或根
+    if (path.length === 0) {
+      rootChildren.push(node)
+    } else {
+      path[path.length - 1].children.push(node)
+    }
+
+    // 将当前节点加入路径
+    path.push(node)
   }
 
-  if (itemRefs.length === 0) return
+  // 递归设置 PDF 字典的关系
+  function processNode(node: TreeNode, parentRef: ReturnType<typeof context.register>): void {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const dict = context.lookup(node.ref) as any
+    dict.set(PDFName.of('Parent'), parentRef)
 
-  // 设置大纲项之间的链接
-  for (let i = 0; i < itemRefs.length; i++) {
-    const itemDict = context.lookup(itemRefs[i])
-    if (itemDict && typeof itemDict === 'object' && 'set' in itemDict) {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const dict = itemDict as any
-      if (i > 0) {
-        dict.set(PDFName.of('Prev'), itemRefs[i - 1])
-      }
-      if (i < itemRefs.length - 1) {
-        dict.set(PDFName.of('Next'), itemRefs[i + 1])
+    if (node.children.length > 0) {
+      // 设置 First 和 Last
+      dict.set(PDFName.of('First'), node.children[0].ref)
+      dict.set(PDFName.of('Last'), node.children[node.children.length - 1].ref)
+      dict.set(PDFName.of('Count'), context.obj(node.children.length))
+
+      // 设置子节点之间的 Prev/Next
+      for (let i = 0; i < node.children.length; i++) {
+        const child = node.children[i]
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const childDict = context.lookup(child.ref) as any
+
+        if (i > 0) {
+          childDict.set(PDFName.of('Prev'), node.children[i - 1].ref)
+        }
+        if (i < node.children.length - 1) {
+          childDict.set(PDFName.of('Next'), node.children[i + 1].ref)
+        }
+
+        // 递归处理子节点
+        processNode(child, node.ref)
       }
     }
   }
 
-  // 设置根大纲
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const outlinesAny = outlinesDict as any
-  outlinesAny.set(PDFName.of('First'), itemRefs[0])
-  outlinesAny.set(PDFName.of('Last'), itemRefs[itemRefs.length - 1])
-  outlinesAny.set(PDFName.of('Count'), context.obj(itemRefs.length))
+  // 设置根大纲的 First 和 Last
+  if (rootChildren.length > 0) {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const outlinesAny = outlinesDict as any
+    outlinesAny.set(PDFName.of('First'), rootChildren[0].ref)
+    outlinesAny.set(PDFName.of('Last'), rootChildren[rootChildren.length - 1].ref)
+    outlinesAny.set(PDFName.of('Count'), context.obj(rootChildren.length))
 
-  // 设置目录中的 Outlines
+    // 设置一级书签之间的 Prev/Next
+    for (let i = 0; i < rootChildren.length; i++) {
+      const child = rootChildren[i]
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const childDict = context.lookup(child.ref) as any
+
+      if (i > 0) {
+        childDict.set(PDFName.of('Prev'), rootChildren[i - 1].ref)
+      }
+      if (i < rootChildren.length - 1) {
+        childDict.set(PDFName.of('Next'), rootChildren[i + 1].ref)
+      }
+
+      // 处理每个一级书签的子树
+      processNode(child, outlinesRef)
+    }
+  }
+
+  // 设置文档目录的 Outlines
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const catalog = pdfDoc.catalog as any
   catalog.set(PDFName.of('Outlines'), outlinesRef)
 }
 
 /**
- * 提取 h1-h4 标题
+ * 提取 h1-h4 标题（根据 id 去重）
  */
 function extractHeadings(htmlContent: string): Array<{ level: number; text: string; id: string }> {
   const headings: Array<{ level: number; text: string; id: string }> = []
+  const seenIds = new Set<string>()
   const headingRegex = /<h([1-4])[^>]*id="([^"]*)"[^>]*>(.*?)<\/h\1>/g
   let match
 
@@ -329,7 +396,9 @@ function extractHeadings(htmlContent: string): Array<{ level: number; text: stri
     const level = parseInt(match[1])
     const id = match[2]
     const text = stripHtml(match[3])
-    if (id && !id.includes('toc') && !id.includes('contents')) {
+    // 根据 id 去重，并排除 toc/contents 相关的标题
+    if (id && !seenIds.has(id) && !id.includes('toc') && !id.includes('contents')) {
+      seenIds.add(id)
       headings.push({ level, text, id })
     }
   }
@@ -392,5 +461,6 @@ function getMarkdownStyles(): string {
 .markdown-body .task-list-item { list-style-type: none; padding-left: 0; }
 .markdown-body .task-list-item input[type="checkbox"] { margin-right: 0.5em; }
 .markdown-body .mermaid { margin: 1em 0; text-align: center; }
+.markdown-body .heading-number { font-weight: 600; color: #3b82f6; margin-right: 0.25em; }
 `
 }
