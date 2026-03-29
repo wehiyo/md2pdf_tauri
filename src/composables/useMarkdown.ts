@@ -7,7 +7,8 @@ import sub from 'markdown-it-sub'
 import abbr from 'markdown-it-abbr'
 import deflist from 'markdown-it-deflist'
 import anchor from 'markdown-it-anchor'
-import toc from 'markdown-it-table-of-contents'
+// toc 插件已禁用，不再生成内嵌目录
+// import toc from 'markdown-it-table-of-contents'
 import hljs from 'highlight.js'
 import katex from 'katex'
 
@@ -43,10 +44,11 @@ md.use(anchor, {
   permalink: true,
   level: [1, 2, 3]
 })
-md.use(toc, {
-  includeLevel: [1, 2, 3],
-  containerClass: 'table-of-contents'
-})
+// toc 插件已禁用
+// md.use(toc, {
+//   includeLevel: [1, 2, 3],
+//   containerClass: 'table-of-contents'
+// })
 
 // 添加 $$ 块级公式解析规则
 md.block.ruler.before('fence', 'math_block', function math_block(state, startLine, endLine, silent) {

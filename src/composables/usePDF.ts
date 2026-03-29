@@ -8,11 +8,13 @@ export function usePDF() {
    */
   async function exportToPDF(htmlContent: string, title: string = '文档'): Promise<void> {
     try {
-      // 提取正文内容（移除内嵌目录）
-      const contentWithoutToc = htmlContent.replace(/<div class="table-of-contents">.*?<\/div>/s, '')
+      // 移除内嵌目录和 [[toc]] 标记
+      let contentWithoutToc = htmlContent
+        .replace(/<div class="table-of-contents">.*?<\/div>/gs, '')
+        .replace(/\[\[toc\]\]/gi, '')
 
       // 生成目录数据（用于分页锚点）
-      const tocData = extractTOC(htmlContent)
+      const tocData = extractTOC(contentWithoutToc)
 
       // 生成 PDF
       await generatePDF(contentWithoutToc, tocData, title)
