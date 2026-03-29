@@ -124,6 +124,7 @@ async function exportHTML() {
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Exported Document</title>
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css">
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/highlight.js@11.9.0/styles/github.min.css">
   <style>
     ${document.querySelector('style[data-vite-dev-id*="markdown"]')?.textContent || ''}
     body {
