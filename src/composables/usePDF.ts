@@ -18,8 +18,14 @@ export function usePDF() {
       // 提取正文内容（移除内嵌目录）
       const contentWithoutToc = htmlContent.replace(/<div class="table-of-contents">.*?<\/div>/s, '')
 
+      // 生成目录数据
+      const tocData = extractTOC(htmlContent)
+
+      // 生成带页码锚点的正文
+      const contentWithPageAnchors = addPageAnchors(contentWithoutToc, tocData)
+
       // 生成目录 HTML
-      const tocHtml = generateTOC(htmlContent)
+      const tocHtml = generateTOCHtml(tocData)
 
       // 创建完整的 HTML 文档
       const fullHtml = `<!DOCTYPE html>
@@ -32,13 +38,31 @@ export function usePDF() {
   <style>
     ${getMarkdownStyles()}
 
+    /* 基础页面设置 */
     @page {
-      margin: 2cm 2.5cm;
+      margin: 2cm 2.5cm 2.5cm 2.5cm;
       size: A4;
+      @bottom-right {
+        content: counter(page);
+        font-size: 10pt;
+        color: #6b7280;
+      }
     }
 
-    @page :first {
+    /* 封面页无页码 */
+    @page cover {
       margin: 0;
+      @bottom-right {
+        content: none;
+      }
+    }
+
+    /* 目录页无页码 */
+    @page toc {
+      margin: 2cm 2.5cm 2.5cm 2.5cm;
+      @bottom-right {
+        content: none;
+      }
     }
 
     body {
@@ -52,21 +76,22 @@ export function usePDF() {
 
     /* 封面页 */
     .cover-page {
-      page-break-after: always;
+      page: cover;
       display: flex;
       flex-direction: column;
       justify-content: center;
       align-items: center;
-      height: 100vh;
+      min-height: 100vh;
       text-align: center;
       padding: 2cm;
+      box-sizing: border-box;
     }
 
     .cover-page h1 {
       font-size: 2.5em;
       font-weight: 700;
       color: #1f2937;
-      margin: 0;
+      margin: 0 0 0.5em 0;
       line-height: 1.3;
       border: none;
     }
@@ -74,19 +99,26 @@ export function usePDF() {
     .cover-page .subtitle {
       font-size: 1.2em;
       color: #6b7280;
-      margin-top: 1em;
+    }
+
+    .cover-page .meta {
+      margin-top: 3em;
+      font-size: 1em;
+      color: #9ca3af;
     }
 
     /* 目录页 */
     .toc-page {
+      page: toc;
+      page-break-before: always;
       page-break-after: always;
-      padding: 2cm;
+      padding: 0;
     }
 
     .toc-page h2 {
       font-size: 1.8em;
       text-align: center;
-      margin-bottom: 2em;
+      margin: 0 0 2em 0;
       border-bottom: 2px solid #1f2937;
       padding-bottom: 0.5em;
     }
@@ -100,13 +132,39 @@ export function usePDF() {
     .toc-item {
       display: flex;
       align-items: baseline;
-      margin-bottom: 0.8em;
+      margin-bottom: 0.6em;
       line-height: 1.4;
+    }
+
+    .toc-link {
+      display: flex;
+      align-items: baseline;
+      flex: 1;
+      text-decoration: none;
+      color: inherit;
+      cursor: pointer;
+    }
+
+    .toc-link:hover {
+      color: inherit;
+    }
+
+    .toc-link:hover .toc-text {
+      color: #3b82f6;
+    }
+
+    .toc-link:hover .toc-dots {
+      border-bottom-color: #3b82f6;
+    }
+
+    .toc-link:active {
+      color: inherit;
     }
 
     .toc-item.level-1 {
       font-weight: 600;
       font-size: 1.1em;
+      margin-top: 0.8em;
     }
 
     .toc-item.level-2 {
@@ -120,27 +178,27 @@ export function usePDF() {
       color: #4b5563;
     }
 
-    .toc-link {
+    .toc-text {
       flex: 1;
-      text-decoration: none;
-      color: #1f2937;
-      border-bottom: 1px dotted #d1d5db;
     }
 
-    .toc-link:hover {
-      color: #3b82f6;
+    .toc-dots {
+      flex: 1;
+      border-bottom: 1px dotted #d1d5db;
+      margin: 0 0.3em;
+      min-width: 1em;
     }
 
     .toc-page-number {
-      margin-left: 0.5em;
       color: #6b7280;
       min-width: 2em;
       text-align: right;
+      font-variant-numeric: tabular-nums;
     }
 
     /* 正文 */
     .main-content {
-      padding: 0;
+      page-break-before: always;
     }
 
     .main-content h1:first-child {
@@ -170,6 +228,7 @@ export function usePDF() {
   <div class="cover-page">
     <h1>${escapeHtml(title)}</h1>
     <div class="subtitle">MD2PDF 生成文档</div>
+    <div class="meta">${new Date().toLocaleDateString('zh-CN')}</div>
   </div>
 
   <!-- 目录 -->
@@ -180,8 +239,48 @@ export function usePDF() {
 
   <!-- 正文 -->
   <div class="main-content markdown-body">
-    ${contentWithoutToc}
+    ${contentWithPageAnchors}
   </div>
+
+  <script>
+    // 打印前计算目录页码
+    function updateTOCPageNumbers() {
+      const tocLinks = document.querySelectorAll('.toc-link');
+      const mainContent = document.querySelector('.main-content');
+
+      if (!mainContent) return;
+
+      // A4 页面可打印区域高度（约 257mm = 970px at 96dpi，减去边距）
+      const pageHeight = 970;
+      const contentTop = mainContent.getBoundingClientRect().top + window.scrollY;
+
+      tocLinks.forEach((link) => {
+        const href = link.getAttribute('href');
+        if (!href) return;
+
+        const targetId = href.substring(1);
+        const target = document.getElementById(targetId);
+        const pageNumEl = link.querySelector('.toc-page-number');
+
+        if (target && pageNumEl) {
+          const targetTop = target.getBoundingClientRect().top + window.scrollY;
+          // 计算相对于正文开始位置的距离
+          const relativeTop = targetTop - contentTop;
+          // 计算页码（从第 1 页开始）
+          const pageNumber = Math.floor(relativeTop / pageHeight) + 1;
+          pageNumEl.textContent = Math.max(1, pageNumber);
+        }
+      });
+    }
+
+    // 页面加载完成后更新页码
+    window.addEventListener('load', () => {
+      // 等待 Mermaid 和 KaTeX 渲染完成
+      setTimeout(updateTOCPageNumbers, 2000);
+    });
+    // 额外延迟确保布局稳定
+    setTimeout(updateTOCPageNumbers, 3000);
+  <\/script>
 </body>
 </html>`
 
@@ -192,8 +291,8 @@ export function usePDF() {
         iframeDoc.write(fullHtml)
         iframeDoc.close()
 
-        // 等待资源加载
-        await new Promise(resolve => setTimeout(resolve, 1500))
+        // 等待资源加载和 JavaScript 计算页码
+        await new Promise(resolve => setTimeout(resolve, 3500))
 
         // 调用 iframe 的打印
         const iframeWindow = iframe.contentWindow
@@ -210,7 +309,7 @@ export function usePDF() {
         // 延迟删除 iframe
         setTimeout(() => {
           document.body.removeChild(iframe)
-        }, 2000)
+        }, 3000)
       }
 
     } catch (error) {
@@ -225,87 +324,96 @@ export function usePDF() {
 }
 
 /**
- * 从 HTML 内容生成目录
+ * 提取目录数据
  */
-function generateTOC(htmlContent: string): string {
+function extractTOC(htmlContent: string): Array<{ level: number; text: string; id: string }> {
   const headings: Array<{ level: number; text: string; id: string }> = []
 
-  // 匹配 h1, h2, h3 标签
-  const h1Regex = /<h1[^>]*id="([^"]*)"[^>]*>(.*?)<\/h1>/g
-  const h2Regex = /<h2[^>]*id="([^"]*)"[^>]*>(.*?)<\/h2>/g
-  const h3Regex = /<h3[^>]*id="([^"]*)"[^>]*>(.*?)<\/h3>/g
-
-  // 提取 h1
+  // 按顺序匹配所有标题标签
+  const headingRegex = /<h([123])[^>]*id="([^"]*)"[^>]*>(.*?)<\/h\1>/g
   let match
-  while ((match = h1Regex.exec(htmlContent)) !== null) {
-    headings.push({ level: 1, text: stripHtml(match[2]), id: match[1] })
+
+  while ((match = headingRegex.exec(htmlContent)) !== null) {
+    const level = parseInt(match[1])
+    const id = match[2]
+    const text = stripHtml(match[3])
+
+    // 跳过目录本身的标题
+    if (id && !id.includes('toc') && !id.includes('contents')) {
+      headings.push({ level, text, id })
+    }
   }
 
-  // 提取 h2
-  while ((match = h2Regex.exec(htmlContent)) !== null) {
-    headings.push({ level: 2, text: stripHtml(match[2]), id: match[1] })
-  }
+  return headings
+}
 
-  // 提取 h3
-  while ((match = h3Regex.exec(htmlContent)) !== null) {
-    headings.push({ level: 3, text: stripHtml(match[2]), id: match[1] })
-  }
+/**
+ * 为内容添加分页锚点
+ */
+function addPageAnchors(htmlContent: string, tocData: Array<{ level: number; text: string; id: string }>): string {
+  let result = htmlContent
 
+  // 为每个 h1 标题添加分页标记
+  tocData.forEach((heading, index) => {
+    if (heading.level === 1) {
+      const h1Regex = new RegExp(`<h1[^>]*id="${heading.id}"[^>]*>`, 'g')
+      // 除了第一个 h1（它已经在目录页之后），其他 h1 前添加分页
+      if (index > 0) {
+        result = result.replace(h1Regex, `<div style="page-break-before: always;"></div><h1 id="${heading.id}">`)
+      }
+    }
+  })
+
+  return result
+}
+
+/**
+ * 生成目录 HTML
+ */
+function generateTOCHtml(headings: Array<{ level: number; text: string; id: string }>): string {
   if (headings.length === 0) {
     return '<p style="text-align: center; color: #9ca3af;">无目录</p>'
   }
 
-  // 按出现顺序排序（保持原有顺序）
-  // 生成目录 HTML
-  let tocHtml = '<ul class="toc-list">'
+  let html = '<ul class="toc-list">'
 
-  headings.forEach((heading, index) => {
-    // 页码从正文开始（第3页是正文第一页，所以加3）
-    const pageNumber = estimatePageNumber(headings, index)
-    tocHtml += `
+  headings.forEach((heading) => {
+    const displayText = escapeHtml(heading.text)
+    const anchorRef = `#${heading.id}`
+
+    html += `
       <li class="toc-item level-${heading.level}">
-        <a class="toc-link" href="#${heading.id}">${escapeHtml(heading.text)}</a>
-        <span class="toc-page-number">${pageNumber}</span>
+        <a href="${anchorRef}" class="toc-link">
+          <span class="toc-text">${displayText}</span>
+          <span class="toc-dots"></span>
+          <span class="toc-page-number"></span>
+        </a>
       </li>
     `
   })
 
-  tocHtml += '</ul>'
+  html += '</ul>'
 
-  return tocHtml
-}
-
-/**
- * 估算页码（简化算法）
- */
-function estimatePageNumber(headings: Array<{ level: number; text: string; id: string }>, index: number): number {
-  // 封面占1页，目录占1页，正文从第3页开始
-  // 每个一级标题估算1页，二级三级标题在同页
-  let pageCount = 3 // 从第3页开始
-
-  for (let i = 0; i < index; i++) {
-    if (headings[i].level === 1) {
-      pageCount++
-    }
-  }
-
-  return pageCount
+  return html
 }
 
 /**
  * 去除 HTML 标签
  */
 function stripHtml(html: string): string {
-  return html.replace(/<[^>]*>/g, '')
+  return html.replace(/<[^>]*>/g, '').replace(/&quot;/g, '"').replace(/&amp;/g, '&').replace(/&lt;/g, '<').replace(/&gt;/g, '>')
 }
 
 /**
  * HTML 转义
  */
 function escapeHtml(text: string): string {
-  const div = document.createElement('div')
-  div.textContent = text
-  return div.innerHTML
+  return text
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#039;')
 }
 
 /**
