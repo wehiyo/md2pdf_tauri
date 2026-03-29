@@ -13,6 +13,7 @@
         class="editor-pane"
       />
       <Preview
+        ref="previewRef"
         :html="renderedHtml"
         class="preview-pane"
       />
@@ -102,6 +103,7 @@ const content = ref(defaultContent)
 const { render } = useMarkdown()
 const { exportToPDF } = usePDF()
 const { isDark, toggle: toggleTheme } = useTheme()
+const previewRef = ref<InstanceType<typeof Preview>>()
 
 // 计算渲染后的 HTML
 const renderedHtml = computed(() => render(content.value))
@@ -117,6 +119,10 @@ async function exportHTML() {
     })
 
     if (filePath) {
+      // 从预览区域获取已渲染的 HTML（包含 Mermaid SVG）
+      const previewElement = document.querySelector('.preview-content')
+      const previewContent = previewElement?.innerHTML || renderedHtml.value
+
       const fullHtml = `<!DOCTYPE html>
 <html lang="zh-CN">
 <head>
@@ -137,12 +143,8 @@ async function exportHTML() {
 </head>
 <body>
   <div class="markdown-body">
-    ${renderedHtml.value}
+    ${previewContent}
   </div>
-  <script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"><\/script>
-  <script>
-    mermaid.initialize({ startOnLoad: true });
-  <\/script>
 </body>
 </html>`
       await writeTextFile(filePath, fullHtml)
