@@ -139,6 +139,10 @@ async function exportHTML() {
   <div class="markdown-body">
     ${renderedHtml.value}
   </div>
+  <script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"><\/script>
+  <script>
+    mermaid.initialize({ startOnLoad: true });
+  <\/script>
 </body>
 </html>`
       await writeTextFile(filePath, fullHtml)
