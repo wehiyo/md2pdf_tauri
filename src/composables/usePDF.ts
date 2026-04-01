@@ -1,12 +1,22 @@
-import { message, open } from '@tauri-apps/plugin-dialog'
+import { message, save } from '@tauri-apps/plugin-dialog'
 import { PDFDocument, StandardFonts, rgb, PDFName, PDFHexString } from 'pdf-lib'
 import { readFile, writeFile } from '@tauri-apps/plugin-fs'
+import { invoke } from '@tauri-apps/api/core'
+
+// 防止重复调用（模块级别）
+let isExporting = false
 
 export function usePDF() {
   /**
    * 导出 HTML 为 PDF
    */
   async function exportToPDF(htmlContent: string, title: string = '文档'): Promise<void> {
+    if (isExporting) {
+      console.log('[诊断] 已有导出任务在进行中，忽略重复调用')
+      return
+    }
+    isExporting = true
+
     try {
       // 移除内嵌目录、[[toc]] 标记及相关内容
       let contentWithoutToc = htmlContent
@@ -23,29 +33,43 @@ export function usePDF() {
     } catch (error) {
       console.error('导出 PDF 失败:', error)
       await message('导出失败：' + String(error), { title: '错误', kind: 'error' })
+    } finally {
+      isExporting = false
     }
   }
 
   /**
-   * 生成 PDF
+   * 生成 PDF（使用 WebView2 静默打印）
    */
   async function generatePDF(
     contentWithoutToc: string,
     headings: Array<{ level: number; text: string; id: string }>,
     title: string
   ): Promise<void> {
+    // Step 1: 获取保存路径
+    const savePath = await save({
+      filters: [{ name: 'PDF', extensions: ['pdf'] }],
+      defaultPath: `${title}.pdf`,
+      title: '保存 PDF 文件'
+    })
+
+    if (!savePath) {
+      return
+    }
+
+    // 创建带封面和页码锚点的 HTML
     const contentWithPageAnchors = addPageAnchors(contentWithoutToc, headings)
 
-    // 创建 HTML 文档（封面 + 正文，无目录页）
+    // 创建 HTML 文档
     const fullHtml = `<!DOCTYPE html>
 <html>
 <head>
   <meta charset="UTF-8">
   <title>${escapeHtml(title)}</title>
-  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css">
-  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/highlight.js@11.9.0/styles/github.min.css">
   <style>
     ${getMarkdownStyles()}
+    ${getKatexStyles()}
+    ${getHighlightStyles()}
 
     @page { margin: 2cm 2.5cm; size: A4; }
     @page :first { margin: 0; }
@@ -83,81 +107,81 @@ export function usePDF() {
 </body>
 </html>`
 
-    // 提示用户并打开打印对话框
-    await message('即将打开打印对话框。\n\n请在打印对话框中选择"Microsoft Print to PDF"保存 PDF 文件。\n保存完成后，请选择刚才保存的 PDF 文件，程序将为其添加页码和书签。', {
-      title: '导出 PDF',
-      kind: 'info'
-    })
+    // Step 2: 计算书签页码
+    const bookmarkData = await calculateBookmarkPagesInIframe(fullHtml, headings)
 
-    // 创建 iframe 并打印
-    const iframe = document.createElement('iframe')
-    iframe.style.position = 'fixed'
-    iframe.style.left = '-9999px'
-    iframe.style.top = '0'
-    iframe.style.width = '210mm'
-    iframe.style.height = 'auto'
-    iframe.style.minHeight = '100%'
-    iframe.style.border = 'none'
-    document.body.appendChild(iframe)
-
-    const iframeDoc = iframe.contentDocument || iframe.contentWindow?.document
-    if (!iframeDoc) {
-      document.body.removeChild(iframe)
-      await message('无法创建打印文档', { title: '错误', kind: 'error' })
-      return
-    }
-
-    iframeDoc.open()
-    iframeDoc.write(fullHtml)
-    iframeDoc.close()
-
-    // 等待内容渲染
-    await new Promise(resolve => setTimeout(resolve, 2000))
-
-    // 计算标题所在页码
-    const bookmarkData = calculateBookmarkPages(iframeDoc, headings)
-
-    // 打开打印对话框
-    const iframeWindow = iframe.contentWindow
-    if (iframeWindow) {
-      iframeWindow.focus()
-      iframeWindow.print()
-    }
-
-    // 清理 iframe
-    setTimeout(() => {
-      if (iframe.parentNode) {
-        document.body.removeChild(iframe)
-      }
-    }, 3000)
-
-    // 让用户选择刚才保存的 PDF
-    const selectedPdf = await open({
-      multiple: false,
-      filters: [{ name: 'PDF', extensions: ['pdf'] }],
-      title: '选择刚才保存的 PDF 文件'
-    })
-
-    if (!selectedPdf || typeof selectedPdf !== 'string') {
-      await message('未选择 PDF 文件，无法添加页码和书签。', { title: '取消', kind: 'warning' })
-      return
-    }
-
-    // 添加页码和书签
+    // Step 3: 调用 Rust command 静默生成 PDF
     try {
-      const pdfBytes = await readFile(selectedPdf)
-      const pdfWithEnhancements = await enhancePDF(pdfBytes, bookmarkData)
-      await writeFile(selectedPdf, pdfWithEnhancements)
-      await message(`PDF 已保存，包含页码和书签：${selectedPdf}`, { title: '成功', kind: 'info' })
-    } catch (error) {
-      console.error('PDF 增强失败:', error)
-      await message('PDF 增强失败：' + String(error), { title: '错误', kind: 'error' })
+      const result = await invoke<{ success: boolean; path: string; error?: string }>(
+        'print_to_pdf',
+        { html: fullHtml, savePath: savePath }
+      )
+
+      if (result.success) {
+        // Step 4: 添加页码和书签
+        try {
+          const pdfBytes = await readFile(result.path)
+          const pdfWithEnhancements = await enhancePDF(pdfBytes, bookmarkData)
+          await writeFile(result.path, pdfWithEnhancements)
+
+          await message(`PDF 已保存：${result.path}`, { title: '成功', kind: 'info' })
+        } catch (enhanceError) {
+          console.error('PDF 增强失败:', enhanceError)
+          await message(`PDF 已生成，但添加页码和书签失败：${result.path}\n\n错误：${String(enhanceError)}`, { title: '警告', kind: 'warning' })
+        }
+      } else {
+        await message('PDF 生成失败：' + (result.error || '未知错误'), { title: '错误', kind: 'error' })
+      }
+    } catch (printError) {
+      console.error('静默打印失败:', printError)
+      await message('导出失败：' + String(printError), { title: '错误', kind: 'error' })
     }
   }
 
   /**
- * 计算标题所在的页码（同时根据文本去重）
+   * 在 iframe 中计算书签页码
    */
+  async function calculateBookmarkPagesInIframe(
+    fullHtml: string,
+    headings: Array<{ level: number; text: string; id: string }>
+  ): Promise<Array<{ level: number; text: string; pageNumber: number }>> {
+    return new Promise((resolve) => {
+      const iframe = document.createElement('iframe')
+      iframe.style.position = 'fixed'
+      iframe.style.left = '-9999px'
+      iframe.style.top = '0'
+      iframe.style.width = '210mm'
+      iframe.style.height = 'auto'
+      iframe.style.minHeight = '100%'
+      iframe.style.border = 'none'
+      iframe.style.visibility = 'hidden'
+      document.body.appendChild(iframe)
+
+      const iframeDoc = iframe.contentDocument || iframe.contentWindow?.document
+      if (!iframeDoc) {
+        document.body.removeChild(iframe)
+        resolve([])
+        return
+      }
+
+      iframeDoc.open()
+      iframeDoc.write(fullHtml)
+      iframeDoc.close()
+
+      // 等待内容渲染
+      setTimeout(() => {
+        const result = calculateBookmarkPages(iframeDoc, headings)
+        if (iframe.parentNode) {
+          document.body.removeChild(iframe)
+        }
+        resolve(result)
+      }, 2000)
+    })
+  }
+
+  /**
+ * 计算标题所在的页码（同时根据文本去重）
+ */
   function calculateBookmarkPages(
     iframeDoc: Document,
     headings: Array<{ level: number; text: string; id: string }>
@@ -462,5 +486,116 @@ function getMarkdownStyles(): string {
 .markdown-body .task-list-item input[type="checkbox"] { margin-right: 0.5em; }
 .markdown-body .mermaid { margin: 1em 0; text-align: center; }
 .markdown-body .heading-number { font-weight: 600; color: #3b82f6; margin-right: 0.25em; }
+`
+}
+
+/**
+ * 内联 KaTeX 样式（精简版，用于 PDF 打印）
+ */
+function getKatexStyles(): string {
+  return `
+.katex { font: normal 1.21em KaTeX_Main, Times New Roman, serif; line-height: 1.2; text-indent: 0; text-rendering: auto; }
+.katex * { -ms-high-contrast-adjust: none; border-color: currentColor; }
+.katex .katex-html { display: inline-block; }
+.katex .base { position: relative; white-space: nowrap; width: min-content; }
+.katex .strut { display: inline-block; }
+.katex .text { display: inline-block; }
+.katex .mathit { font-family: KaTeX_Math; font-style: italic; }
+.katex .mathrm { font-style: normal; }
+.katex .mathbf { font-family: KaTeX_Main; font-weight: bold; }
+.katex .boldsymbol { font-family: KaTeX_Math; font-weight: bold; font-style: italic; }
+.katex .amsrm { font-family: KaTeX_AMS; }
+.katex .mathbb { font-family: KaTeX_AMS; }
+.katex .mathcal { font-family: KaTeX_Caligraphic; }
+.katex .mathfrak { font-family: KaTeX_Fraktur; }
+.katex .mathtt { font-family: KaTeX_Typewriter; }
+.katex .mathscr { font-family: KaTeX_Script; }
+.katex .mathsf { font-family: KaTeX_SansSerif; }
+.katex .nulldelimiter { display: inline-block; width: 0; }
+.katex .delimcenter { position: relative; }
+.katex .op-symbol { position: relative; }
+.katex .op-symbol.small-op { font-family: KaTeX_Size1; }
+.katex .op-symbol.large-op { font-family: KaTeX_Size2; }
+.katex .accent { position: relative; }
+.katex .accent-body { position: absolute; }
+.katex .overline .accent-body { border-top-style: solid; }
+.katex .underline .accent-body { border-bottom-style: solid; }
+.katex .vlist-t { display: inline-table; table-layout: fixed; border-collapse: collapse; }
+.katex .vlist-r { display: table-row; }
+.katex .vlist { display: table-cell; vertical-align: bottom; position: relative; }
+.katex .msupsub { text-align: left; }
+.katex .supsub { display: inline-block; }
+.katex .mfrac { display: inline-block; text-align: center; }
+.katex .mfrac .frac-line { border-bottom-style: solid; display: inline-block; width: 100%; }
+.katex .mspace { display: inline-block; }
+.katex .mspace.negativethinspace { margin-left: -0.16667em; }
+.katex .mspace.thinspace { width: 0.16667em; }
+.katex .mspace.medmuspace { width: 0.22222em; }
+.katex .mspace.thickmuspace { width: 0.27778em; }
+.katex .frac { display: inline-block; position: relative; vertical-align: middle; text-align: center; }
+.katex .frac > .frac-line { border-bottom-style: solid; display: inline-block; width: 100%; }
+.katex .sqrt { display: inline-block; position: relative; }
+.katex .sqrt > .root { margin-left: 0.27777em; margin-right: -0.55555em; }
+.katex .sizing { display: inline-block; }
+.katex .sizing.reset-size1.size1 { font-size: 1em; }
+.katex .sizing.reset-size1.size2 { font-size: 1.2em; }
+.katex .sizing.reset-size1.size3 { font-size: 1.4em; }
+.katex .sizing.reset-size1.size4 { font-size: 1.6em; }
+.katex .sizing.reset-size1.size5 { font-size: 1.8em; }
+.katex .sizing.reset-size1.size6 { font-size: 2em; }
+.katex .delimsizing { display: inline-block; }
+.katex .delimsizinginner { font-family: KaTeX_Size1; }
+.katex .mtable { display: inline-table; vertical-align: middle; }
+.katex .mtable .col-align-c > .vlist-t { text-align: center; }
+.katex .mtable .col-align-l > .vlist-t { text-align: left; }
+.katex .mtable .col-align-r > .vlist-t { text-align: right; }
+.katex .mtable .mtd { display: table-cell; }
+.katex .mtable .mtr { display: table-row; }
+.katex .mtable .mtr > .mtd { padding: 0 0.5em; }
+.katex-display { display: block; margin: 1em 0; text-align: center; }
+.katex-display > .katex { display: block; text-align: center; white-space: nowrap; }
+.katex-display > .katex > .katex-html { display: block; text-align: center; }
+`
+}
+
+/**
+ * 内联 highlight.js 样式（GitHub 风格精简版）
+ */
+function getHighlightStyles(): string {
+  return `
+.hljs { color: #24292e; background: #f6f8fa; }
+.hljs-doctag { color: #6f42c1; font-weight: bold; }
+.hljs-keyword { color: #d73a49; }
+.hljs-built_in { color: #005cc5; }
+.hljs-type { color: #6f42c1; }
+.hljs-function { color: #6f42c1; }
+.hljs-number { color: #005cc5; }
+.hljs-string { color: #032f62; }
+.hljs-comment { color: #6a737d; font-style: italic; }
+.hljs-addition { color: #22863a; background-color: #f0fff4; }
+.hljs-deletion { color: #cb2431; background-color: #ffeef0; }
+.hljs-variable { color: #e36209; }
+.hljs-attr { color: #6f42c1; }
+.hljs-attribute { color: #005cc5; }
+.hljs-name { color: #22863a; }
+.hljs-selector-id { color: #6f42c1; }
+.hljs-selector-class { color: #6f42c1; }
+.hljs-selector-tag { color: #d73a49; }
+.hljs-meta { color: #005cc5; }
+.hljs-title { color: #24292e; font-weight: bold; }
+.hljs-section { color: #6f42c1; font-weight: bold; }
+.hljs-link { color: #032f62; text-decoration: underline; }
+.hljs-symbol { color: #e36209; }
+.hljs-bullet { color: #005cc5; }
+.hljs-params { color: #24292e; }
+.hljs-template-tag { color: #d73a49; }
+.hljs-template-variable { color: #e36209; }
+.hljs-quote { color: #032f62; font-style: italic; }
+.hljs-regexp { color: #032f62; }
+.hljs-emphasis { font-style: italic; }
+.hljs-strong { font-weight: bold; }
+.hljs-tag { color: #22863a; }
+.hljs-literal { color: #005cc5; }
+pre code.hljs { display: block; overflow-x: auto; padding: 1em; }
 `
 }
