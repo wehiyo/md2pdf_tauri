@@ -130,7 +130,48 @@ md.renderer.rules.fence = (tokens, idx, options, env, self) => {
     }
   }
 
-  return defaultFence?.(tokens, idx, options, env, self) || ''
+  // 代码块带行号
+  const codeContent = token.content
+  const lines = codeContent.split('\n')
+
+  // 解析行号起始值，支持 linenum=100 或 linenum="100" 语法
+  let startLineNum = 1
+  const lineNumMatch = info.match(/linenum=(?:"(\d+)"|(\d+))/)
+  if (lineNumMatch) {
+    startLineNum = parseInt(lineNumMatch[1] || lineNumMatch[2], 10)
+  }
+
+  const maxLineNum = lines.length + startLineNum - 1
+  const lineNumWidth = String(maxLineNum).length
+
+  let linesHtml = ''
+
+  if (lang && hljs.getLanguage(lang)) {
+    try {
+      const highlighted = hljs.highlight(codeContent, { language: lang }).value
+      const lineNodes = highlighted.split('\n')
+
+      for (let i = 0; i < lineNodes.length; i++) {
+        const lineNum = startLineNum + i
+        linesHtml += `<div class="code-line"><span class="line-number" data-num="${lineNum}"></span><span class="code-line-content">${lineNodes[i] || ''}</span></div>\n`
+      }
+    } catch (__) {
+      // 高亮失败，使用普通文本
+      lines.forEach((line, i) => {
+        const lineNum = startLineNum + i
+        linesHtml += `<div class="code-line"><span class="line-number" data-num="${lineNum}"></span><span class="code-line-content">${escapeHtml(line)}</span></div>\n`
+      })
+    }
+  } else {
+    // 无语言或语言不支持
+    lines.forEach((line, i) => {
+      const lineNum = startLineNum + i
+      linesHtml += `<div class="code-line"><span class="line-number" data-num="${lineNum}"></span><span class="code-line-content">${escapeHtml(line)}</span></div>\n`
+    })
+  }
+
+  const langClass = lang ? ` class="language-${lang}"` : ''
+  return `<pre${langClass}><code${langClass}><div class="code-lines-container">${linesHtml}</div></code></pre>`
 }
 
 // 处理行内数学公式
@@ -150,6 +191,16 @@ md.renderer.rules.text = (tokens, idx, _options, _env, _self) => {
   })
 
   return content
+}
+
+// HTML 转义辅助函数
+function escapeHtml(html: string): string {
+  return html
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#039;')
 }
 
 // 标题编号计数器（模块级别）
