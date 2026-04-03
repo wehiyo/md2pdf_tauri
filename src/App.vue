@@ -30,6 +30,10 @@ import { usePDF } from './composables/usePDF'
 import { save, open, message } from '@tauri-apps/plugin-dialog'
 import { writeTextFile, readTextFile } from '@tauri-apps/plugin-fs'
 import exampleContent from './assets/example.md?raw'
+// @ts-ignore
+import katexStyles from './assets/katex/katex-inline.css?raw'
+// @ts-ignore
+import highlightStyles from './assets/github.min.css?raw'
 
 // 使用 example.md 作为默认内容
 const content = ref(exampleContent)
@@ -61,9 +65,9 @@ async function exportHTML() {
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Exported Document</title>
-  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css">
-  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/highlight.js@11.9.0/styles/github.min.css">
   <style>
+    ${katexStyles}
+    ${highlightStyles}
     ${document.querySelector('style[data-vite-dev-id*="markdown"]')?.textContent || ''}
     body {
       max-width: 900px;
