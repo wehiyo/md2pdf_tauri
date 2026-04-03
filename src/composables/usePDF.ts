@@ -3,6 +3,12 @@ import { PDFDocument, StandardFonts, rgb, PDFName, PDFHexString } from 'pdf-lib'
 import { readFile, writeFile } from '@tauri-apps/plugin-fs'
 import { invoke } from '@tauri-apps/api/core'
 
+// 导入本地样式文件（Vite ?raw 导入）
+// @ts-ignore
+import katexStyles from '../assets/katex/katex-inline.css?raw'
+// @ts-ignore
+import highlightStyles from '../assets/github.min.css?raw'
+
 // 防止重复调用（模块级别）
 let isExporting = false
 
@@ -60,16 +66,16 @@ export function usePDF() {
     // 创建带封面和页码锚点的 HTML
     const contentWithPageAnchors = addPageAnchors(contentWithoutToc, headings)
 
-    // 创建 HTML 文档（使用 CDN 加载 KaTeX 和 highlight.js 样式）
+    // 创建 HTML 文档（使用本地 KaTeX 和 highlight.js 样式，字体已内联为 base64）
     const fullHtml = `<!DOCTYPE html>
 <html>
 <head>
   <meta charset="UTF-8">
   <title>${escapeHtml(title)}</title>
-  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css">
-  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/highlight.js@11.9.0/styles/github.min.css">
   <style>
     ${getMarkdownStyles()}
+    ${katexStyles}
+    ${highlightStyles}
 
     @page { margin: 2cm 2.5cm; size: A4; }
     @page :first { margin: 0; }
