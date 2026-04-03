@@ -60,16 +60,16 @@ export function usePDF() {
     // 创建带封面和页码锚点的 HTML
     const contentWithPageAnchors = addPageAnchors(contentWithoutToc, headings)
 
-    // 创建 HTML 文档
+    // 创建 HTML 文档（使用 CDN 加载 KaTeX 和 highlight.js 样式）
     const fullHtml = `<!DOCTYPE html>
 <html>
 <head>
   <meta charset="UTF-8">
   <title>${escapeHtml(title)}</title>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css">
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/highlight.js@11.9.0/styles/github.min.css">
   <style>
     ${getMarkdownStyles()}
-    ${getKatexStyles()}
-    ${getHighlightStyles()}
 
     @page { margin: 2cm 2.5cm; size: A4; }
     @page :first { margin: 0; }
@@ -486,116 +486,5 @@ function getMarkdownStyles(): string {
 .markdown-body .task-list-item input[type="checkbox"] { margin-right: 0.5em; }
 .markdown-body .mermaid { margin: 1em 0; text-align: center; }
 .markdown-body .heading-number { font-weight: 600; color: #3b82f6; margin-right: 0.25em; }
-`
-}
-
-/**
- * 内联 KaTeX 样式（精简版，用于 PDF 打印）
- */
-function getKatexStyles(): string {
-  return `
-.katex { font: normal 1.21em KaTeX_Main, Times New Roman, serif; line-height: 1.2; text-indent: 0; text-rendering: auto; }
-.katex * { -ms-high-contrast-adjust: none; border-color: currentColor; }
-.katex .katex-html { display: inline-block; }
-.katex .base { position: relative; white-space: nowrap; width: min-content; }
-.katex .strut { display: inline-block; }
-.katex .text { display: inline-block; }
-.katex .mathit { font-family: KaTeX_Math; font-style: italic; }
-.katex .mathrm { font-style: normal; }
-.katex .mathbf { font-family: KaTeX_Main; font-weight: bold; }
-.katex .boldsymbol { font-family: KaTeX_Math; font-weight: bold; font-style: italic; }
-.katex .amsrm { font-family: KaTeX_AMS; }
-.katex .mathbb { font-family: KaTeX_AMS; }
-.katex .mathcal { font-family: KaTeX_Caligraphic; }
-.katex .mathfrak { font-family: KaTeX_Fraktur; }
-.katex .mathtt { font-family: KaTeX_Typewriter; }
-.katex .mathscr { font-family: KaTeX_Script; }
-.katex .mathsf { font-family: KaTeX_SansSerif; }
-.katex .nulldelimiter { display: inline-block; width: 0; }
-.katex .delimcenter { position: relative; }
-.katex .op-symbol { position: relative; }
-.katex .op-symbol.small-op { font-family: KaTeX_Size1; }
-.katex .op-symbol.large-op { font-family: KaTeX_Size2; }
-.katex .accent { position: relative; }
-.katex .accent-body { position: absolute; }
-.katex .overline .accent-body { border-top-style: solid; }
-.katex .underline .accent-body { border-bottom-style: solid; }
-.katex .vlist-t { display: inline-table; table-layout: fixed; border-collapse: collapse; }
-.katex .vlist-r { display: table-row; }
-.katex .vlist { display: table-cell; vertical-align: bottom; position: relative; }
-.katex .msupsub { text-align: left; }
-.katex .supsub { display: inline-block; }
-.katex .mfrac { display: inline-block; text-align: center; }
-.katex .mfrac .frac-line { border-bottom-style: solid; display: inline-block; width: 100%; }
-.katex .mspace { display: inline-block; }
-.katex .mspace.negativethinspace { margin-left: -0.16667em; }
-.katex .mspace.thinspace { width: 0.16667em; }
-.katex .mspace.medmuspace { width: 0.22222em; }
-.katex .mspace.thickmuspace { width: 0.27778em; }
-.katex .frac { display: inline-block; position: relative; vertical-align: middle; text-align: center; }
-.katex .frac > .frac-line { border-bottom-style: solid; display: inline-block; width: 100%; }
-.katex .sqrt { display: inline-block; position: relative; }
-.katex .sqrt > .root { margin-left: 0.27777em; margin-right: -0.55555em; }
-.katex .sizing { display: inline-block; }
-.katex .sizing.reset-size1.size1 { font-size: 1em; }
-.katex .sizing.reset-size1.size2 { font-size: 1.2em; }
-.katex .sizing.reset-size1.size3 { font-size: 1.4em; }
-.katex .sizing.reset-size1.size4 { font-size: 1.6em; }
-.katex .sizing.reset-size1.size5 { font-size: 1.8em; }
-.katex .sizing.reset-size1.size6 { font-size: 2em; }
-.katex .delimsizing { display: inline-block; }
-.katex .delimsizinginner { font-family: KaTeX_Size1; }
-.katex .mtable { display: inline-table; vertical-align: middle; }
-.katex .mtable .col-align-c > .vlist-t { text-align: center; }
-.katex .mtable .col-align-l > .vlist-t { text-align: left; }
-.katex .mtable .col-align-r > .vlist-t { text-align: right; }
-.katex .mtable .mtd { display: table-cell; }
-.katex .mtable .mtr { display: table-row; }
-.katex .mtable .mtr > .mtd { padding: 0 0.5em; }
-.katex-display { display: block; margin: 1em 0; text-align: center; }
-.katex-display > .katex { display: block; text-align: center; white-space: nowrap; }
-.katex-display > .katex > .katex-html { display: block; text-align: center; }
-`
-}
-
-/**
- * 内联 highlight.js 样式（GitHub 风格精简版）
- */
-function getHighlightStyles(): string {
-  return `
-.hljs { color: #24292e; background: #f6f8fa; }
-.hljs-doctag { color: #6f42c1; font-weight: bold; }
-.hljs-keyword { color: #d73a49; }
-.hljs-built_in { color: #005cc5; }
-.hljs-type { color: #6f42c1; }
-.hljs-function { color: #6f42c1; }
-.hljs-number { color: #005cc5; }
-.hljs-string { color: #032f62; }
-.hljs-comment { color: #6a737d; font-style: italic; }
-.hljs-addition { color: #22863a; background-color: #f0fff4; }
-.hljs-deletion { color: #cb2431; background-color: #ffeef0; }
-.hljs-variable { color: #e36209; }
-.hljs-attr { color: #6f42c1; }
-.hljs-attribute { color: #005cc5; }
-.hljs-name { color: #22863a; }
-.hljs-selector-id { color: #6f42c1; }
-.hljs-selector-class { color: #6f42c1; }
-.hljs-selector-tag { color: #d73a49; }
-.hljs-meta { color: #005cc5; }
-.hljs-title { color: #24292e; font-weight: bold; }
-.hljs-section { color: #6f42c1; font-weight: bold; }
-.hljs-link { color: #032f62; text-decoration: underline; }
-.hljs-symbol { color: #e36209; }
-.hljs-bullet { color: #005cc5; }
-.hljs-params { color: #24292e; }
-.hljs-template-tag { color: #d73a49; }
-.hljs-template-variable { color: #e36209; }
-.hljs-quote { color: #032f62; font-style: italic; }
-.hljs-regexp { color: #032f62; }
-.hljs-emphasis { font-style: italic; }
-.hljs-strong { font-weight: bold; }
-.hljs-tag { color: #22863a; }
-.hljs-literal { color: #005cc5; }
-pre code.hljs { display: block; overflow-x: auto; padding: 1em; }
 `
 }
