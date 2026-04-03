@@ -1,5 +1,6 @@
 import MarkdownIt from 'markdown-it'
 import footnote from 'markdown-it-footnote'
+import image from 'markdown-it-image'
 // taskLists 插件暂时禁用
 // import taskLists from 'markdown-it-task-lists'
 import sup from 'markdown-it-sup'
@@ -32,6 +33,7 @@ const md = new MarkdownIt({
 
 // 使用插件
 md.use(footnote)
+md.use(image)
 // 暂时禁用 task-lists 插件
 // md.use(taskLists, { enabled: true })
 md.use(sup)
