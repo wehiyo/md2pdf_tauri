@@ -2,6 +2,10 @@ import { message, save } from '@tauri-apps/plugin-dialog'
 import { PDFDocument, StandardFonts, rgb, PDFName, PDFHexString } from 'pdf-lib'
 import { readFile, writeFile } from '@tauri-apps/plugin-fs'
 import { invoke } from '@tauri-apps/api/core'
+import fontkit from '@pdf-lib/fontkit'
+
+// 字体缓存
+let cachedChineseFont: Uint8Array | null = null
 
 // 导入本地样式文件（Vite ?raw 导入）
 // @ts-ignore
@@ -127,7 +131,7 @@ export function usePDF() {
         // Step 4: 添加页码和书签
         try {
           const pdfBytes = await readFile(result.path)
-          const pdfWithEnhancements = await enhancePDF(pdfBytes, bookmarkData)
+          const pdfWithEnhancements = await enhancePDF(pdfBytes, bookmarkData, title)
           await writeFile(result.path, pdfWithEnhancements)
 
           await message(`PDF 已保存：${result.path}`, { title: '成功', kind: 'info' })
@@ -228,60 +232,143 @@ export function usePDF() {
 }
 
 /**
- * 使用 pdf-lib 为 PDF 添加页码和书签
+ * 检查字符串是否包含非 ASCII 字符
+ */
+function hasNonAscii(text: string): boolean {
+  for (let i = 0; i < text.length; i++) {
+    if (text.charCodeAt(i) > 255) return true
+  }
+  return false
+}
+
+/**
+ * 使用 pdf-lib 为 PDF 添加页码、页眉和书签
  */
 async function enhancePDF(
   pdfBytes: Uint8Array,
-  bookmarkData: Array<{ level: number; text: string; pageNumber: number }>
+  bookmarkData: Array<{ level: number; text: string; pageNumber: number }>,
+  headerTitle?: string
 ): Promise<Uint8Array> {
   const pdfDoc = await PDFDocument.load(pdfBytes)
-  const pages = pdfDoc.getPages()
-  const font = await pdfDoc.embedFont(StandardFonts.Helvetica)
 
-  // A4 页面宽度 (points)
-  const pageWidth = 595.28
+  // 注册 fontkit 以支持自定义字体
+  pdfDoc.registerFontkit(fontkit)
+
+  const pages = pdfDoc.getPages()
+  const helveticaFont = await pdfDoc.embedFont(StandardFonts.Helvetica)
 
   // 页码位置参数
-  const marginRight = 70
   const marginBottom = 57
   const fontSize = 10
 
-  // 添加页码
+  // 页眉位置参数
+  const headerFontSize = 10
+  const marginTop = 30
+
+  // 确定页眉字体：如果有中文则尝试加载中文字体
+  let headerFont = helveticaFont
+  let canShowHeader = !!headerTitle
+
+  if (headerTitle && hasNonAscii(headerTitle)) {
+    try {
+      const chineseFontBytes = await loadChineseFont()
+      if (chineseFontBytes) {
+        headerFont = await pdfDoc.embedFont(chineseFontBytes)
+      } else {
+        canShowHeader = false
+      }
+    } catch (e) {
+      console.warn('无法加载中文字体，跳过页眉:', e)
+      canShowHeader = false
+    }
+  }
+
+  // 添加页眉和页码
   for (let i = 0; i < pages.length; i++) {
-    // 封面页（第 0 页）不添加页码
+    // 封面页（第 0 页）不添加页眉和页码
     if (i === 0) continue
 
     const page = pages[i]
     const pageNum = i
-    const text = `- ${pageNum} -`
-    const textWidth = font.widthOfTextAtSize(text, fontSize)
-    const x = pageWidth - marginRight - textWidth
+
+    // 获取页面实际尺寸
+    const pageWidth = page.getWidth()
+    const pageHeight = page.getHeight()
+
+    // 添加页眉（标题居中）
+    if (headerTitle && canShowHeader) {
+      const headerTextWidth = headerFont.widthOfTextAtSize(headerTitle, headerFontSize)
+      const headerX = (pageWidth - headerTextWidth) / 2
+      const headerY = pageHeight - marginTop
+
+      page.drawText(headerTitle, {
+        x: headerX,
+        y: headerY,
+        size: headerFontSize,
+        font: headerFont,
+        color: rgb(0.42, 0.45, 0.5)
+      })
+    }
+
+    // 添加页码（居中）
+    const pageText = `- ${pageNum} -`
+    const textWidth = helveticaFont.widthOfTextAtSize(pageText, fontSize)
+    const x = (pageWidth - textWidth) / 2
     const y = marginBottom
 
-    page.drawText(text, {
+    page.drawText(pageText, {
       x,
       y,
       size: fontSize,
-      font,
+      font: helveticaFont,
       color: rgb(0.42, 0.45, 0.5)
     })
   }
 
   // 添加书签
   if (bookmarkData.length > 0) {
-    addPDFOutlines(pdfDoc, bookmarkData)
+    addPDFOutlines(pdfDoc, bookmarkData, helveticaFont)
   }
 
-  return pdfDoc.save()
+  const savedBytes = await pdfDoc.save()
+  console.log('[PDF] Saved PDF size:', savedBytes.length)
+  return savedBytes
+}
+
+/**
+ * 尝试加载中文字体
+ * 返回字体字节数组，如果失败则返回 null
+ */
+async function loadChineseFont(): Promise<Uint8Array | null> {
+  // 使用缓存
+  if (cachedChineseFont) {
+    return cachedChineseFont
+  }
+
+  try {
+    // 使用 fetch 从 assets 加载字体
+    const fontUrl = new URL('../assets/fonts/SourceHanSansSC-Regular.ttf', import.meta.url)
+    const response = await fetch(fontUrl.href)
+    if (!response.ok) {
+      return null
+    }
+    const arrayBuffer = await response.arrayBuffer()
+    cachedChineseFont = new Uint8Array(arrayBuffer)
+    return cachedChineseFont
+  } catch (e) {
+    console.warn('加载中文字体失败:', e)
+    return null
+  }
 }
 
 /**
  * 使用 pdf-lib 底层 API 添加 PDF 大纲（书签）
- * 支持 h1-h4 多级书签
+ * 支持 h1-h4 多级书签，支持中文
  */
 function addPDFOutlines(
   pdfDoc: PDFDocument,
-  bookmarkData: Array<{ level: number; text: string; pageNumber: number }>
+  bookmarkData: Array<{ level: number; text: string; pageNumber: number }>,
+  _font?: any // 保留参数以兼容调用，但书签不需要字体
 ): void {
   const context = pdfDoc.context
   const pages = pdfDoc.getPages()
