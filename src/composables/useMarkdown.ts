@@ -27,6 +27,9 @@ export interface ParseResult {
   body: string
 }
 
+// 支持的 admonition 类型
+const ADMONITION_TYPES = ['note', 'tip', 'warning', 'danger', 'info', 'success', 'failure', 'bug', 'example', 'quote', 'abstract', 'question']
+
 // 解析 YAML frontmatter
 function parseFrontmatter(content: string): ParseResult {
   const frontmatterRegex = /^---\s*\n([\s\S]*?)\n---\s*\n/
@@ -85,6 +88,125 @@ md.use(anchor, {
 //   includeLevel: [1, 2, 3],
 //   containerClass: 'table-of-contents'
 // })
+
+// 自定义 Admonition 解析器（支持缩进语法和结束标记语法）
+md.block.ruler.before('fence', 'admonition_block', function admonition_block(state, startLine, endLine, silent) {
+  const pos = state.bMarks[startLine] + state.tShift[startLine]
+  const max = state.eMarks[startLine]
+
+  // 检查是否以 !!! 开头
+  if (pos + 3 > max || state.src.substring(pos, pos + 3) !== '!!!') {
+    return false
+  }
+
+  // 解析类型和标题
+  const params = state.src.substring(pos + 3, max).trim()
+  if (!params) {
+    return false
+  }
+
+  const parts = params.split(' ', 2)
+  const admonitionType = parts[0].toLowerCase()
+
+  // 检查类型是否有效
+  if (!ADMONITION_TYPES.includes(admonitionType)) {
+    return false
+  }
+
+  const admonitionTitle = parts.length > 1 ? parts[1] : admonitionType
+
+  // 收集内容，同时支持两种语法
+  let nextLine = startLine + 1
+  const contentLines: string[] = []
+  const minIndent = 4  // 最小缩进空格数
+  let hasIndentedContent = false  // 是否有缩进内容（用于判断语法类型）
+  let autoClosed = false  // 是否通过 !!! 结束
+
+  while (nextLine < endLine) {
+    const linePos = state.bMarks[nextLine] + state.tShift[nextLine]
+    const lineMax = state.eMarks[nextLine]
+    const lineIndent = state.sCount[nextLine]
+
+    // 检查是否为结束标记 !!!（整行只有 !!!）
+    const lineText = state.src.substring(linePos, lineMax).trim()
+    if (lineText === '!!!') {
+      autoClosed = true
+      nextLine++
+      break
+    }
+
+    // 空行处理
+    if (linePos >= lineMax) {
+      // 如果已经有缩进内容，空行也加入
+      if (hasIndentedContent) {
+        contentLines.push('')
+      }
+      nextLine++
+      continue
+    }
+
+    // 检查缩进
+    if (lineIndent >= minIndent) {
+      // 缩进语法：提取内容（保留相对缩进）
+      hasIndentedContent = true
+      const lineContent = state.src.substring(linePos, lineMax)
+      contentLines.push(lineContent)
+      nextLine++
+    } else if (!hasIndentedContent) {
+      // 非缩进语法：如果还没有缩进内容，直接加入内容行
+      contentLines.push(lineText)
+      nextLine++
+    } else {
+      // 缩进语法遇到非缩进行，结束
+      break
+    }
+  }
+
+  // 至少需要一行内容（或结束标记存在）
+  if (contentLines.length === 0 && !autoClosed) {
+    return false
+  }
+
+  if (!silent) {
+    // 创建 admonition_open token
+    const openToken = state.push('admonition_open', 'div', 1)
+    openToken.attrPush(['class', `admonition ${admonitionType}`])
+    openToken.map = [startLine, nextLine]
+
+    // 创建标题 token
+    const titleOpenToken = state.push('admonition_title_open', 'p', 1)
+    titleOpenToken.attrPush(['class', 'admonition-title'])
+    titleOpenToken.map = [startLine, startLine]
+
+    const titleContentToken = state.push('inline', '', 0)
+    titleContentToken.content = admonitionTitle
+    titleContentToken.children = []
+
+    state.push('admonition_title_close', 'p', -1)
+
+    // 解析内容（递归解析 Markdown）
+    const content = contentLines.join('\n')
+    if (content.trim()) {
+      // 创建内容容器
+      const contentToken = state.push('admonition_content', 'div', 0)
+      contentToken.content = content
+    }
+
+    // 创建 admonition_close token
+    const closeToken = state.push('admonition_close', 'div', -1)
+    closeToken.map = [startLine, nextLine]
+  }
+
+  state.line = nextLine
+  return true
+})
+
+// 渲染 admonition 内容
+md.renderer.rules.admonition_content = (tokens, idx) => {
+  const content = tokens[idx].content
+  // 递归渲染内容为 Markdown
+  return md.render(content)
+}
 
 // 添加 $$ 块级公式解析规则
 md.block.ruler.before('fence', 'math_block', function math_block(state, startLine, endLine, silent) {

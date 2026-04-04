@@ -648,5 +648,22 @@ function getMarkdownStyles(): string {
 .markdown-body .task-list-item input[type="checkbox"] { margin-right: 0.5em; }
 .markdown-body .mermaid { margin: 1em 0; text-align: center; }
 .markdown-body .heading-number { font-weight: 600; color: #3b82f6; margin-right: 0.25em; }
+
+/* Admonition 提示框 */
+.markdown-body .admonition { margin: 1em 0; padding: 0.75em 1em; border-radius: 6px; border-left: 4px solid; background-color: #f9fafb; page-break-inside: avoid; }
+.markdown-body .admonition-title { font-weight: 600; margin-bottom: 0.5em; display: flex; align-items: center; gap: 0.5em; }
+.markdown-body .admonition p:last-child { margin-bottom: 0; }
+.markdown-body .admonition.note { border-left-color: #3b82f6; background-color: #eff6ff; }
+.markdown-body .admonition.note .admonition-title { color: #1d4ed8; }
+.markdown-body .admonition.tip { border-left-color: #10b981; background-color: #ecfdf5; }
+.markdown-body .admonition.tip .admonition-title { color: #047857; }
+.markdown-body .admonition.warning { border-left-color: #f59e0b; background-color: #fffbeb; }
+.markdown-body .admonition.warning .admonition-title { color: #b45309; }
+.markdown-body .admonition.danger { border-left-color: #ef4444; background-color: #fef2f2; }
+.markdown-body .admonition.danger .admonition-title { color: #b91c1c; }
+.markdown-body .admonition.info { border-left-color: #6b7280; background-color: #f9fafb; }
+.markdown-body .admonition.info .admonition-title { color: #4b5563; }
+.markdown-body .plantuml { margin: 1em 0; text-align: center; }
+.markdown-body .plantuml svg { max-width: 100%; }
 `
 }
