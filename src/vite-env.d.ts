@@ -54,3 +54,15 @@ declare module 'markdown-it-table-of-contents' {
   const plugin: MarkdownIt.PluginWithOptions<TOCOptions>
   export default plugin
 }
+
+declare module 'markdown-it-emoji' {
+  import MarkdownIt from 'markdown-it'
+  export const bare: MarkdownIt.PluginSimple
+  export const light: MarkdownIt.PluginSimple
+  export const full: MarkdownIt.PluginSimple
+}
+
+declare module 'markdown-it-emoji/lib/data/full.mjs' {
+  const data: Record<string, string>
+  export default data
+}

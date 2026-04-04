@@ -357,7 +357,24 @@ CSS
 
 ### 表情符号
 
-支持常用表情：:smile: :heart: :thumbsup: :rocket:
+支持常用表情，使用 `:emoji_name:` 语法：
+
+#### 表情类
+
+:smile: :laughing: :blush: :smiley: :relaxed:
+:wink: :stuck_out_tongue: :grinning: :innocent:
+
+#### 手势类
+
+:thumbsup: :thumbsdown: :ok_hand: :v: :clap: :wave:
+
+#### 心形类
+
+:heart: :yellow_heart: :green_heart: :blue_heart: :purple_heart: :broken_heart:
+
+#### 其他常用
+
+:rocket: :fire: :star: :sparkles: :bug: :memo: :warning: :heavy_check_mark:
 
 ### 链接
 

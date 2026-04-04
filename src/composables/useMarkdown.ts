@@ -7,6 +7,7 @@ import sub from 'markdown-it-sub'
 import abbr from 'markdown-it-abbr'
 import deflist from 'markdown-it-deflist'
 import anchor from 'markdown-it-anchor'
+import { full as emoji } from 'markdown-it-emoji'
 // toc 插件已禁用，不再生成内嵌目录
 // import toc from 'markdown-it-table-of-contents'
 import hljs from 'highlight.js'
@@ -77,8 +78,7 @@ md.use(sup)
 md.use(sub)
 md.use(abbr)
 md.use(deflist)
-// 暂时禁用 emoji 插件以避免导入问题
-// md.use(emoji)
+md.use(emoji)
 md.use(anchor, {
   permalink: false,
   level: [1, 2, 3, 4]
