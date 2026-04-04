@@ -367,22 +367,29 @@ function escapeHtml(html: string): string {
 // 标题编号计数器（模块级别）
 const headingCounters = { h2: 0, h3: 0, h4: 0 }
 
-// 重写 heading_open 渲染规则，为 h2-h4 添加编号
+// 标题 ID 映射：原始 slug -> 带编号的 ID（用于链接跳转）
+const headingIdMap = new Map<string, string>()
+
+// 将标题文本转为 slug（与 markdown-it-anchor 一致的逻辑）
+function slugify(text: string): string {
+  return text
+    .toLowerCase()
+    .replace(/\s+/g, '-')
+    .replace(/[^\w\u4e00-\u9fa5-]/g, '')  // 保留中文、字母、数字、连字符
+}
+
+// 重写 heading_open 渲染规则，为 h2-h4 添加编号，并将编号加入ID
 md.renderer.rules.heading_open = (tokens, idx) => {
   const token = tokens[idx]
   const level = token.tag as 'h1' | 'h2' | 'h3' | 'h4'
 
-  // 获取 id 属性
-  let id = ''
-  if (token.attrs) {
-    for (const attr of token.attrs) {
-      if (attr[0] === 'id') {
-        id = attr[1]
-        break
-      }
-    }
+  // 获取标题文本（下一个 inline token 的内容）
+  let titleText = ''
+  if (tokens[idx + 1] && tokens[idx + 1].type === 'inline') {
+    titleText = tokens[idx + 1].content || ''
   }
 
+  // 更新计数器
   if (level === 'h2') {
     headingCounters.h2++
     headingCounters.h3 = 0
@@ -396,18 +403,30 @@ md.renderer.rules.heading_open = (tokens, idx) => {
 
   // 生成编号（仅 h2-h4）
   let number = ''
+  let numberPrefix = ''
   if (level === 'h2') {
     number = `${headingCounters.h2}. `
+    numberPrefix = `${headingCounters.h2}-`
   } else if (level === 'h3') {
     number = `${headingCounters.h2}.${headingCounters.h3}. `
+    numberPrefix = `${headingCounters.h2}-${headingCounters.h3}-`
   } else if (level === 'h4') {
     number = `${headingCounters.h2}.${headingCounters.h3}.${headingCounters.h4}. `
+    numberPrefix = `${headingCounters.h2}-${headingCounters.h3}-${headingCounters.h4}-`
+  }
+
+  // 生成带编号前缀的 ID
+  const baseSlug = slugify(titleText)
+  const numberedId = numberPrefix ? `${numberPrefix}${baseSlug}` : baseSlug
+
+  // 存储映射：原始 slug -> 带编号的 ID
+  if (baseSlug) {
+    headingIdMap.set(baseSlug, numberedId)
   }
 
   // 渲染开标签
-  const idAttr = id ? ` id="${id}"` : ''
   const numberSpan = number ? `<span class="heading-number">${number}</span>` : ''
-  return `<${level}${idAttr}>${numberSpan}`
+  return `<${level} id="${numberedId}">${numberSpan}`
 }
 
 // 重写 heading_close 渲染规则
@@ -431,13 +450,27 @@ export function useMarkdown() {
       return '<div class="empty-preview">开始输入 Markdown...</div>'
     }
 
-    // 重置计数器
+    // 重置计数器和映射
     headingCounters.h2 = 0
     headingCounters.h3 = 0
     headingCounters.h4 = 0
+    headingIdMap.clear()
 
     try {
-      return md.render(body)
+      let html = md.render(body)
+
+      // 后处理：将锚点链接中的原始 slug 替换为带编号的 ID
+      html = html.replace(/href="#([^"]+)"/g, (match, slug) => {
+        // URL 解码 slug（markdown-it-anchor 会对中文进行编码）
+        const decodedSlug = decodeURIComponent(slug)
+        const numberedId = headingIdMap.get(decodedSlug)
+        if (numberedId) {
+          return `href="#${numberedId}"`
+        }
+        return match
+      })
+
+      return html
     } catch (error) {
       console.error('Markdown render error:', error)
       return `<div class="render-error">渲染错误: ${String(error)}</div>`

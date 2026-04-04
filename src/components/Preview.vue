@@ -4,6 +4,7 @@
       ref="previewRef"
       class="preview-content markdown-body"
       v-html="html"
+      @click="handleLinkClick"
     />
   </div>
 </template>
@@ -19,6 +20,23 @@ const props = defineProps<{
 }>()
 
 const previewRef = ref<HTMLDivElement>()
+
+// 处理文档内链接跳转
+function handleLinkClick(event: MouseEvent) {
+  const target = event.target as HTMLElement
+  const link = target.closest('a')
+  if (!link) return
+
+  const href = link.getAttribute('href')
+  if (href && href.startsWith('#')) {
+    event.preventDefault()
+    const targetId = href.slice(1)
+    const targetElement = previewRef.value?.querySelector(`#${CSS.escape(targetId)}`)
+    if (targetElement) {
+      targetElement.scrollIntoView({ behavior: 'smooth', block: 'start' })
+    }
+  }
+}
 
 // 初始化 Mermaid
 onMounted(() => {
