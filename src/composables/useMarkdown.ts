@@ -459,15 +459,60 @@ export function useMarkdown() {
     try {
       let html = md.render(body)
 
+      // 后处理：处理 figure 标签（必须在图片属性处理之前）
+      // 匹配 <figure markdown="span">...</figure> 并添加居中样式
+      html = html.replace(/<figure\s+markdown="span">([\s\S]*?)<\/figure>/g, (_match, content) => {
+        // 提取 figcaption
+        let figcaption = ''
+        let imgMarkdown = content
+
+        // 检查是否有 figcaption 标签
+        const figcaptionMatch = content.match(/<figcaption>([\s\S]*?)<\/figcaption>/)
+        if (figcaptionMatch) {
+          figcaption = figcaptionMatch[1]
+          // 从原始内容中移除 figcaption
+          imgMarkdown = content.replace(/<figcaption>[\s\S]*?<\/figcaption>/, '').trim()
+        }
+
+        // 先处理图片属性语法 { width="300" }，在 Markdown 源码层面替换
+        // 将 ![alt](src){ width="300" } 转换为带 style 的 img 标签
+        imgMarkdown = imgMarkdown.replace(/!\[([^\]]*)\]\(([^)]+)\)\s*\{\s*width\s*=\s*"([^"]*)"\s*\}/g,
+          (_m: string, alt: string, src: string, width: string) => {
+            return `<img src="${src}" alt="${alt}" style="width: ${width};">`
+          }
+        )
+
+        // 渲染剩余的 Markdown
+        let imgContent = md.render(imgMarkdown)
+
+        // 移除图片周围的 <p> 标签
+        imgContent = imgContent.replace(/<p>(<img[^>]*>)<\/p>/g, '$1')
+
+        return `<figure class="figure-span">${imgContent}${figcaption ? `<figcaption>${figcaption}</figcaption>` : ''}</figure>`
+      })
+
+      // 后处理：处理普通图片属性语法 ![alt](src){ width="300" }
+      // 在 Markdown 源码渲染后的 HTML 中处理
+      html = html.replace(/<p><img([^>]*)>\s*\{\s*width\s*=\s*"([^"]*)"\s*\}<\/p>/g,
+        (_match, imgAttrs, width) => {
+          return `<img${imgAttrs} style="width: ${width};">`
+        }
+      )
+      html = html.replace(/<img([^>]*)>\s*\{\s*width\s*=\s*"([^"]*)"\s*\}/g,
+        (_match, imgAttrs, width) => {
+          return `<img${imgAttrs} style="width: ${width};">`
+        }
+      )
+
       // 后处理：将锚点链接中的原始 slug 替换为带编号的 ID
-      html = html.replace(/href="#([^"]+)"/g, (match, slug) => {
+      html = html.replace(/href="#([^"]+)"/g, (_match, slug) => {
         // URL 解码 slug（markdown-it-anchor 会对中文进行编码）
         const decodedSlug = decodeURIComponent(slug)
         const numberedId = headingIdMap.get(decodedSlug)
         if (numberedId) {
           return `href="#${numberedId}"`
         }
-        return match
+        return _match
       })
 
       return html

@@ -665,5 +665,8 @@ function getMarkdownStyles(): string {
 .markdown-body .admonition.info .admonition-title { color: #4b5563; }
 .markdown-body .plantuml { margin: 1em 0; text-align: center; }
 .markdown-body .plantuml svg { max-width: 100%; }
+.markdown-body figure.figure-span { display: flex; flex-direction: column; align-items: center; margin: 1.5em 0; text-align: center; page-break-inside: avoid; }
+.markdown-body figure.figure-span img { max-width: 100%; height: auto; }
+.markdown-body figure.figure-span figcaption { margin-top: 0.5em; font-size: 0.9em; color: #6b7280; text-align: center; }
 `
 }

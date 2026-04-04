@@ -222,6 +222,20 @@ class Cat extends Animal {
 
 网络图片通过 URL 引用。
 
+#### 带标题的图片
+
+使用 `<figure>` 标签可以创建带标题的居中图片：
+
+<figure markdown="span">
+  ![示例图片](https://dummyimage.com/600x400/){ width="300" }
+  <figcaption>这是一个示例图片标题</figcaption>
+</figure>
+
+支持以下属性：
+- `markdown="span"` - 图片居中显示
+- `{ width="300" }` - 控制图片宽度
+- `<figcaption>` - 图片标题，在图片下方居中显示
+
 ---
 
 ## 文档元素
