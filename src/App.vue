@@ -27,6 +27,7 @@ import Editor from './components/Editor.vue'
 import Preview from './components/Preview.vue'
 import Toolbar from './components/Toolbar.vue'
 import { useMarkdown } from './composables/useMarkdown'
+import type { Metadata } from './composables/useMarkdown'
 import { usePDF } from './composables/usePDF'
 import { save, open, message } from '@tauri-apps/plugin-dialog'
 import { writeTextFile, readTextFile } from '@tauri-apps/plugin-fs'
@@ -64,12 +65,17 @@ const defaultContent = `# MD2PDF - Markdown 编辑器
 
 const content = ref(defaultContent)
 const currentFileDir = ref<string | null>(null)
+const currentMetadata = ref<Metadata>({})
 const { render } = useMarkdown()
 const { exportToPDF } = usePDF()
 const previewRef = ref<InstanceType<typeof Preview>>()
 
-// 计算渲染后的 HTML
-const renderedHtml = computed(() => render(content.value))
+// 计算渲染后的 HTML 和 metadata
+const renderedHtml = computed(() => {
+  const result = render(content.value)
+  currentMetadata.value = result.metadata
+  return result.html
+})
 
 // 导出 HTML
 async function exportHTML() {
@@ -104,12 +110,15 @@ async function exportHTML() {
         }
       )
 
+      // 使用 metadata.title 或从 h1 提取标题
+      const title = currentMetadata.value.title || extractH1Title(content.value) || 'Exported Document'
+
       const fullHtml = `<!DOCTYPE html>
 <html lang="zh-CN">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Exported Document</title>
+  <title>${title}</title>
   <style>
     ${katexStyles}
     ${highlightStyles}
@@ -143,11 +152,16 @@ async function exportPDF() {
   const previewElement = document.querySelector('.preview-content')
   const previewContent = previewElement?.innerHTML || renderedHtml.value
 
-  // 提取文档标题（从第一个 h1 或第一行）
-  const h1Match = content.value.match(/^#\s+(.+)$/m)
-  const title = h1Match ? h1Match[1].trim() : '文档'
+  // 使用 metadata.title 或从 h1 提取标题
+  const title = currentMetadata.value.title || extractH1Title(content.value) || '文档'
 
   await exportToPDF(previewContent, title)
+}
+
+// 从 Markdown 内容提取第一个 h1 标题
+function extractH1Title(mdContent: string): string | null {
+  const h1Match = mdContent.match(/^#\s+(.+)$/m)
+  return h1Match ? h1Match[1].trim() : null
 }
 
 // 打开文件

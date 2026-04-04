@@ -11,6 +11,42 @@ import anchor from 'markdown-it-anchor'
 // import toc from 'markdown-it-table-of-contents'
 import hljs from 'highlight.js'
 import katex from 'katex'
+import { parse as parseYaml } from 'yaml'
+
+// Metadata 类型定义
+export interface Metadata {
+  title?: string
+  author?: string
+  date?: string
+  [key: string]: any
+}
+
+// 解析结果类型
+export interface ParseResult {
+  metadata: Metadata
+  body: string
+}
+
+// 解析 YAML frontmatter
+function parseFrontmatter(content: string): ParseResult {
+  const frontmatterRegex = /^---\s*\n([\s\S]*?)\n---\s*\n/
+  const match = content.match(frontmatterRegex)
+
+  if (match) {
+    const yamlContent = match[1]
+    const body = content.slice(match[0].length)
+
+    try {
+      const metadata = parseYaml(yamlContent) as Metadata
+      return { metadata: metadata || {}, body }
+    } catch (error) {
+      console.error('YAML parse error:', error)
+      return { metadata: {}, body: content }
+    }
+  }
+
+  return { metadata: {}, body: content }
+}
 
 // 配置 highlight.js
 const highlight = (str: string, lang?: string): string => {
@@ -256,10 +292,17 @@ md.renderer.rules.heading_close = (tokens, idx) => {
 
 export function useMarkdown() {
   /**
-   * 渲染 Markdown 为 HTML
+   * 解析 Markdown 内容，提取 metadata 和 body
    */
-  function render(content: string): string {
-    if (!content.trim()) {
+  function parse(content: string): ParseResult {
+    return parseFrontmatter(content)
+  }
+
+  /**
+   * 渲染 Markdown body 为 HTML
+   */
+  function renderBody(body: string): string {
+    if (!body.trim()) {
       return '<div class="empty-preview">开始输入 Markdown...</div>'
     }
 
@@ -269,14 +312,25 @@ export function useMarkdown() {
     headingCounters.h4 = 0
 
     try {
-      return md.render(content)
+      return md.render(body)
     } catch (error) {
       console.error('Markdown render error:', error)
       return `<div class="render-error">渲染错误: ${String(error)}</div>`
     }
   }
 
+  /**
+   * 解析并渲染 Markdown，返回 metadata 和 HTML
+   */
+  function render(content: string): { html: string; metadata: Metadata } {
+    const { metadata, body } = parseFrontmatter(content)
+    const html = renderBody(body)
+    return { html, metadata }
+  }
+
   return {
+    parse,
+    renderBody,
     render
   }
 }

@@ -22,7 +22,7 @@ pub struct PrintResult {
 #[tauri::command]
 pub async fn print_to_pdf(
     app: AppHandle,
-    window: WebviewWindow,
+    _window: WebviewWindow,
     html: String,
     save_path: String,
 ) -> Result<PrintResult, String> {
