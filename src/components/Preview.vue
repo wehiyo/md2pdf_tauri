@@ -11,7 +11,7 @@
 <script setup lang="ts">
 import { ref, onMounted, onUpdated, watch, nextTick } from 'vue'
 import mermaid from 'mermaid'
-import { convertFileSrc } from '@tauri-apps/api/core'
+import { convertFileSrc, invoke } from '@tauri-apps/api/core'
 
 const props = defineProps<{
   html: string
@@ -53,6 +53,31 @@ async function renderMermaid() {
   }
 }
 
+// 渲染 PlantUML 图表
+async function renderPlantuml() {
+  if (!previewRef.value) return
+
+  const plantumlElements = previewRef.value.querySelectorAll('.plantuml')
+
+  for (const element of plantumlElements) {
+    if (element.getAttribute('data-processed')) continue
+
+    const encoded = element.getAttribute('data-plantuml')
+    if (!encoded) continue
+
+    try {
+      const content = decodeURIComponent(encoded)
+      const svg = await invoke<string>('render_plantuml', { content })
+      element.innerHTML = svg
+      element.setAttribute('data-processed', 'true')
+    } catch (error) {
+      console.error('PlantUML render error:', error)
+      element.innerHTML = `<pre class="error">PlantUML 渲染失败: ${error}</pre>`
+      element.setAttribute('data-processed', 'true')
+    }
+  }
+}
+
 // 修复本地图片路径
 function fixImagePaths() {
   console.log('fixImagePaths called, fileDir:', props.fileDir)
@@ -90,11 +115,13 @@ function fixImagePaths() {
 watch(() => props.html, async () => {
   await nextTick()
   await renderMermaid()
+  await renderPlantuml()
   fixImagePaths()
 }, { immediate: true })
 
 onUpdated(async () => {
   await renderMermaid()
+  await renderPlantuml()
   fixImagePaths()
 })
 </script>

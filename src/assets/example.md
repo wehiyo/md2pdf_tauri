@@ -167,6 +167,45 @@ gantt
     集成测试      :a5, after a3, 7d
 ```
 
+### PlantUML 图表
+
+PlantUML 是另一种图表语言，支持更多图表类型（需要安装 Java 运行时）。
+
+#### 时序图
+
+```plantuml
+@startuml
+participant 用户
+participant 应用
+participant 数据库
+
+用户 -> 应用: 登录请求
+应用 -> 数据库: 查询用户
+数据库 --> 应用: 返回用户信息
+应用 --> 用户: 登录成功
+@enduml
+```
+
+#### 类图
+
+```plantuml
+@startuml
+class Animal {
+  +name: String
+  +age: int
+  +makeSound(): void
+}
+class Dog extends Animal {
+  +breed: String
+  +bark(): void
+}
+class Cat extends Animal {
+  +color: String
+  +meow(): void
+}
+@enduml
+```
+
 ### 图片
 
 #### 本地图片

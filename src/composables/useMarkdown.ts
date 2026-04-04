@@ -142,7 +142,7 @@ md.renderer.rules.math_block = (tokens, idx) => {
   }
 }
 
-// 自定义 fence 渲染器处理 Mermaid 和代码块
+// 自定义 fence 渲染器处理 Mermaid、PlantUML 和代码块
 const defaultFence = md.renderer.rules.fence?.bind(md.renderer.rules)
 md.renderer.rules.fence = (tokens, idx, options, env, self) => {
   const token = tokens[idx]
@@ -151,6 +151,13 @@ md.renderer.rules.fence = (tokens, idx, options, env, self) => {
 
   if (lang === 'mermaid') {
     return `<div class="mermaid">${token.content}</div>`
+  }
+
+  // PlantUML 图表
+  if (lang === 'plantuml') {
+    // 编码内容避免 HTML 转义问题
+    const encoded = encodeURIComponent(token.content)
+    return `<div class="plantuml" data-plantuml="${encoded}">Loading PlantUML...</div>`
   }
 
   // 数学公式代码块
