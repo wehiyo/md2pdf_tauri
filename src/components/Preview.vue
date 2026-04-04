@@ -11,9 +11,11 @@
 <script setup lang="ts">
 import { ref, onMounted, onUpdated, watch, nextTick } from 'vue'
 import mermaid from 'mermaid'
+import { convertFileSrc } from '@tauri-apps/api/core'
 
 const props = defineProps<{
   html: string
+  fileDir?: string | null
 }>()
 
 const previewRef = ref<HTMLDivElement>()
@@ -51,14 +53,49 @@ async function renderMermaid() {
   }
 }
 
-// 监听 HTML 变化，渲染图表
+// 修复本地图片路径
+function fixImagePaths() {
+  console.log('fixImagePaths called, fileDir:', props.fileDir)
+  if (!previewRef.value) {
+    console.log('previewRef is null')
+    return
+  }
+  if (!props.fileDir) {
+    console.log('fileDir is null, skipping image fix')
+    return
+  }
+
+  const images = previewRef.value.querySelectorAll('img')
+  console.log('Found images:', images.length)
+
+  for (const img of images) {
+    const src = img.getAttribute('src')
+    console.log('Image src:', src)
+    if (src && !src.match(/^https?:\/\//) && !src.startsWith('data:') && !src.startsWith('asset:') && !src.includes('asset.localhost')) {
+      // 相对路径，转换为绝对路径
+      const absolutePath = props.fileDir + '/' + src
+      const normalizedPath = absolutePath.replace(/\\/g, '/')
+
+      // 使用 convertFileSrc 转换为 asset 协议 URL
+      const assetUrl = convertFileSrc(normalizedPath)
+      console.log('Converting image path (preview):', src, '->', assetUrl)
+      // 保存原始路径用于导出
+      img.setAttribute('data-original-src', normalizedPath)
+      img.setAttribute('src', assetUrl)
+    }
+  }
+}
+
+// 监听 HTML 变化，渲染图表和修复图片路径
 watch(() => props.html, async () => {
   await nextTick()
   await renderMermaid()
+  fixImagePaths()
 }, { immediate: true })
 
-onUpdated(() => {
-  renderMermaid()
+onUpdated(async () => {
+  await renderMermaid()
+  fixImagePaths()
 })
 </script>
 

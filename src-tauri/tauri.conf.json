@@ -24,7 +24,11 @@
       }
     ],
     "security": {
-      "csp": null,
+      "csp": "default-src 'self'; img-src 'self' asset: http://asset.localhost https: data: blob: file:; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'",
+      "assetProtocol": {
+        "enable": true,
+        "scope": ["**"]
+      },
       "capabilities": [
         {
           "identifier": "default",
@@ -37,10 +41,19 @@
             "dialog:allow-open",
             "dialog:allow-save",
             "dialog:allow-message",
-            "fs:default",
+            {
+              "identifier": "fs:default",
+              "allow": [
+                { "path": "$HOME/**" },
+                { "path": "$DESKTOP/**" },
+                { "path": "$DOCUMENT/**" },
+                { "path": "$DOWNLOAD/**" }
+              ]
+            },
             "fs:allow-read-text-file",
             "fs:allow-write-text-file",
             "fs:allow-read-dir",
+            "fs:allow-read-file",
             "fs:allow-write-file",
             "fs:allow-remove",
             "fs:allow-temp-write",

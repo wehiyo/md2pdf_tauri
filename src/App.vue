@@ -14,6 +14,7 @@
       <Preview
         ref="previewRef"
         :html="renderedHtml"
+        :file-dir="currentFileDir"
         class="preview-pane"
       />
     </div>
@@ -29,14 +30,40 @@ import { useMarkdown } from './composables/useMarkdown'
 import { usePDF } from './composables/usePDF'
 import { save, open, message } from '@tauri-apps/plugin-dialog'
 import { writeTextFile, readTextFile } from '@tauri-apps/plugin-fs'
-import exampleContent from './assets/example.md?raw'
 // @ts-ignore
 import katexStyles from './assets/katex/katex-inline.css?raw'
 // @ts-ignore
 import highlightStyles from './assets/github.min.css?raw'
 
-// 使用 example.md 作为默认内容
-const content = ref(exampleContent)
+// 默认提示内容
+const defaultContent = `# MD2PDF - Markdown 编辑器
+
+欢迎使用 MD2PDF！
+
+## 使用说明
+
+- 在左侧编辑器中编写 Markdown 内容
+- 右侧预览区会实时显示渲染结果
+- 点击工具栏按钮可以：
+  - **打开文件**：从文件系统打开 .md 文件
+  - **保存文件**：保存当前内容到 .md 文件
+  - **导出 HTML**：导出为 HTML 文件
+  - **导出 PDF**：导出为 PDF 文件
+
+## 功能支持
+
+- 数学公式（KaTeX）
+- 代码高亮
+- Mermaid 图表
+- 本地图片
+
+---
+
+请点击工具栏的「打开文件」按钮打开一个 Markdown 文件，或直接在此编写内容。
+`
+
+const content = ref(defaultContent)
+const currentFileDir = ref<string | null>(null)
 const { render } = useMarkdown()
 const { exportToPDF } = usePDF()
 const previewRef = ref<InstanceType<typeof Preview>>()
@@ -57,7 +84,25 @@ async function exportHTML() {
     if (filePath) {
       // 从预览区域获取已渲染的 HTML（包含 Mermaid SVG）
       const previewElement = document.querySelector('.preview-content')
-      const previewContent = previewElement?.innerHTML || renderedHtml.value
+      let previewContent = previewElement?.innerHTML || renderedHtml.value
+
+      // 将 asset 协议 URL 转换为原始绝对路径（用于浏览器显示）
+      // 查找所有包含 data-original-src 的 img 标签，用原始路径替换 src
+      previewContent = previewContent.replace(
+        /<img([^>]*)>/g,
+        (match, attrs) => {
+          const originalSrcMatch = attrs.match(/data-original-src="([^"]+)"/)
+          if (originalSrcMatch) {
+            const originalSrc = originalSrcMatch[1]
+            // 移除 data-original-src 属性，替换 src
+            const newAttrs = attrs
+              .replace(/data-original-src="[^"]+"/, '')
+              .replace(/src="[^"]+"/, `src="${originalSrc}"`)
+            return `<img${newAttrs}>`
+          }
+          return match
+        }
+      )
 
       const fullHtml = `<!DOCTYPE html>
 <html lang="zh-CN">
@@ -119,6 +164,12 @@ async function openFile() {
     if (selected && typeof selected === 'string') {
       const text = await readTextFile(selected)
       content.value = text
+
+      // 从文件路径提取目录（使用字符串操作，不导入 Tauri API）
+      const lastSep = Math.max(selected.lastIndexOf('/'), selected.lastIndexOf('\\'))
+      currentFileDir.value = lastSep > 0 ? selected.substring(0, lastSep) : null
+      console.log('Opened file:', selected)
+      console.log('File directory:', currentFileDir.value)
     }
   } catch (error) {
     console.error('打开文件失败:', error)
