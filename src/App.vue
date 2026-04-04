@@ -152,10 +152,7 @@ async function exportPDF() {
   const previewElement = document.querySelector('.preview-content')
   const previewContent = previewElement?.innerHTML || renderedHtml.value
 
-  // 使用 metadata.title 或从 h1 提取标题
-  const title = currentMetadata.value.title || extractH1Title(content.value) || '文档'
-
-  await exportToPDF(previewContent, title)
+  await exportToPDF(previewContent, currentMetadata.value)
 }
 
 // 从 Markdown 内容提取第一个 h1 标题

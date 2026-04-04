@@ -3,6 +3,7 @@ import { PDFDocument, StandardFonts, rgb, PDFName, PDFHexString } from 'pdf-lib'
 import { readFile, writeFile } from '@tauri-apps/plugin-fs'
 import { invoke } from '@tauri-apps/api/core'
 import fontkit from '@pdf-lib/fontkit'
+import type { Metadata } from './useMarkdown'
 
 // 字体缓存
 let cachedChineseFont: Uint8Array | null = null
@@ -20,7 +21,8 @@ export function usePDF() {
   /**
    * 导出 HTML 为 PDF
    */
-  async function exportToPDF(htmlContent: string, title: string = '文档'): Promise<void> {
+  async function exportToPDF(htmlContent: string, metadata: Metadata = {}): Promise<void> {
+    const title = metadata.title || '文档'
     if (isExporting) {
       console.log('[诊断] 已有导出任务在进行中，忽略重复调用')
       return
@@ -38,7 +40,7 @@ export function usePDF() {
       const headings = extractHeadings(contentWithoutToc)
 
       // 生成 PDF
-      await generatePDF(contentWithoutToc, headings, title)
+      await generatePDF(contentWithoutToc, headings, metadata)
 
     } catch (error) {
       console.error('导出 PDF 失败:', error)
@@ -54,8 +56,10 @@ export function usePDF() {
   async function generatePDF(
     contentWithoutToc: string,
     headings: Array<{ level: number; text: string; id: string }>,
-    title: string
+    metadata: Metadata
   ): Promise<void> {
+    const title = metadata.title || '文档'
+
     // Step 1: 获取保存路径
     const savePath = await save({
       filters: [{ name: 'PDF', extensions: ['pdf'] }],
@@ -69,6 +73,19 @@ export function usePDF() {
 
     // 创建带封面和页码锚点的 HTML
     const contentWithPageAnchors = addPageAnchors(contentWithoutToc, headings)
+
+    // 构建封面 meta 信息
+    const metaItems: string[] = []
+    if (metadata.author) {
+      metaItems.push(`<div class="meta-item">作者：${escapeHtml(metadata.author)}</div>`)
+    }
+    if (metadata.date) {
+      metaItems.push(`<div class="meta-item">日期：${escapeHtml(metadata.date)}</div>`)
+    }
+    if (metadata['security level']) {
+      metaItems.push(`<div class="meta-item">密级：${escapeHtml(metadata['security level'])}</div>`)
+    }
+    const metaHtml = metaItems.length > 0 ? `<div class="meta">${metaItems.join('')}</div>` : ''
 
     // 创建 HTML 文档（使用本地 KaTeX 和 highlight.js 样式，字体已内联为 base64）
     const fullHtml = `<!DOCTYPE html>
@@ -93,7 +110,8 @@ export function usePDF() {
     }
     .cover-page h1 { font-size: 2.5em; font-weight: 700; color: #1f2937; margin: 0 0 0.5em 0; border: none; }
     .cover-page .subtitle { font-size: 1.2em; color: #6b7280; }
-    .cover-page .meta { margin-top: 3em; font-size: 1em; color: #9ca3af; }
+    .cover-page .meta { margin-top: 3em; font-size: 1em; color: #6b7280; }
+    .cover-page .meta-item { margin: 0.5em 0; }
 
     .main-content { page-break-before: always; padding: 0; }
     .main-content h1:first-child { margin-top: 0; }
@@ -108,7 +126,7 @@ export function usePDF() {
   <div class="cover-page">
     <h1>${escapeHtml(title)}</h1>
     <div class="subtitle">MD2PDF 生成文档</div>
-    <div class="meta">${new Date().toLocaleDateString('zh-CN')}</div>
+    ${metaHtml}
   </div>
 
   <div class="main-content markdown-body">
@@ -131,7 +149,7 @@ export function usePDF() {
         // Step 4: 添加页码和书签
         try {
           const pdfBytes = await readFile(result.path)
-          const pdfWithEnhancements = await enhancePDF(pdfBytes, bookmarkData, title)
+          const pdfWithEnhancements = await enhancePDF(pdfBytes, bookmarkData, metadata)
           await writeFile(result.path, pdfWithEnhancements)
 
           await message(`PDF 已保存：${result.path}`, { title: '成功', kind: 'info' })
@@ -247,7 +265,7 @@ function hasNonAscii(text: string): boolean {
 async function enhancePDF(
   pdfBytes: Uint8Array,
   bookmarkData: Array<{ level: number; text: string; pageNumber: number }>,
-  headerTitle?: string
+  metadata: Metadata = {}
 ): Promise<Uint8Array> {
   const pdfDoc = await PDFDocument.load(pdfBytes)
 
@@ -258,18 +276,28 @@ async function enhancePDF(
   const helveticaFont = await pdfDoc.embedFont(StandardFonts.Helvetica)
 
   // 页码位置参数
-  const marginBottom = 57
-  const fontSize = 10
+  const marginBottom = 25
+  const fontSize = 8
+  const pageMargin = 50 // 页边距
 
   // 页眉位置参数
-  const headerFontSize = 10
-  const marginTop = 30
+  const headerFontSize = 8
+  const marginTop = 25
+  const headerLineMargin = 8 // 页眉与分割线的间距
+  const headerMargin = 50 // 页眉左右边距
+
+  // 提取 metadata 信息
+  const headerTitle = metadata.title || ''
+  const securityLevel = metadata['security level'] || ''
 
   // 确定页眉字体：如果有中文则尝试加载中文字体
   let headerFont = helveticaFont
-  let canShowHeader = !!headerTitle
+  let canShowHeader = !!(headerTitle || securityLevel)
 
-  if (headerTitle && hasNonAscii(headerTitle)) {
+  // 检查是否有中文内容
+  const hasChinese = (headerTitle && hasNonAscii(headerTitle)) || (securityLevel && hasNonAscii(securityLevel))
+
+  if (hasChinese) {
     try {
       const chineseFontBytes = await loadChineseFont()
       if (chineseFontBytes) {
@@ -295,25 +323,53 @@ async function enhancePDF(
     const pageWidth = page.getWidth()
     const pageHeight = page.getHeight()
 
-    // 添加页眉（标题居中）
-    if (headerTitle && canShowHeader) {
-      const headerTextWidth = headerFont.widthOfTextAtSize(headerTitle, headerFontSize)
-      const headerX = (pageWidth - headerTextWidth) / 2
+    // 添加页眉（标题居中，security level 在右侧）
+    if (canShowHeader) {
       const headerY = pageHeight - marginTop
 
-      page.drawText(headerTitle, {
-        x: headerX,
-        y: headerY,
-        size: headerFontSize,
-        font: headerFont,
-        color: rgb(0.42, 0.45, 0.5)
+      // 绘制标题（居中）
+      if (headerTitle) {
+        const headerTextWidth = headerFont.widthOfTextAtSize(headerTitle, headerFontSize)
+        const headerX = (pageWidth - headerTextWidth) / 2
+
+        page.drawText(headerTitle, {
+          x: headerX,
+          y: headerY,
+          size: headerFontSize,
+          font: headerFont,
+          color: rgb(0.42, 0.45, 0.5)
+        })
+      }
+
+      // 绘制 security level（右侧）
+      if (securityLevel) {
+        const securityText = `密级：${securityLevel}`
+        const securityTextWidth = headerFont.widthOfTextAtSize(securityText, headerFontSize)
+        const securityX = pageWidth - headerMargin - securityTextWidth
+
+        page.drawText(securityText, {
+          x: securityX,
+          y: headerY,
+          size: headerFontSize,
+          font: headerFont,
+          color: rgb(0.42, 0.45, 0.5)
+        })
+      }
+
+      // 添加分割线（在页眉下方）
+      const lineY = headerY - headerLineMargin
+      page.drawLine({
+        start: { x: headerMargin, y: lineY },
+        end: { x: pageWidth - headerMargin, y: lineY },
+        thickness: 0.5,
+        color: rgb(0.8, 0.8, 0.8)
       })
     }
 
-    // 添加页码（居中）
-    const pageText = `- ${pageNum} -`
+    // 添加页码（右侧）
+    const pageText = `${pageNum}`
     const textWidth = helveticaFont.widthOfTextAtSize(pageText, fontSize)
-    const x = (pageWidth - textWidth) / 2
+    const x = pageWidth - pageMargin - textWidth
     const y = marginBottom
 
     page.drawText(pageText, {
@@ -322,6 +378,15 @@ async function enhancePDF(
       size: fontSize,
       font: helveticaFont,
       color: rgb(0.42, 0.45, 0.5)
+    })
+
+    // 添加页脚分割线（在页码上方）
+    const footerLineY = marginBottom + 12
+    page.drawLine({
+      start: { x: pageMargin, y: footerLineY },
+      end: { x: pageWidth - pageMargin, y: footerLineY },
+      thickness: 0.5,
+      color: rgb(0.8, 0.8, 0.8)
     })
   }
 

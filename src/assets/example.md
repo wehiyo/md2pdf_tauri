@@ -1,3 +1,10 @@
+---
+title: MD2PDF 功能展示
+author: MD2PDF Team
+date: 2026-04-04
+security level: 外部公开
+---
+
 # MD2PDF 功能展示
 
 本文档展示 MD2PDF 支持的所有 Markdown 特性和扩展功能。
