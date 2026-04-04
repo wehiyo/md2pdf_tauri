@@ -22,7 +22,6 @@ export function usePDF() {
    * 导出 HTML 为 PDF
    */
   async function exportToPDF(htmlContent: string, metadata: Metadata = {}): Promise<void> {
-    const title = metadata.title || '文档'
     if (isExporting) {
       console.log('[诊断] 已有导出任务在进行中，忽略重复调用')
       return

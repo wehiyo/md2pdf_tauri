@@ -143,8 +143,7 @@ md.renderer.rules.math_block = (tokens, idx) => {
 }
 
 // 自定义 fence 渲染器处理 Mermaid、PlantUML 和代码块
-const defaultFence = md.renderer.rules.fence?.bind(md.renderer.rules)
-md.renderer.rules.fence = (tokens, idx, options, env, self) => {
+md.renderer.rules.fence = (tokens, idx, _options, _env, _self) => {
   const token = tokens[idx]
   const info = token.info ? token.info.trim() : ''
   const lang = info.split(/\s+/g)[0]
@@ -183,9 +182,6 @@ md.renderer.rules.fence = (tokens, idx, options, env, self) => {
   if (lineNumMatch) {
     startLineNum = parseInt(lineNumMatch[1] || lineNumMatch[2], 10)
   }
-
-  const maxLineNum = lines.length + startLineNum - 1
-  const lineNumWidth = String(maxLineNum).length
 
   let linesHtml = ''
 
