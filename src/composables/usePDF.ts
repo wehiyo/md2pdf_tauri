@@ -5,6 +5,7 @@ import { invoke } from '@tauri-apps/api/core'
 import fontkit from '@pdf-lib/fontkit'
 import mermaid from 'mermaid'
 import type { Metadata } from './useMarkdown'
+import { useExportProgress } from './useExportProgress'
 
 // 字体缓存
 let cachedChineseFont: Uint8Array | null = null
@@ -22,6 +23,8 @@ import highlightStyles from '../assets/github.min.css?raw'
 let isExporting = false
 
 export function usePDF() {
+  const { startExport, updateStep, endExport } = useExportProgress()
+
   /**
    * 导出 HTML 为 PDF
    */
@@ -31,6 +34,7 @@ export function usePDF() {
       return
     }
     isExporting = true
+    startExport()
 
     try {
       // 移除内嵌目录、[[toc]] 标记及相关内容
@@ -40,7 +44,7 @@ export function usePDF() {
         .replace(/\[\[toc\]\]/gi, '')
 
       // 预渲染 Mermaid 和 PlantUML 图表
-      console.log('[PDF导出] 开始预渲染图表...')
+      updateStep('预渲染图表...', 1)
       contentWithoutToc = await preRenderDiagrams(contentWithoutToc)
 
       // 提取标题数据（h1-h4，用于分页和书签）
@@ -53,6 +57,7 @@ export function usePDF() {
       console.error('导出 PDF 失败:', error)
       await message('导出失败：' + String(error), { title: '错误', kind: 'error' })
     } finally {
+      endExport()
       isExporting = false
     }
   }
@@ -137,12 +142,12 @@ export function usePDF() {
     })
 
     if (!savePath) {
+      endExport()
       return
     }
 
-    // Step 2: 预渲染图表
-    console.log('[PDF导出] 开始预渲染图表...')
-    const contentWithDiagrams = await preRenderDiagrams(contentWithoutToc)
+    // Step 2: 预渲染图表（已在 exportToPDF 中完成）
+    const contentWithDiagrams = contentWithoutToc
 
     // Step 3: 添加标记文本（用于 PDF 书签定位）
     const contentWithMarkers = addMarkerText(contentWithDiagrams, headings)
@@ -171,6 +176,7 @@ export function usePDF() {
 
     // Step 7: 调用 Rust command 打印 PDF
     try {
+      updateStep('生成 PDF...', 2)
       const printResult = await invoke<{ success: boolean; path: string; error?: string }>('print_to_pdf', {
         html: fullHtml,
         savePath: savePath
@@ -181,45 +187,39 @@ export function usePDF() {
         return
       }
 
-      console.log('[PDF导出] PDF 生成成功，开始提取标记位置...')
-
       // Step 8: 从 PDF 提取标记位置
+      updateStep('提取书签位置...', 3)
       const markerPositions = await invoke<Array<{ marker: string; page: number; y: number }>>('extract_pdf_markers', {
         pdfPath: printResult.path,
         markers: markers
       })
 
-      console.log(`[PDF导出] 提取到 ${markerPositions.length} 个标记位置`)
-
       // Step 9: 构建书签数据
-      // pdf-extract 返回的是 PDF 实际页码（1-indexed）
-      // PDF 第 1 页是封面，内容从第 2 页开始
-      // bookmark.rs 中 bm.page 是 0-indexed 的内容页码，会 +1 跳过封面
-      // 所以：如果标记在 PDF 第 N 页，bm.page = N - 2
       const bookmarks = headings.map((h, i) => {
         const pos = markerPositions.find(p => p.marker === markers[i])
         return {
           title: h.text,
           level: h.level,
-          page: pos ? pos.page - 2 : 0, // PDF页码 - 1(转0-index) - 1(跳过封面) = 内容页码
+          page: pos ? pos.page - 2 : 0,
           y: pos ? pos.y : 700
         }
       })
 
       // Step 10: 注入书签
+      updateStep('注入书签...', 4)
       if (bookmarks.length > 0) {
         try {
           await invoke<void>('inject_bookmarks', {
             pdfPath: printResult.path,
             bookmarks: bookmarks
           })
-          console.log('[PDF导出] 书签注入完成')
         } catch (bookmarkError) {
           console.error('书签注入失败:', bookmarkError)
         }
       }
 
       // Step 11: 添加页码和页眉
+      updateStep('添加页码...', 5)
       try {
         const pdfBytes = await readFile(printResult.path)
         const pdfWithPageNumbers = await addPageNumbers(pdfBytes, metadata)

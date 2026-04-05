@@ -18,6 +18,7 @@
         class="preview-pane"
       />
     </div>
+    <ExportProgress />
   </div>
 </template>
 
@@ -26,6 +27,7 @@ import { ref, computed, onMounted } from 'vue'
 import Editor from './components/Editor.vue'
 import Preview from './components/Preview.vue'
 import Toolbar from './components/Toolbar.vue'
+import ExportProgress from './components/ExportProgress.vue'
 import { useMarkdown } from './composables/useMarkdown'
 import type { Metadata } from './composables/useMarkdown'
 import { usePDF } from './composables/usePDF'
