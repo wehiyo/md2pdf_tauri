@@ -1,12 +1,16 @@
 import { message, save } from '@tauri-apps/plugin-dialog'
-import { PDFDocument, StandardFonts, rgb, PDFName, PDFHexString } from 'pdf-lib'
+import { PDFDocument, StandardFonts, rgb } from 'pdf-lib'
 import { readFile, writeFile } from '@tauri-apps/plugin-fs'
 import { invoke } from '@tauri-apps/api/core'
 import fontkit from '@pdf-lib/fontkit'
+import mermaid from 'mermaid'
 import type { Metadata } from './useMarkdown'
 
 // 字体缓存
 let cachedChineseFont: Uint8Array | null = null
+
+// Mermaid 初始化标志
+let mermaidInitialized = false
 
 // 导入本地样式文件（Vite ?raw 导入）
 // @ts-ignore
@@ -35,6 +39,10 @@ export function usePDF() {
         .replace(/<p>\s*\[\[toc\]\]\s*<\/p>/gi, '')
         .replace(/\[\[toc\]\]/gi, '')
 
+      // 预渲染 Mermaid 和 PlantUML 图表
+      console.log('[PDF导出] 开始预渲染图表...')
+      contentWithoutToc = await preRenderDiagrams(contentWithoutToc)
+
       // 提取标题数据（h1-h4，用于分页和书签）
       const headings = extractHeadings(contentWithoutToc)
 
@@ -50,7 +58,69 @@ export function usePDF() {
   }
 
   /**
-   * 生成 PDF（使用 WebView2 静默打印）
+   * 预渲染 Mermaid 和 PlantUML 图表为 SVG
+   */
+  async function preRenderDiagrams(html: string): Promise<string> {
+    // 初始化 Mermaid
+    if (!mermaidInitialized) {
+      mermaid.initialize({
+        startOnLoad: false,
+        theme: 'default',
+        securityLevel: 'loose',
+        fontFamily: 'inherit'
+      })
+      mermaidInitialized = true
+    }
+
+    // 预渲染 Mermaid 图表
+    const mermaidRegex = /<div class="mermaid">([\s\S]*?)<\/div>/g
+    let result = html
+    let match
+
+    // 收集所有 Mermaid 图表
+    const mermaidMatches: { full: string; code: string }[] = []
+    while ((match = mermaidRegex.exec(result)) !== null) {
+      mermaidMatches.push({ full: match[0], code: match[1].trim() })
+    }
+
+    // 渲染每个 Mermaid 图表
+    for (let i = 0; i < mermaidMatches.length; i++) {
+      const { full, code } = mermaidMatches[i]
+      try {
+        const id = `mermaid-pdf-${i}`
+        const { svg } = await mermaid.render(id, code)
+        result = result.replace(full, `<div class="mermaid" data-processed="true">${svg}</div>`)
+        console.log(`[PDF导出] Mermaid 图表 ${i + 1}/${mermaidMatches.length} 渲染完成`)
+      } catch (e) {
+        console.warn(`[PDF导出] Mermaid 渲染失败:`, e)
+      }
+    }
+
+    // 预渲染 PlantUML 图表
+    const plantumlRegex = /<div class="plantuml" data-plantuml="([^"]*)">[\s\S]*?<\/div>/g
+    const plantumlMatches: { full: string; encoded: string }[] = []
+    while ((match = plantumlRegex.exec(result)) !== null) {
+      plantumlMatches.push({ full: match[0], encoded: match[1] })
+    }
+
+    for (let i = 0; i < plantumlMatches.length; i++) {
+      const { full, encoded } = plantumlMatches[i]
+      try {
+        const content = decodeURIComponent(encoded)
+        const svg = await invoke<string>('render_plantuml', { content })
+        result = result.replace(full, `<div class="plantuml" data-processed="true">${svg}</div>`)
+        console.log(`[PDF导出] PlantUML 图表 ${i + 1}/${plantumlMatches.length} 渲染完成`)
+      } catch (e) {
+        console.warn(`[PDF导出] PlantUML 渲染失败:`, e)
+      }
+    }
+
+    console.log(`[PDF导出] 图表预渲染完成: ${mermaidMatches.length} Mermaid, ${plantumlMatches.length} PlantUML`)
+    return result
+  }
+
+  /**
+   * 生成 PDF（使用标记文本提取实现书签定位）
    */
   async function generatePDF(
     contentWithoutToc: string,
@@ -70,8 +140,18 @@ export function usePDF() {
       return
     }
 
-    // 创建带封面和页码锚点的 HTML
-    const contentWithPageAnchors = addPageAnchors(contentWithoutToc, headings)
+    // Step 2: 预渲染图表
+    console.log('[PDF导出] 开始预渲染图表...')
+    const contentWithDiagrams = await preRenderDiagrams(contentWithoutToc)
+
+    // Step 3: 添加标记文本（用于 PDF 书签定位）
+    const contentWithMarkers = addMarkerText(contentWithDiagrams, headings)
+
+    // Step 4: 为 h1 标题添加分页（从第二个开始）
+    const contentWithPageBreaks = addH1PageBreaks(contentWithMarkers, headings)
+
+    // Step 5: 生成标记列表
+    const markers = headings.map((_, i) => `PDFMARK${i.toString().padStart(3, '0')}`)
 
     // 构建封面 meta 信息
     const metaItems: string[] = []
@@ -86,163 +166,75 @@ export function usePDF() {
     }
     const metaHtml = metaItems.length > 0 ? `<div class="meta">${metaItems.join('')}</div>` : ''
 
-    // 创建 HTML 文档（使用本地 KaTeX 和 highlight.js 样式，字体已内联为 base64）
-    const fullHtml = `<!DOCTYPE html>
-<html>
-<head>
-  <meta charset="UTF-8">
-  <title>${escapeHtml(title)}</title>
-  <style>
-    ${getMarkdownStyles()}
-    ${katexStyles}
-    ${highlightStyles}
+    // Step 6: 创建 HTML 文档
+    const fullHtml = getFullHtml(title, metaHtml, contentWithPageBreaks)
 
-    @page { margin: 2cm 2.5cm; size: A4; }
-    @page :first { margin: 0; }
-
-    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; font-size: 11pt; line-height: 1.6; color: #1f2937; margin: 0; padding: 0; }
-
-    .cover-page {
-      display: flex; flex-direction: column; justify-content: center; align-items: center;
-      min-height: 100vh; text-align: center; padding: 2cm; box-sizing: border-box;
-      page-break-after: always;
-    }
-    .cover-page h1 { font-size: 2.5em; font-weight: 700; color: #1f2937; margin: 0 0 0.5em 0; border: none; }
-    .cover-page .subtitle { font-size: 1.2em; color: #6b7280; }
-    .cover-page .meta { margin-top: 3em; font-size: 1em; color: #6b7280; }
-    .cover-page .meta-item { margin: 0.5em 0; }
-
-    .main-content { page-break-before: always; padding: 0; }
-    .main-content h1:first-child { margin-top: 0; }
-    .markdown-body { max-width: none; }
-
-    h1, h2, h3, h4 { page-break-after: avoid; }
-    pre, blockquote, table, figure, img, svg, .mermaid { page-break-inside: avoid; }
-    * { -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
-  </style>
-</head>
-<body>
-  <div class="cover-page">
-    <h1>${escapeHtml(title)}</h1>
-    <div class="subtitle">MD2PDF 生成文档</div>
-    ${metaHtml}
-  </div>
-
-  <div class="main-content markdown-body">
-    ${contentWithPageAnchors}
-  </div>
-</body>
-</html>`
-
-    // Step 2: 计算书签页码
-    const bookmarkData = await calculateBookmarkPagesInIframe(fullHtml, headings)
-
-    // Step 3: 调用 Rust command 静默生成 PDF
+    // Step 7: 调用 Rust command 打印 PDF
     try {
-      const result = await invoke<{ success: boolean; path: string; error?: string }>(
-        'print_to_pdf',
-        { html: fullHtml, savePath: savePath }
-      )
+      const printResult = await invoke<{ success: boolean; path: string; error?: string }>('print_to_pdf', {
+        html: fullHtml,
+        savePath: savePath
+      })
 
-      if (result.success) {
-        // Step 4: 添加页码和书签
-        try {
-          const pdfBytes = await readFile(result.path)
-          const pdfWithEnhancements = await enhancePDF(pdfBytes, bookmarkData, metadata)
-          await writeFile(result.path, pdfWithEnhancements)
-
-          await message(`PDF 已保存：${result.path}`, { title: '成功', kind: 'info' })
-        } catch (enhanceError) {
-          console.error('PDF 增强失败:', enhanceError)
-          await message(`PDF 已生成，但添加页码和书签失败：${result.path}\n\n错误：${String(enhanceError)}`, { title: '警告', kind: 'warning' })
-        }
-      } else {
-        await message('PDF 生成失败：' + (result.error || '未知错误'), { title: '错误', kind: 'error' })
-      }
-    } catch (printError) {
-      console.error('静默打印失败:', printError)
-      await message('导出失败：' + String(printError), { title: '错误', kind: 'error' })
-    }
-  }
-
-  /**
-   * 在 iframe 中计算书签页码
-   */
-  async function calculateBookmarkPagesInIframe(
-    fullHtml: string,
-    headings: Array<{ level: number; text: string; id: string }>
-  ): Promise<Array<{ level: number; text: string; pageNumber: number }>> {
-    return new Promise((resolve) => {
-      const iframe = document.createElement('iframe')
-      iframe.style.position = 'fixed'
-      iframe.style.left = '-9999px'
-      iframe.style.top = '0'
-      iframe.style.width = '210mm'
-      iframe.style.height = 'auto'
-      iframe.style.minHeight = '100%'
-      iframe.style.border = 'none'
-      iframe.style.visibility = 'hidden'
-      document.body.appendChild(iframe)
-
-      const iframeDoc = iframe.contentDocument || iframe.contentWindow?.document
-      if (!iframeDoc) {
-        document.body.removeChild(iframe)
-        resolve([])
+      if (!printResult.success) {
+        await message('PDF 生成失败：' + (printResult.error || '未知错误'), { title: '错误', kind: 'error' })
         return
       }
 
-      iframeDoc.open()
-      iframeDoc.write(fullHtml)
-      iframeDoc.close()
+      console.log('[PDF导出] PDF 生成成功，开始提取标记位置...')
 
-      // 等待内容渲染
-      setTimeout(() => {
-        const result = calculateBookmarkPages(iframeDoc, headings)
-        if (iframe.parentNode) {
-          document.body.removeChild(iframe)
+      // Step 8: 从 PDF 提取标记位置
+      const markerPositions = await invoke<Array<{ marker: string; page: number; y: number }>>('extract_pdf_markers', {
+        pdfPath: printResult.path,
+        markers: markers
+      })
+
+      console.log(`[PDF导出] 提取到 ${markerPositions.length} 个标记位置`)
+
+      // Step 9: 构建书签数据
+      // pdf-extract 返回的是 PDF 实际页码（1-indexed）
+      // PDF 第 1 页是封面，内容从第 2 页开始
+      // bookmark.rs 中 bm.page 是 0-indexed 的内容页码，会 +1 跳过封面
+      // 所以：如果标记在 PDF 第 N 页，bm.page = N - 2
+      const bookmarks = headings.map((h, i) => {
+        const pos = markerPositions.find(p => p.marker === markers[i])
+        return {
+          title: h.text,
+          level: h.level,
+          page: pos ? pos.page - 2 : 0, // PDF页码 - 1(转0-index) - 1(跳过封面) = 内容页码
+          y: pos ? pos.y : 700
         }
-        resolve(result)
-      }, 2000)
-    })
-  }
+      })
 
-  /**
- * 计算标题所在的页码（同时根据文本去重）
- */
-  function calculateBookmarkPages(
-    iframeDoc: Document,
-    headings: Array<{ level: number; text: string; id: string }>
-  ): Array<{ level: number; text: string; pageNumber: number }> {
-    const result: Array<{ level: number; text: string; pageNumber: number }> = []
-    const seenTexts = new Set<string>()
-    const pageHeight = 715 // A4 可打印区域高度（像素）
-    const mainContent = iframeDoc.querySelector('.main-content')
-
-    if (!mainContent) return result
-
-    const contentRect = mainContent.getBoundingClientRect()
-    const contentTop = contentRect.top
-
-    headings.forEach((heading) => {
-      // 根据文本去重，只保留第一个出现的标题
-      if (seenTexts.has(heading.text)) return
-      seenTexts.add(heading.text)
-
-      const element = iframeDoc.getElementById(heading.id)
-      if (element) {
-        const elementRect = element.getBoundingClientRect()
-        const relativeTop = elementRect.top - contentTop
-        // 封面页是第 0 页，正文从第 1 页开始（PDF 页码索引）
-        const pageNumber = Math.floor(relativeTop / pageHeight) + 1
-        result.push({
-          level: heading.level,
-          text: heading.text,
-          pageNumber: pageNumber
-        })
+      // Step 10: 注入书签
+      if (bookmarks.length > 0) {
+        try {
+          await invoke<void>('inject_bookmarks', {
+            pdfPath: printResult.path,
+            bookmarks: bookmarks
+          })
+          console.log('[PDF导出] 书签注入完成')
+        } catch (bookmarkError) {
+          console.error('书签注入失败:', bookmarkError)
+        }
       }
-    })
 
-    return result
+      // Step 11: 添加页码和页眉
+      try {
+        const pdfBytes = await readFile(printResult.path)
+        const pdfWithPageNumbers = await addPageNumbers(pdfBytes, metadata)
+        await writeFile(printResult.path, pdfWithPageNumbers)
+
+        await message(`PDF 已保存：${printResult.path}`, { title: '成功', kind: 'info' })
+      } catch (pageNumberError) {
+        console.error('添加页码失败:', pageNumberError)
+        await message(`PDF 已生成：${printResult.path}`, { title: '成功', kind: 'info' })
+      }
+
+    } catch (printError) {
+      console.error('PDF 导出失败:', printError)
+      await message('导出失败：' + String(printError), { title: '错误', kind: 'error' })
+    }
   }
 
   return { exportToPDF }
@@ -256,147 +248,6 @@ function hasNonAscii(text: string): boolean {
     if (text.charCodeAt(i) > 255) return true
   }
   return false
-}
-
-/**
- * 使用 pdf-lib 为 PDF 添加页码、页眉和书签
- */
-async function enhancePDF(
-  pdfBytes: Uint8Array,
-  bookmarkData: Array<{ level: number; text: string; pageNumber: number }>,
-  metadata: Metadata = {}
-): Promise<Uint8Array> {
-  const pdfDoc = await PDFDocument.load(pdfBytes)
-
-  // 注册 fontkit 以支持自定义字体
-  pdfDoc.registerFontkit(fontkit)
-
-  const pages = pdfDoc.getPages()
-  const helveticaFont = await pdfDoc.embedFont(StandardFonts.Helvetica)
-
-  // 页码位置参数
-  const marginBottom = 25
-  const fontSize = 8
-  const pageMargin = 50 // 页边距
-
-  // 页眉位置参数
-  const headerFontSize = 8
-  const marginTop = 25
-  const headerLineMargin = 8 // 页眉与分割线的间距
-  const headerMargin = 50 // 页眉左右边距
-
-  // 提取 metadata 信息
-  const headerTitle = metadata.title || ''
-  const securityLevel = metadata['security level'] || ''
-
-  // 确定页眉字体：如果有中文则尝试加载中文字体
-  let headerFont = helveticaFont
-  let canShowHeader = !!(headerTitle || securityLevel)
-
-  // 检查是否有中文内容
-  const hasChinese = (headerTitle && hasNonAscii(headerTitle)) || (securityLevel && hasNonAscii(securityLevel))
-
-  if (hasChinese) {
-    try {
-      const chineseFontBytes = await loadChineseFont()
-      if (chineseFontBytes) {
-        headerFont = await pdfDoc.embedFont(chineseFontBytes)
-      } else {
-        canShowHeader = false
-      }
-    } catch (e) {
-      console.warn('无法加载中文字体，跳过页眉:', e)
-      canShowHeader = false
-    }
-  }
-
-  // 添加页眉和页码
-  for (let i = 0; i < pages.length; i++) {
-    // 封面页（第 0 页）不添加页眉和页码
-    if (i === 0) continue
-
-    const page = pages[i]
-    const pageNum = i
-
-    // 获取页面实际尺寸
-    const pageWidth = page.getWidth()
-    const pageHeight = page.getHeight()
-
-    // 添加页眉（标题居中，security level 在右侧）
-    if (canShowHeader) {
-      const headerY = pageHeight - marginTop
-
-      // 绘制标题（居中）
-      if (headerTitle) {
-        const headerTextWidth = headerFont.widthOfTextAtSize(headerTitle, headerFontSize)
-        const headerX = (pageWidth - headerTextWidth) / 2
-
-        page.drawText(headerTitle, {
-          x: headerX,
-          y: headerY,
-          size: headerFontSize,
-          font: headerFont,
-          color: rgb(0.42, 0.45, 0.5)
-        })
-      }
-
-      // 绘制 security level（右侧）
-      if (securityLevel) {
-        const securityText = `密级：${securityLevel}`
-        const securityTextWidth = headerFont.widthOfTextAtSize(securityText, headerFontSize)
-        const securityX = pageWidth - headerMargin - securityTextWidth
-
-        page.drawText(securityText, {
-          x: securityX,
-          y: headerY,
-          size: headerFontSize,
-          font: headerFont,
-          color: rgb(0.42, 0.45, 0.5)
-        })
-      }
-
-      // 添加分割线（在页眉下方）
-      const lineY = headerY - headerLineMargin
-      page.drawLine({
-        start: { x: headerMargin, y: lineY },
-        end: { x: pageWidth - headerMargin, y: lineY },
-        thickness: 0.5,
-        color: rgb(0.8, 0.8, 0.8)
-      })
-    }
-
-    // 添加页码（右侧）
-    const pageText = `${pageNum}`
-    const textWidth = helveticaFont.widthOfTextAtSize(pageText, fontSize)
-    const x = pageWidth - pageMargin - textWidth
-    const y = marginBottom
-
-    page.drawText(pageText, {
-      x,
-      y,
-      size: fontSize,
-      font: helveticaFont,
-      color: rgb(0.42, 0.45, 0.5)
-    })
-
-    // 添加页脚分割线（在页码上方）
-    const footerLineY = marginBottom + 12
-    page.drawLine({
-      start: { x: pageMargin, y: footerLineY },
-      end: { x: pageWidth - pageMargin, y: footerLineY },
-      thickness: 0.5,
-      color: rgb(0.8, 0.8, 0.8)
-    })
-  }
-
-  // 添加书签
-  if (bookmarkData.length > 0) {
-    addPDFOutlines(pdfDoc, bookmarkData, helveticaFont)
-  }
-
-  const savedBytes = await pdfDoc.save()
-  console.log('[PDF] Saved PDF size:', savedBytes.length)
-  return savedBytes
 }
 
 /**
@@ -426,142 +277,135 @@ async function loadChineseFont(): Promise<Uint8Array | null> {
 }
 
 /**
- * 使用 pdf-lib 底层 API 添加 PDF 大纲（书签）
- * 支持 h1-h4 多级书签，支持中文
+ * 使用 pdf-lib 为 PDF 添加页码和页眉（书签由 Rust 后端处理）
  */
-function addPDFOutlines(
-  pdfDoc: PDFDocument,
-  bookmarkData: Array<{ level: number; text: string; pageNumber: number }>,
-  _font?: any // 保留参数以兼容调用，但书签不需要字体
-): void {
-  const context = pdfDoc.context
+async function addPageNumbers(
+  pdfBytes: Uint8Array,
+  metadata: Metadata = {}
+): Promise<Uint8Array> {
+  const pdfDoc = await PDFDocument.load(pdfBytes)
+
+  // 注册 fontkit 以支持自定义字体
+  pdfDoc.registerFontkit(fontkit)
+
   const pages = pdfDoc.getPages()
+  const helveticaFont = await pdfDoc.embedFont(StandardFonts.Helvetica)
 
-  if (bookmarkData.length === 0) return
+  // 页码位置参数
+  const marginBottom = 25
+  const fontSize = 8
+  const pageMargin = 50
 
-  // 创建根大纲
-  const outlinesDict = context.obj({})
-  const outlinesRef = context.register(outlinesDict)
+  // 页眉位置参数
+  const headerFontSize = 8
+  const marginTop = 25
+  const headerLineMargin = 8
+  const headerMargin = 50
 
-  // 定义树节点结构
-  interface TreeNode {
-    text: string
-    level: number
-    pageNumber: number
-    ref: ReturnType<typeof context.register>
-    children: TreeNode[]
-  }
+  // 提取 metadata 信息
+  const headerTitle = metadata.title || ''
+  const securityLevel = metadata['security level'] || ''
 
-  // 构建树形结构
-  const rootChildren: TreeNode[] = []
-  const path: TreeNode[] = [] // 当前路径上的节点栈
+  // 确定页眉字体
+  let headerFont = helveticaFont
+  let canShowHeader = !!(headerTitle || securityLevel)
 
-  for (const item of bookmarkData) {
-    const page = pages[item.pageNumber]
-    if (!page) continue
+  // 检查是否有中文内容
+  const hasChinese = (headerTitle && hasNonAscii(headerTitle)) || (securityLevel && hasNonAscii(securityLevel))
 
-    // 创建节点
-    const destArray = context.obj([
-      page.ref,
-      PDFName.of('XYZ'),
-      null,
-      null,
-      null
-    ])
-
-    const itemDict = context.obj({})
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const itemDictAny = itemDict as any
-    itemDictAny.set(PDFName.of('Title'), PDFHexString.fromText(item.text))
-    itemDictAny.set(PDFName.of('Dest'), destArray)
-
-    const itemRef = context.register(itemDict)
-
-    const node: TreeNode = {
-      text: item.text,
-      level: item.level,
-      pageNumber: item.pageNumber,
-      ref: itemRef,
-      children: []
-    }
-
-    // 弹出路径中 level >= 当前的节点
-    while (path.length > 0 && path[path.length - 1].level >= node.level) {
-      path.pop()
-    }
-
-    // 添加到父节点的 children 或根
-    if (path.length === 0) {
-      rootChildren.push(node)
-    } else {
-      path[path.length - 1].children.push(node)
-    }
-
-    // 将当前节点加入路径
-    path.push(node)
-  }
-
-  // 递归设置 PDF 字典的关系
-  function processNode(node: TreeNode, parentRef: ReturnType<typeof context.register>): void {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const dict = context.lookup(node.ref) as any
-    dict.set(PDFName.of('Parent'), parentRef)
-
-    if (node.children.length > 0) {
-      // 设置 First 和 Last
-      dict.set(PDFName.of('First'), node.children[0].ref)
-      dict.set(PDFName.of('Last'), node.children[node.children.length - 1].ref)
-      dict.set(PDFName.of('Count'), context.obj(node.children.length))
-
-      // 设置子节点之间的 Prev/Next
-      for (let i = 0; i < node.children.length; i++) {
-        const child = node.children[i]
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        const childDict = context.lookup(child.ref) as any
-
-        if (i > 0) {
-          childDict.set(PDFName.of('Prev'), node.children[i - 1].ref)
-        }
-        if (i < node.children.length - 1) {
-          childDict.set(PDFName.of('Next'), node.children[i + 1].ref)
-        }
-
-        // 递归处理子节点
-        processNode(child, node.ref)
+  if (hasChinese) {
+    try {
+      const chineseFontBytes = await loadChineseFont()
+      if (chineseFontBytes) {
+        headerFont = await pdfDoc.embedFont(chineseFontBytes)
+      } else {
+        canShowHeader = false
       }
+    } catch (e) {
+      console.warn('无法加载中文字体，跳过页眉:', e)
+      canShowHeader = false
     }
   }
 
-  // 设置根大纲的 First 和 Last
-  if (rootChildren.length > 0) {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const outlinesAny = outlinesDict as any
-    outlinesAny.set(PDFName.of('First'), rootChildren[0].ref)
-    outlinesAny.set(PDFName.of('Last'), rootChildren[rootChildren.length - 1].ref)
-    outlinesAny.set(PDFName.of('Count'), context.obj(rootChildren.length))
+  // 添加页眉和页码
+  for (let i = 0; i < pages.length; i++) {
+    // 封面页（第 0 页）不添加页眉和页码
+    if (i === 0) continue
 
-    // 设置一级书签之间的 Prev/Next
-    for (let i = 0; i < rootChildren.length; i++) {
-      const child = rootChildren[i]
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const childDict = context.lookup(child.ref) as any
+    const page = pages[i]
+    const pageNum = i
 
-      if (i > 0) {
-        childDict.set(PDFName.of('Prev'), rootChildren[i - 1].ref)
-      }
-      if (i < rootChildren.length - 1) {
-        childDict.set(PDFName.of('Next'), rootChildren[i + 1].ref)
+    const pageWidth = page.getWidth()
+    const pageHeight = page.getHeight()
+
+    // 添加页眉
+    if (canShowHeader) {
+      const headerY = pageHeight - marginTop
+
+      if (headerTitle) {
+        const headerTextWidth = headerFont.widthOfTextAtSize(headerTitle, headerFontSize)
+        const headerX = (pageWidth - headerTextWidth) / 2
+
+        page.drawText(headerTitle, {
+          x: headerX,
+          y: headerY,
+          size: headerFontSize,
+          font: headerFont,
+          color: rgb(0.42, 0.45, 0.5)
+        })
       }
 
-      // 处理每个一级书签的子树
-      processNode(child, outlinesRef)
+      if (securityLevel) {
+        const securityText = `密级：${securityLevel}`
+        const securityTextWidth = headerFont.widthOfTextAtSize(securityText, headerFontSize)
+        const securityX = pageWidth - headerMargin - securityTextWidth
+
+        page.drawText(securityText, {
+          x: securityX,
+          y: headerY,
+          size: headerFontSize,
+          font: headerFont,
+          color: rgb(0.42, 0.45, 0.5)
+        })
+      }
+
+      // 分割线
+      const lineY = headerY - headerLineMargin
+      page.drawLine({
+        start: { x: headerMargin, y: lineY },
+        end: { x: pageWidth - headerMargin, y: lineY },
+        thickness: 0.5,
+        color: rgb(0.8, 0.8, 0.8)
+      })
     }
+
+    // 添加页码
+    const pageText = `${pageNum}`
+    const textWidth = helveticaFont.widthOfTextAtSize(pageText, fontSize)
+    const x = pageWidth - pageMargin - textWidth
+    const y = marginBottom
+
+    page.drawText(pageText, {
+      x,
+      y,
+      size: fontSize,
+      font: helveticaFont,
+      color: rgb(0.42, 0.45, 0.5)
+    })
+
+    // 页脚分割线
+    const footerLineY = marginBottom + 12
+    page.drawLine({
+      start: { x: pageMargin, y: footerLineY },
+      end: { x: pageWidth - pageMargin, y: footerLineY },
+      thickness: 0.5,
+      color: rgb(0.8, 0.8, 0.8)
+    })
   }
 
-  // 设置文档目录的 Outlines
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const catalog = pdfDoc.catalog as any
-  catalog.set(PDFName.of('Outlines'), outlinesRef)
+  const savedBytes = await pdfDoc.save()
+  console.log('[PDF] Saved PDF size:', savedBytes.length)
+  return savedBytes
 }
 
 /**
@@ -586,21 +430,50 @@ function extractHeadings(htmlContent: string): Array<{ level: number; text: stri
   return headings
 }
 
-function addPageAnchors(htmlContent: string, headings: Array<{ level: number; text: string; id: string }>): string {
+function stripHtml(html: string): string {
+  return html.replace(/<[^>]*>/g, '').replace(/&quot;/g, '"').replace(/&amp;/g, '&').replace(/&lt;/g, '<').replace(/&gt;/g, '>')
+}
+
+/**
+ * 为标题添加唯一标记文本（用于 PDF 书签定位）
+ * 使用标准字体确保 ASCII 字符能被 pdf-extract 正确提取
+ */
+function addMarkerText(htmlContent: string, headings: Array<{ level: number; text: string; id: string }>): string {
   let result = htmlContent
+
   headings.forEach((heading, index) => {
-    if (heading.level === 1) {
-      const h1Regex = new RegExp(`<h1[^>]*id="${heading.id}"[^>]*>`, 'g')
-      if (index > 0) {
-        result = result.replace(h1Regex, `<div style="page-break-before: always;"></div><h1 id="${heading.id}">`)
-      }
-    }
+    // 生成唯一标记: PDFMARK000, PDFMARK001, ...
+    const marker = `PDFMARK${index.toString().padStart(3, '0')}`
+
+    // 标记渲染在与标题同一行，使用相同字体大小但颜色隐藏
+    // font-size: 0.01em 比 0 更安全，避免被完全忽略
+    // line-height: 1 确保不影响标题行高
+    // color 匹配背景色使其不可见
+    // z-index: -1 放在背景层
+    const markerHtml = `<span style="font-family:'Courier New',Courier,monospace;font-size:0.01em;line-height:1;color:#f9fafb;display:inline-block;vertical-align:baseline;">${marker}</span>`
+
+    // 在标题元素内部开头插入标记
+    const headingRegex = new RegExp(`<h${heading.level}([^>]*)id="${heading.id}"([^>]*)>`, 'g')
+    result = result.replace(headingRegex, `<h${heading.level}$1id="${heading.id}"$2>${markerHtml}`)
   })
+
   return result
 }
 
-function stripHtml(html: string): string {
-  return html.replace(/<[^>]*>/g, '').replace(/&quot;/g, '"').replace(/&amp;/g, '&').replace(/&lt;/g, '<').replace(/&gt;/g, '>')
+/**
+ * 为 h1 标题添加分页（从第二个开始）
+ */
+function addH1PageBreaks(htmlContent: string, headings: Array<{ level: number; text: string; id: string }>): string {
+  let result = htmlContent
+
+  headings.forEach((heading, index) => {
+    if (heading.level === 1 && index > 0) {
+      const h1Regex = new RegExp(`<h1[^>]*id="${heading.id}"[^>]*>`, 'g')
+      result = result.replace(h1Regex, `<div style="page-break-before: always;"></div><h1 id="${heading.id}">`)
+    }
+  })
+
+  return result
 }
 
 function escapeHtml(text: string): string {
@@ -670,3 +543,56 @@ function getMarkdownStyles(): string {
 .markdown-body figure.figure-span figcaption { margin-top: 0.5em; font-size: 0.9em; color: #6b7280; text-align: center; }
 `
 }
+
+/**
+ * 生成完整的 HTML 文档
+ */
+function getFullHtml(title: string, metaHtml: string, content: string): string {
+  return `<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <title>${escapeHtml(title)}</title>
+  <style>
+    ${getMarkdownStyles()}
+    ${katexStyles}
+    ${highlightStyles}
+
+    @page { margin: 2cm 2.5cm; size: A4; }
+    @page :first { margin: 0; }
+
+    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; font-size: 11pt; line-height: 1.6; color: #1f2937; margin: 0; padding: 0; }
+
+    .cover-page {
+      display: flex; flex-direction: column; justify-content: center; align-items: center;
+      min-height: 100vh; text-align: center; padding: 2cm; box-sizing: border-box;
+      page-break-after: always;
+    }
+    .cover-page h1 { font-size: 2.5em; font-weight: 700; color: #1f2937; margin: 0 0 0.5em 0; border: none; }
+    .cover-page .subtitle { font-size: 1.2em; color: #6b7280; }
+    .cover-page .meta { margin-top: 3em; font-size: 1em; color: #6b7280; }
+    .cover-page .meta-item { margin: 0.5em 0; }
+
+    .main-content { page-break-before: always; padding: 0; }
+    .main-content h1:first-child { margin-top: 0; }
+    .markdown-body { max-width: none; }
+
+    h1, h2, h3, h4 { page-break-after: avoid; }
+    pre, blockquote, table, figure, img, svg, .mermaid { page-break-inside: avoid; }
+    * { -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
+  </style>
+</head>
+<body>
+  <div class="cover-page">
+    <h1>${escapeHtml(title)}</h1>
+    <div class="subtitle">MD2PDF 生成文档</div>
+    ${metaHtml}
+  </div>
+
+  <div class="main-content markdown-body">
+    ${content}
+  </div>
+</body>
+</html>`
+}
+

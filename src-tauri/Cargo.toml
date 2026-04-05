@@ -20,6 +20,12 @@ serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 url = "2"
 
+# PDF 书签注入支持
+lopdf = "0.34"
+
+# PDF 文本提取（支持 ToUnicode CMap 解析）
+pdf-extract = "0.10.0"
+
 # WebView2 PDF 打印支持
 [target.'cfg(windows)'.dependencies]
 webview2-com = "0.38"
