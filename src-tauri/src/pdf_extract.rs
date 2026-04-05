@@ -52,10 +52,6 @@ impl MarkerFinder {
             .filter(|c| !c.is_whitespace())
             .collect();
 
-        // 调试：输出文本长度
-        println!("[PDF提取调试] current_text 长度: {} 字节, clean_text 长度: {} 字符",
-            self.current_text.len(), clean_text.chars().count());
-
         for marker in &self.markers {
             if self.found_markers.contains_key(marker) {
                 continue;
@@ -66,7 +62,6 @@ impl MarkerFinder {
             if let Some(byte_pos) = clean_text.find(marker) {
                 // 将字节位置转换为字符位置
                 let char_pos = clean_text[..byte_pos].chars().count();
-                println!("[PDF提取调试] 标记 {} 在字节位置 {}, 字符位置 {}", marker, byte_pos, char_pos);
                 let y = self.find_y_for_clean_position(char_pos);
                 println!("[PDF提取] 在第 {} 页找到标记: {}, Y={:.2}", self.current_page, marker, y);
                 self.found_markers.insert(marker.clone(), (self.current_page, y));
@@ -78,7 +73,6 @@ impl MarkerFinder {
     fn find_y_for_clean_position(&self, clean_pos: usize) -> f64 {
         // 重建清理后的字符索引到原始字节索引的映射
         let mut clean_idx = 0;
-        let mut prev_byte_idx = 0;
         let mut prev_y = if !self.char_positions.is_empty() {
             self.char_positions[0].1
         } else {
@@ -89,20 +83,15 @@ impl MarkerFinder {
             if !c.is_whitespace() {
                 if clean_idx == clean_pos {
                     // 精确匹配
-                    println!("[PDF提取调试] 清理位置 {} 精确匹配字节索引 {}", clean_pos, byte_idx);
                     return self.find_y_for_byte_index(byte_idx);
                 }
                 // 记录前一个非空白字符的位置
-                prev_byte_idx = byte_idx;
                 prev_y = self.find_y_for_byte_index(byte_idx);
                 clean_idx += 1;
             }
         }
 
         // 如果 clean_pos 超出范围，使用最后一个已知位置
-        // 这通常意味着标记在当前文本末尾附近
-        println!("[PDF提取调试] 清理位置 {} 超出遍历范围(clean_idx={}), 使用前一个位置 Y={:.2}",
-            clean_pos, clean_idx, prev_y);
         prev_y
     }
 
