@@ -53,8 +53,6 @@ pub async fn inject_bookmarks(
         return Ok(()); // 无书签，直接返回
     }
 
-    println!("[PDF书签] 开始注入 {} 个书签到 {}", bookmarks.len(), pdf_path);
-
     // 加载 PDF
     let mut doc = Document::load(&pdf_path)
         .map_err(|e| format!("无法加载 PDF: {}", e))?;
@@ -64,8 +62,6 @@ pub async fn inject_bookmarks(
     let page_ids: Vec<Object> = pages.values()
         .map(|id| Object::Reference(*id))
         .collect();
-
-    println!("[PDF书签] PDF 共有 {} 页", page_ids.len());
 
     // 构建书签树结构
     let outlines_ref = build_outline_tree(&mut doc, &bookmarks, &page_ids)?;
@@ -87,7 +83,6 @@ pub async fn inject_bookmarks(
     doc.save(&pdf_path)
         .map_err(|e| format!("无法保存 PDF: {}", e))?;
 
-    println!("[PDF书签] 书签注入完成");
     Ok(())
 }
 
@@ -160,7 +155,6 @@ fn build_tree_structure(
         let actual_page = bm.page + 1; // 加 1 跳过封面页
 
         if actual_page >= page_ids.len() {
-            println!("[PDF书签] 警告: 页码 {} 超出范围，跳过", actual_page);
             continue;
         }
 
@@ -169,9 +163,6 @@ fn build_tree_structure(
 
         // 转换 Y 坐标
         let pdf_y = transform_y(bm.y);
-
-        println!("[PDF书签] 标题: {}, 页码: {}, Y(提取): {:.2}pt, Y(书签): {:.2}pt",
-            bm.title, actual_page, bm.y, pdf_y);
 
         // 创建书签字典
         let mut bookmark_dict = Dictionary::new();

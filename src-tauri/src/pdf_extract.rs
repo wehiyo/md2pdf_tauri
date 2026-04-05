@@ -63,7 +63,6 @@ impl MarkerFinder {
                 // 将字节位置转换为字符位置
                 let char_pos = clean_text[..byte_pos].chars().count();
                 let y = self.find_y_for_clean_position(char_pos);
-                println!("[PDF提取] 在第 {} 页找到标记: {}, Y={:.2}", self.current_page, marker, y);
                 self.found_markers.insert(marker.clone(), (self.current_page, y));
             }
         }
@@ -133,18 +132,12 @@ impl OutputDev for MarkerFinder {
         self.current_text.clear();
         self.char_positions.clear();
 
-        println!("[PDF提取] 开始处理第 {} 页, 页面高度: {:.2}", page_num, media_box.ury - media_box.lly);
-
         Ok(())
     }
 
     fn end_page(&mut self) -> Result<(), OutputError> {
         // 在页结束时搜索标记
         self.search_markers_in_text();
-
-        // 输出页面文本预览
-        let preview: String = self.current_text.chars().take(100).collect();
-        println!("[PDF提取] 第 {} 页文本预览: {}...", self.current_page, preview);
 
         Ok(())
     }
@@ -196,8 +189,6 @@ pub fn extract_marker_positions(
     pdf_path: &str,
     markers: &[String],
 ) -> Result<Vec<MarkerPosition>, String> {
-    println!("[PDF提取] 开始从 {} 提取 {} 个标记", pdf_path, markers.len());
-
     // 加载 PDF
     let doc = Document::load(pdf_path)
         .map_err(|e| format!("无法加载 PDF: {}", e))?;
@@ -219,7 +210,6 @@ pub fn extract_marker_positions(
                     y: *y as f32,
                 })
                 .unwrap_or_else(|| {
-                    println!("[PDF提取] 警告: 未找到标记 {}", m);
                     MarkerPosition {
                         marker: m.clone(),
                         page: 1,
@@ -228,8 +218,6 @@ pub fn extract_marker_positions(
                 })
         })
         .collect();
-
-    println!("[PDF提取] 共找到 {} 个标记", result.len());
 
     Ok(result)
 }
