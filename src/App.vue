@@ -9,9 +9,13 @@
     <div class="main-content">
       <Editor
         v-model="content"
+        :theme="theme"
         class="editor-pane"
+        :class="{ 'full-width': !showPreview }"
+        @toggle-preview="togglePreview"
       />
       <Preview
+        v-show="showPreview"
         ref="previewRef"
         :html="renderedHtml"
         :file-dir="currentFileDir"
@@ -31,6 +35,7 @@ import ExportProgress from './components/ExportProgress.vue'
 import { useMarkdown } from './composables/useMarkdown'
 import type { Metadata } from './composables/useMarkdown'
 import { usePDF } from './composables/usePDF'
+import { useTheme } from './composables/useTheme'
 import { save, open, message } from '@tauri-apps/plugin-dialog'
 import { writeTextFile, readTextFile } from '@tauri-apps/plugin-fs'
 // @ts-ignore
@@ -70,7 +75,16 @@ const currentFileDir = ref<string | null>(null)
 const currentMetadata = ref<Metadata>({})
 const { render } = useMarkdown()
 const { exportToPDF } = usePDF()
+const { theme } = useTheme()
 const previewRef = ref<InstanceType<typeof Preview>>()
+
+// 预览区显示状态
+const showPreview = ref(true)
+
+// 切换预览区显示
+function togglePreview() {
+  showPreview.value = !showPreview.value
+}
 
 // 计算渲染后的 HTML 和 metadata
 const renderedHtml = computed(() => {
@@ -243,9 +257,19 @@ onMounted(() => {
 
 .editor-pane {
   border-right: 1px solid #e2e8f0;
+  transition: flex 0.3s ease;
+}
+
+.editor-pane.full-width {
+  flex: 1;
+  border-right: none;
 }
 
 .dark .editor-pane {
   border-right-color: #334155;
+}
+
+.dark .editor-pane.full-width {
+  border-right-color: transparent;
 }
 </style>

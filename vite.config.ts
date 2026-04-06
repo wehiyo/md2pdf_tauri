@@ -29,11 +29,18 @@ export default defineConfig(async () => ({
 
   // 4. build configuration
   build: {
-    // Tauri supports es2021
-    target: process.env.TAURI_PLATFORM == 'windows' ? 'chrome105' : 'safari13',
+    // Tauri supports es2021, use esnext for top-level await support
+    target: 'esnext',
     // don't minify for debug builds
     minify: !process.env.TAURI_DEBUG ? 'esbuild' : false,
     // produce sourcemaps for debug builds
     sourcemap: !!process.env.TAURI_DEBUG,
+  },
+
+  // 5. optimize dependencies to handle ESM modules with top-level await
+  optimizeDeps: {
+    esbuildOptions: {
+      target: 'esnext',
+    },
   },
 }))
