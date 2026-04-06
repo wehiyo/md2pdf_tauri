@@ -40,7 +40,7 @@ import type { Metadata } from './composables/useMarkdown'
 import { usePDF } from './composables/usePDF'
 import { useTheme } from './composables/useTheme'
 import { useScrollSync } from './composables/useScrollSync'
-import { save, open, message } from '@tauri-apps/plugin-dialog'
+import { save, open, message, ask } from '@tauri-apps/plugin-dialog'
 import { writeTextFile, readTextFile } from '@tauri-apps/plugin-fs'
 // @ts-ignore
 import katexStyles from './assets/katex/katex-inline.css?raw'
@@ -76,12 +76,17 @@ const defaultContent = `# MD2PDF - Markdown 编辑器
 
 const content = ref(defaultContent)
 const currentFileDir = ref<string | null>(null)
+const currentFilePath = ref<string | null>(null)
+const savedContent = ref(defaultContent) // 记录已保存的内容
 const currentMetadata = ref<Metadata>({})
 const { render } = useMarkdown()
 const { exportToPDF } = usePDF()
 const { theme } = useTheme()
 const editorRef = ref<InstanceType<typeof Editor>>()
 const previewRef = ref<InstanceType<typeof Preview>>()
+
+// 检测是否有未保存的改动
+const hasUnsavedChanges = computed(() => content.value !== savedContent.value)
 
 // 滚动容器引用
 const editorScrollContainer = ref<HTMLElement | null>(null)
@@ -206,14 +211,43 @@ function extractH1Title(mdContent: string): string | null {
   return h1Match ? h1Match[1].trim() : null
 }
 
+// 检查未保存改动并提示用户
+async function checkUnsavedChanges(): Promise<boolean> {
+  if (!hasUnsavedChanges.value) return true
+
+  const shouldSave = await ask('当前文件有未保存的改动，是否保存？', {
+    title: '保存确认',
+    kind: 'warning'
+  })
+
+  if (shouldSave) {
+    // 用户选择保存
+    const saved = await saveFile()
+    return saved
+  }
+
+  // 用户选择不保存，继续操作
+  return true
+}
+
 // 新建文件
 async function newFile() {
+  // 检查未保存改动
+  const canProceed = await checkUnsavedChanges()
+  if (!canProceed) return
+
   content.value = ''
+  savedContent.value = ''
   currentFileDir.value = null
+  currentFilePath.value = null
 }
 
 // 打开文件
 async function openFile() {
+  // 检查未保存改动
+  const canProceed = await checkUnsavedChanges()
+  if (!canProceed) return
+
   try {
     const selected = await open({
       multiple: false,
@@ -226,10 +260,12 @@ async function openFile() {
     if (selected && typeof selected === 'string') {
       const text = await readTextFile(selected)
       content.value = text
+      savedContent.value = text
 
       // 从文件路径提取目录（使用字符串操作，不导入 Tauri API）
       const lastSep = Math.max(selected.lastIndexOf('/'), selected.lastIndexOf('\\'))
       currentFileDir.value = lastSep > 0 ? selected.substring(0, lastSep) : null
+      currentFilePath.value = selected
       console.log('Opened file:', selected)
       console.log('File directory:', currentFileDir.value)
     }
@@ -239,9 +275,18 @@ async function openFile() {
   }
 }
 
-// 保存文件
-async function saveFile() {
+// 保存文件，返回是否保存成功
+async function saveFile(): Promise<boolean> {
   try {
+    // 如果已有文件路径，直接保存
+    if (currentFilePath.value) {
+      await writeTextFile(currentFilePath.value, content.value)
+      savedContent.value = content.value
+      await message('文件保存成功！', { title: '成功', kind: 'info' })
+      return true
+    }
+
+    // 没有文件路径，弹出保存对话框
     const filePath = await save({
       filters: [{
         name: 'Markdown',
@@ -251,11 +296,22 @@ async function saveFile() {
 
     if (filePath) {
       await writeTextFile(filePath, content.value)
+      savedContent.value = content.value
+      currentFilePath.value = filePath
+
+      // 更新文件目录
+      const lastSep = Math.max(filePath.lastIndexOf('/'), filePath.lastIndexOf('\\'))
+      currentFileDir.value = lastSep > 0 ? filePath.substring(0, lastSep) : null
+
       await message('文件保存成功！', { title: '成功', kind: 'info' })
+      return true
     }
+
+    return false
   } catch (error) {
     console.error('保存文件失败:', error)
     await message('保存失败：' + String(error), { title: '错误', kind: 'error' })
+    return false
   }
 }
 
