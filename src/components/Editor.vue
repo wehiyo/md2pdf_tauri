@@ -1,6 +1,7 @@
 <template>
-  <div class="editor-container">
+  <div class="editor-container" ref="containerRef">
     <MdEditor
+      ref="mdEditorRef"
       v-model="content"
       :preview="false"
       :htmlPreview="false"
@@ -16,7 +17,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed } from 'vue'
+import { computed, ref } from 'vue'
 import { MdEditor, NormalToolbar } from 'md-editor-v3'
 import type { ToolbarNames } from 'md-editor-v3'
 import 'md-editor-v3/lib/style.css'
@@ -33,6 +34,17 @@ const emit = defineEmits<{
   'save-file': []
   'toggle-preview': []
 }>()
+
+const containerRef = ref<HTMLElement>()
+const mdEditorRef = ref<InstanceType<typeof MdEditor>>()
+
+// 暴露滚动容器
+defineExpose({
+  getScrollContainer: () => {
+    // CodeMirror 滚动容器
+    return containerRef.value?.querySelector('.cm-scroller') as HTMLElement | null
+  }
+})
 
 const content = computed({
   get: () => props.modelValue,

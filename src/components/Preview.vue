@@ -2,9 +2,9 @@
   <div class="preview-container">
     <PreviewToolbar
       :preview-only-mode="previewOnlyMode"
-      @preview-only="$emit('preview-only')"
-      @export-html="$emit('export-html')"
-      @export-pdf="$emit('export-pdf')"
+      @preview-only="emit('preview-only')"
+      @export-html="emit('export-html')"
+      @export-pdf="emit('export-pdf')"
     />
     <div
       ref="previewRef"
@@ -35,6 +35,11 @@ const emit = defineEmits<{
 }>()
 
 const previewRef = ref<HTMLDivElement>()
+
+// 暴露滚动容器
+defineExpose({
+  getScrollContainer: (): HTMLElement | null => previewRef.value ?? null
+})
 
 // 处理文档内链接跳转
 function handleLinkClick(event: MouseEvent) {

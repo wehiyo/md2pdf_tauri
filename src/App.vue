@@ -2,6 +2,7 @@
   <div class="app-container">
     <div class="main-content">
       <Editor
+        ref="editorRef"
         v-show="!previewOnlyMode"
         v-model="content"
         :theme="theme"
@@ -30,7 +31,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed, onMounted, nextTick } from 'vue'
 import Editor from './components/Editor.vue'
 import Preview from './components/Preview.vue'
 import ExportProgress from './components/ExportProgress.vue'
@@ -38,6 +39,7 @@ import { useMarkdown } from './composables/useMarkdown'
 import type { Metadata } from './composables/useMarkdown'
 import { usePDF } from './composables/usePDF'
 import { useTheme } from './composables/useTheme'
+import { useScrollSync } from './composables/useScrollSync'
 import { save, open, message } from '@tauri-apps/plugin-dialog'
 import { writeTextFile, readTextFile } from '@tauri-apps/plugin-fs'
 // @ts-ignore
@@ -78,7 +80,15 @@ const currentMetadata = ref<Metadata>({})
 const { render } = useMarkdown()
 const { exportToPDF } = usePDF()
 const { theme } = useTheme()
+const editorRef = ref<InstanceType<typeof Editor>>()
 const previewRef = ref<InstanceType<typeof Preview>>()
+
+// 滚动容器引用
+const editorScrollContainer = ref<HTMLElement | null>(null)
+const previewScrollContainer = ref<HTMLElement | null>(null)
+
+// 滚动同步
+const { startSync } = useScrollSync(editorScrollContainer, previewScrollContainer)
 
 // 预览区显示状态
 const showPreview = ref(true)
@@ -103,11 +113,6 @@ function togglePreviewOnly() {
     showPreview.value = true
     previewOnlyMode.value = true
   }
-}
-
-// 退出仅预览模式（点击预览区时）
-function exitPreviewOnly() {
-  // 点击预览区不再退出仅预览模式
 }
 
 // 计算渲染后的 HTML 和 metadata
@@ -254,9 +259,24 @@ async function saveFile() {
   }
 }
 
+// 初始化滚动同步
+async function initScrollSync() {
+  await nextTick()
+  // 等待编辑器初始化完成
+  setTimeout(() => {
+    if (editorRef.value) {
+      editorScrollContainer.value = editorRef.value.getScrollContainer()
+    }
+    if (previewRef.value) {
+      previewScrollContainer.value = previewRef.value.getScrollContainer()
+    }
+    startSync()
+  }, 100)
+}
+
 // 初始化
 onMounted(() => {
-  // 应用已加载
+  initScrollSync()
 })
 </script>
 
