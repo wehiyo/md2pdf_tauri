@@ -1,15 +1,11 @@
 import MarkdownIt from 'markdown-it'
 import footnote from 'markdown-it-footnote'
-// taskLists 插件暂时禁用
-// import taskLists from 'markdown-it-task-lists'
 import sup from 'markdown-it-sup'
 import sub from 'markdown-it-sub'
 import abbr from 'markdown-it-abbr'
 import deflist from 'markdown-it-deflist'
 import anchor from 'markdown-it-anchor'
 import { full as emoji } from 'markdown-it-emoji'
-// toc 插件已禁用，不再生成内嵌目录
-// import toc from 'markdown-it-table-of-contents'
 import hljs from 'highlight.js'
 import katex from 'katex'
 import { parse as parseYaml } from 'yaml'
