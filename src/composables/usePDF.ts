@@ -154,7 +154,9 @@ export function usePDF() {
     headings: Array<{ level: number; text: string; id: string }>,
     metadata: Metadata
   ): Promise<void> {
-    const title = metadata.title || '文档'
+    // 优先使用 metadata.title，否则从 headings 中提取第一个 h1 标题
+    const firstH1 = headings.find(h => h.level === 1)
+    const title = metadata.title || firstH1?.text || '文档'
 
     // Step 1: 获取保存路径
     const savePath = await save({
@@ -244,7 +246,8 @@ export function usePDF() {
       updateStep('添加页码...', 5)
       try {
         const pdfBytes = await readFile(printResult.path)
-        const pdfWithPageNumbers = await addPageNumbers(pdfBytes, metadata)
+        const firstH1 = headings.find(h => h.level === 1)
+        const pdfWithPageNumbers = await addPageNumbers(pdfBytes, metadata, firstH1?.text)
         await writeFile(printResult.path, pdfWithPageNumbers)
 
         await message(`PDF 已保存：${printResult.path}`, { title: '成功', kind: 'info' })
@@ -303,7 +306,8 @@ async function loadChineseFont(): Promise<Uint8Array | null> {
  */
 async function addPageNumbers(
   pdfBytes: Uint8Array,
-  metadata: Metadata = {}
+  metadata: Metadata = {},
+  h1Title?: string
 ): Promise<Uint8Array> {
   const pdfDoc = await PDFDocument.load(pdfBytes)
 
@@ -324,8 +328,8 @@ async function addPageNumbers(
   const headerLineMargin = 8
   const headerMargin = 50
 
-  // 提取 metadata 信息
-  const headerTitle = metadata.title || ''
+  // 提取 metadata 信息，优先使用 metadata.title，否则使用 h1 标题
+  const headerTitle = metadata.title || h1Title || ''
   const securityLevel = metadata['security level'] || ''
 
   // 确定页眉字体
