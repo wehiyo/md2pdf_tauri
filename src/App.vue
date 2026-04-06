@@ -1,6 +1,6 @@
 <template>
   <div class="app-container">
-    <div class="main-content">
+    <div class="main-content" :style="{ zoom: zoomLevel + '%' }">
       <Editor
         ref="editorRef"
         v-show="!previewOnlyMode"
@@ -31,7 +31,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted, nextTick } from 'vue'
+import { ref, computed, onMounted, onUnmounted, nextTick } from 'vue'
 import Editor from './components/Editor.vue'
 import Preview from './components/Preview.vue'
 import ExportProgress from './components/ExportProgress.vue'
@@ -100,6 +100,28 @@ const showPreview = ref(true)
 
 // 仅预览模式（隐藏编辑器）
 const previewOnlyMode = ref(false)
+
+// 页面缩放级别
+const zoomLevel = ref(100)
+const MIN_ZOOM = 50
+const MAX_ZOOM = 200
+
+// 处理 Ctrl + 鼠标滚轮缩放
+function handleWheel(event: WheelEvent) {
+  if (event.ctrlKey) {
+    event.preventDefault()
+
+    const delta = event.deltaY > 0 ? -10 : 10
+    const newZoom = Math.min(MAX_ZOOM, Math.max(MIN_ZOOM, zoomLevel.value + delta))
+
+    zoomLevel.value = newZoom
+  }
+}
+
+// 重置缩放
+function resetZoom() {
+  zoomLevel.value = 100
+}
 
 // 切换预览区显示
 function togglePreview() {
@@ -333,6 +355,12 @@ async function initScrollSync() {
 // 初始化
 onMounted(() => {
   initScrollSync()
+  // 添加滚轮缩放事件监听
+  window.addEventListener('wheel', handleWheel, { passive: false })
+})
+
+onUnmounted(() => {
+  window.removeEventListener('wheel', handleWheel)
 })
 </script>
 
