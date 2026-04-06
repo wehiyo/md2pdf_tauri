@@ -25,7 +25,7 @@ export interface ParseResult {
 }
 
 // 支持的 admonition 类型
-const ADMONITION_TYPES = ['note', 'tip', 'warning', 'danger', 'info', 'success', 'failure', 'bug', 'example', 'quote', 'abstract', 'question']
+const ADMONITION_TYPES = ['note', 'tip', 'warning', 'danger', 'info', 'success', 'failure', 'bug', 'example', 'quote', 'abstract', 'question', 'attention', 'hint', 'caution', 'error']
 
 // 解析 YAML frontmatter
 function parseFrontmatter(content: string): ParseResult {

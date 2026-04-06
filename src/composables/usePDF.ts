@@ -558,6 +558,28 @@ function getMarkdownStyles(): string {
 .markdown-body .admonition.danger .admonition-title { color: #b91c1c; }
 .markdown-body .admonition.info { border-left-color: #6b7280; background-color: #f9fafb; }
 .markdown-body .admonition.info .admonition-title { color: #4b5563; }
+.markdown-body .admonition.success { border-left-color: #10b981; background-color: #ecfdf5; }
+.markdown-body .admonition.success .admonition-title { color: #047857; }
+.markdown-body .admonition.failure { border-left-color: #ef4444; background-color: #fef2f2; }
+.markdown-body .admonition.failure .admonition-title { color: #b91c1c; }
+.markdown-body .admonition.bug { border-left-color: #8b5cf6; background-color: #f5f3ff; }
+.markdown-body .admonition.bug .admonition-title { color: #6d28d9; }
+.markdown-body .admonition.example { border-left-color: #06b6d4; background-color: #ecfeff; }
+.markdown-body .admonition.example .admonition-title { color: #0891b2; }
+.markdown-body .admonition.quote { border-left-color: #64748b; background-color: #f1f5f9; }
+.markdown-body .admonition.quote .admonition-title { color: #475569; }
+.markdown-body .admonition.abstract { border-left-color: #3b82f6; background-color: #eff6ff; }
+.markdown-body .admonition.abstract .admonition-title { color: #1d4ed8; }
+.markdown-body .admonition.question { border-left-color: #f59e0b; background-color: #fffbeb; }
+.markdown-body .admonition.question .admonition-title { color: #b45309; }
+.markdown-body .admonition.attention { border-left-color: #f59e0b; background-color: #fffbeb; }
+.markdown-body .admonition.attention .admonition-title { color: #b45309; }
+.markdown-body .admonition.hint { border-left-color: #10b981; background-color: #ecfdf5; }
+.markdown-body .admonition.hint .admonition-title { color: #047857; }
+.markdown-body .admonition.caution { border-left-color: #ef4444; background-color: #fef2f2; }
+.markdown-body .admonition.caution .admonition-title { color: #b91c1c; }
+.markdown-body .admonition.error { border-left-color: #ef4444; background-color: #fef2f2; }
+.markdown-body .admonition.error .admonition-title { color: #b91c1c; }
 .markdown-body .plantuml { margin: 1em 0; text-align: center; }
 .markdown-body .plantuml svg { max-width: 100%; }
 .markdown-body .wavedrom { margin: 1em 0; text-align: center; }
