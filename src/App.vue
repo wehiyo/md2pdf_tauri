@@ -1,36 +1,28 @@
 <template>
   <div class="app-container">
-    <div class="top-toolbar">
-      <EditorToolbar
-        :theme="theme"
-        :editor="editorInstance"
-        @new-file="newFile"
-        @open-file="openFile"
-        @save-file="saveFile"
-        @toggle-preview="togglePreview"
-        @preview-only="togglePreviewOnly"
-        @export-html="exportHTML"
-        @export-pdf="exportPDF"
-      />
-    </div>
     <div class="main-content">
       <Editor
-        ref="editorRef"
         v-show="!previewOnlyMode"
         v-model="content"
         :theme="theme"
         class="editor-pane"
         :class="{ 'full-width': !showPreview }"
-        @editor-ready="onEditorReady"
+        @new-file="newFile"
+        @open-file="openFile"
+        @save-file="saveFile"
+        @toggle-preview="togglePreview"
       />
       <Preview
         v-show="showPreview || previewOnlyMode"
         ref="previewRef"
         :html="renderedHtml"
         :file-dir="currentFileDir"
+        :preview-only-mode="previewOnlyMode"
         class="preview-pane"
         :class="{ 'full-width': previewOnlyMode }"
-        @click="exitPreviewOnly"
+        @preview-only="togglePreviewOnly"
+        @export-html="exportHTML"
+        @export-pdf="exportPDF"
       />
     </div>
     <ExportProgress />
@@ -40,7 +32,6 @@
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue'
 import Editor from './components/Editor.vue'
-import EditorToolbar from './components/EditorToolbar.vue'
 import Preview from './components/Preview.vue'
 import ExportProgress from './components/ExportProgress.vue'
 import { useMarkdown } from './composables/useMarkdown'
@@ -49,7 +40,6 @@ import { usePDF } from './composables/usePDF'
 import { useTheme } from './composables/useTheme'
 import { save, open, message } from '@tauri-apps/plugin-dialog'
 import { writeTextFile, readTextFile } from '@tauri-apps/plugin-fs'
-import type { ExposeParam } from 'md-editor-v3'
 // @ts-ignore
 import katexStyles from './assets/katex/katex-inline.css?raw'
 // @ts-ignore
@@ -89,19 +79,12 @@ const { render } = useMarkdown()
 const { exportToPDF } = usePDF()
 const { theme } = useTheme()
 const previewRef = ref<InstanceType<typeof Preview>>()
-const editorRef = ref<InstanceType<typeof Editor>>()
-const editorInstance = ref<ExposeParam | null>(null)
 
 // 预览区显示状态
 const showPreview = ref(true)
 
 // 仅预览模式（隐藏编辑器）
 const previewOnlyMode = ref(false)
-
-// 编辑器准备就绪
-function onEditorReady(editor: ExposeParam) {
-  editorInstance.value = editor
-}
 
 // 切换预览区显示
 function togglePreview() {
@@ -289,10 +272,6 @@ onMounted(() => {
   background-color: #0f172a;
 }
 
-.top-toolbar {
-  flex-shrink: 0;
-}
-
 .main-content {
   display: flex;
   flex: 1;
@@ -303,12 +282,11 @@ onMounted(() => {
 .preview-pane {
   flex: 1;
   min-width: 0;
-  overflow: auto;
+  overflow: hidden;
 }
 
 .editor-pane {
   border-right: 1px solid #e2e8f0;
-  transition: flex 0.3s ease;
 }
 
 .editor-pane.full-width {
