@@ -1,10 +1,16 @@
 <template>
   <div class="preview-container">
+    <PreviewToolbar
+      :preview-only-mode="previewOnlyMode"
+      @preview-only="emit('preview-only')"
+      @export-html="emit('export-html')"
+      @export-pdf="emit('export-pdf')"
+    />
     <div
       ref="previewRef"
       class="preview-content markdown-body"
       v-html="html"
-      @click="handleLinkClick"
+      @click.stop="handleLinkClick"
     />
   </div>
 </template>
@@ -14,13 +20,26 @@ import { ref, onMounted, onUpdated, watch, nextTick } from 'vue'
 import mermaid from 'mermaid'
 import wavedrom from 'wavedrom'
 import { convertFileSrc, invoke } from '@tauri-apps/api/core'
+import PreviewToolbar from './PreviewToolbar.vue'
 
 const props = defineProps<{
   html: string
   fileDir?: string | null
+  previewOnlyMode?: boolean
+}>()
+
+const emit = defineEmits<{
+  'preview-only': []
+  'export-html': []
+  'export-pdf': []
 }>()
 
 const previewRef = ref<HTMLDivElement>()
+
+// 暴露滚动容器
+defineExpose({
+  getScrollContainer: (): HTMLElement | null => previewRef.value ?? null
+})
 
 // 处理文档内链接跳转
 function handleLinkClick(event: MouseEvent) {
@@ -174,15 +193,22 @@ onUpdated(async () => {
 
 <style scoped>
 .preview-container {
+  display: flex;
+  flex-direction: column;
   height: 100%;
-  overflow: auto;
   background-color: #ffffff;
 }
 
+.dark .preview-container {
+  background-color: #1e293b;
+}
+
 .preview-content {
+  flex: 1;
+  overflow: auto;
   max-width: 900px;
   margin: 0 auto;
   padding: 2rem;
-  min-height: 100%;
+  width: 100%;
 }
 </style>

@@ -1,21 +1,29 @@
 <template>
   <div class="app-container">
-    <Toolbar
-      @export-html="exportHTML"
-      @export-pdf="exportPDF"
-      @open-file="openFile"
-      @save-file="saveFile"
-    />
     <div class="main-content">
       <Editor
+        ref="editorRef"
+        v-show="!previewOnlyMode"
         v-model="content"
+        :theme="theme"
         class="editor-pane"
+        :class="{ 'full-width': !showPreview }"
+        @new-file="newFile"
+        @open-file="openFile"
+        @save-file="saveFile"
+        @toggle-preview="togglePreview"
       />
       <Preview
+        v-show="showPreview || previewOnlyMode"
         ref="previewRef"
         :html="renderedHtml"
         :file-dir="currentFileDir"
+        :preview-only-mode="previewOnlyMode"
         class="preview-pane"
+        :class="{ 'full-width': previewOnlyMode }"
+        @preview-only="togglePreviewOnly"
+        @export-html="exportHTML"
+        @export-pdf="exportPDF"
       />
     </div>
     <ExportProgress />
@@ -23,14 +31,15 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed, onMounted, nextTick } from 'vue'
 import Editor from './components/Editor.vue'
 import Preview from './components/Preview.vue'
-import Toolbar from './components/Toolbar.vue'
 import ExportProgress from './components/ExportProgress.vue'
 import { useMarkdown } from './composables/useMarkdown'
 import type { Metadata } from './composables/useMarkdown'
 import { usePDF } from './composables/usePDF'
+import { useTheme } from './composables/useTheme'
+import { useScrollSync } from './composables/useScrollSync'
 import { save, open, message } from '@tauri-apps/plugin-dialog'
 import { writeTextFile, readTextFile } from '@tauri-apps/plugin-fs'
 // @ts-ignore
@@ -70,7 +79,41 @@ const currentFileDir = ref<string | null>(null)
 const currentMetadata = ref<Metadata>({})
 const { render } = useMarkdown()
 const { exportToPDF } = usePDF()
+const { theme } = useTheme()
+const editorRef = ref<InstanceType<typeof Editor>>()
 const previewRef = ref<InstanceType<typeof Preview>>()
+
+// 滚动容器引用
+const editorScrollContainer = ref<HTMLElement | null>(null)
+const previewScrollContainer = ref<HTMLElement | null>(null)
+
+// 滚动同步
+const { startSync } = useScrollSync(editorScrollContainer, previewScrollContainer)
+
+// 预览区显示状态
+const showPreview = ref(true)
+
+// 仅预览模式（隐藏编辑器）
+const previewOnlyMode = ref(false)
+
+// 切换预览区显示
+function togglePreview() {
+  showPreview.value = !showPreview.value
+  previewOnlyMode.value = false
+}
+
+// 切换仅预览模式
+function togglePreviewOnly() {
+  if (previewOnlyMode.value) {
+    // 退出仅预览模式，恢复显示编辑区和预览区
+    previewOnlyMode.value = false
+    showPreview.value = true
+  } else {
+    // 进入仅预览模式
+    showPreview.value = true
+    previewOnlyMode.value = true
+  }
+}
 
 // 计算渲染后的 HTML 和 metadata
 const renderedHtml = computed(() => {
@@ -163,6 +206,12 @@ function extractH1Title(mdContent: string): string | null {
   return h1Match ? h1Match[1].trim() : null
 }
 
+// 新建文件
+async function newFile() {
+  content.value = ''
+  currentFileDir.value = null
+}
+
 // 打开文件
 async function openFile() {
   try {
@@ -210,9 +259,24 @@ async function saveFile() {
   }
 }
 
+// 初始化滚动同步
+async function initScrollSync() {
+  await nextTick()
+  // 等待编辑器初始化完成
+  setTimeout(() => {
+    if (editorRef.value) {
+      editorScrollContainer.value = editorRef.value.getScrollContainer()
+    }
+    if (previewRef.value) {
+      previewScrollContainer.value = previewRef.value.getScrollContainer()
+    }
+    startSync()
+  }, 100)
+}
+
 // 初始化
 onMounted(() => {
-  // 应用已加载
+  initScrollSync()
 })
 </script>
 
@@ -238,14 +302,27 @@ onMounted(() => {
 .preview-pane {
   flex: 1;
   min-width: 0;
-  overflow: auto;
+  overflow: hidden;
 }
 
 .editor-pane {
   border-right: 1px solid #e2e8f0;
 }
 
+.editor-pane.full-width {
+  flex: 1;
+  border-right: none;
+}
+
 .dark .editor-pane {
   border-right-color: #334155;
+}
+
+.dark .editor-pane.full-width {
+  border-right-color: transparent;
+}
+
+.preview-pane.full-width {
+  flex: 1;
 }
 </style>
