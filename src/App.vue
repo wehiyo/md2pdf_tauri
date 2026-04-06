@@ -1,25 +1,36 @@
 <template>
   <div class="app-container">
-    <Toolbar
-      @export-html="exportHTML"
-      @export-pdf="exportPDF"
-      @open-file="openFile"
-      @save-file="saveFile"
-    />
+    <div class="top-toolbar">
+      <EditorToolbar
+        :theme="theme"
+        :editor="editorInstance"
+        @new-file="newFile"
+        @open-file="openFile"
+        @save-file="saveFile"
+        @toggle-preview="togglePreview"
+        @preview-only="togglePreviewOnly"
+        @export-html="exportHTML"
+        @export-pdf="exportPDF"
+      />
+    </div>
     <div class="main-content">
       <Editor
+        ref="editorRef"
+        v-show="!previewOnlyMode"
         v-model="content"
         :theme="theme"
         class="editor-pane"
         :class="{ 'full-width': !showPreview }"
-        @toggle-preview="togglePreview"
+        @editor-ready="onEditorReady"
       />
       <Preview
-        v-show="showPreview"
+        v-show="showPreview || previewOnlyMode"
         ref="previewRef"
         :html="renderedHtml"
         :file-dir="currentFileDir"
         class="preview-pane"
+        :class="{ 'full-width': previewOnlyMode }"
+        @click="exitPreviewOnly"
       />
     </div>
     <ExportProgress />
@@ -29,8 +40,8 @@
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue'
 import Editor from './components/Editor.vue'
+import EditorToolbar from './components/EditorToolbar.vue'
 import Preview from './components/Preview.vue'
-import Toolbar from './components/Toolbar.vue'
 import ExportProgress from './components/ExportProgress.vue'
 import { useMarkdown } from './composables/useMarkdown'
 import type { Metadata } from './composables/useMarkdown'
@@ -38,6 +49,7 @@ import { usePDF } from './composables/usePDF'
 import { useTheme } from './composables/useTheme'
 import { save, open, message } from '@tauri-apps/plugin-dialog'
 import { writeTextFile, readTextFile } from '@tauri-apps/plugin-fs'
+import type { ExposeParam } from 'md-editor-v3'
 // @ts-ignore
 import katexStyles from './assets/katex/katex-inline.css?raw'
 // @ts-ignore
@@ -77,13 +89,42 @@ const { render } = useMarkdown()
 const { exportToPDF } = usePDF()
 const { theme } = useTheme()
 const previewRef = ref<InstanceType<typeof Preview>>()
+const editorRef = ref<InstanceType<typeof Editor>>()
+const editorInstance = ref<ExposeParam | null>(null)
 
 // 预览区显示状态
 const showPreview = ref(true)
 
+// 仅预览模式（隐藏编辑器）
+const previewOnlyMode = ref(false)
+
+// 编辑器准备就绪
+function onEditorReady(editor: ExposeParam) {
+  editorInstance.value = editor
+}
+
 // 切换预览区显示
 function togglePreview() {
   showPreview.value = !showPreview.value
+  previewOnlyMode.value = false
+}
+
+// 切换仅预览模式
+function togglePreviewOnly() {
+  if (previewOnlyMode.value) {
+    // 退出仅预览模式，恢复显示编辑区和预览区
+    previewOnlyMode.value = false
+    showPreview.value = true
+  } else {
+    // 进入仅预览模式
+    showPreview.value = true
+    previewOnlyMode.value = true
+  }
+}
+
+// 退出仅预览模式（点击预览区时）
+function exitPreviewOnly() {
+  // 点击预览区不再退出仅预览模式
 }
 
 // 计算渲染后的 HTML 和 metadata
@@ -177,6 +218,12 @@ function extractH1Title(mdContent: string): string | null {
   return h1Match ? h1Match[1].trim() : null
 }
 
+// 新建文件
+async function newFile() {
+  content.value = ''
+  currentFileDir.value = null
+}
+
 // 打开文件
 async function openFile() {
   try {
@@ -242,6 +289,10 @@ onMounted(() => {
   background-color: #0f172a;
 }
 
+.top-toolbar {
+  flex-shrink: 0;
+}
+
 .main-content {
   display: flex;
   flex: 1;
@@ -271,5 +322,9 @@ onMounted(() => {
 
 .dark .editor-pane.full-width {
   border-right-color: transparent;
+}
+
+.preview-pane.full-width {
+  flex: 1;
 }
 </style>
