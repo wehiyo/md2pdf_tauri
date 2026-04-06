@@ -7,11 +7,16 @@
         v-model="content"
         :theme="theme"
         class="editor-pane"
-        :class="{ 'full-width': !showPreview }"
+        :style="editorPaneStyle"
         @new-file="newFile"
         @open-file="openFile"
         @save-file="saveFile"
         @toggle-preview="togglePreview"
+      />
+      <div
+        v-show="showPreview && !previewOnlyMode"
+        class="splitter"
+        @mousedown="startResize"
       />
       <Preview
         v-show="showPreview || previewOnlyMode"
@@ -20,7 +25,7 @@
         :file-dir="currentFileDir"
         :preview-only-mode="previewOnlyMode"
         class="preview-pane"
-        :class="{ 'full-width': previewOnlyMode }"
+        :style="previewPaneStyle"
         @preview-only="togglePreviewOnly"
         @export-html="exportHTML"
         @export-pdf="exportPDF"
@@ -105,6 +110,62 @@ const previewOnlyMode = ref(false)
 const zoomLevel = ref(100)
 const MIN_ZOOM = 50
 const MAX_ZOOM = 200
+
+// 分割器相关
+const editorWidth = ref(50) // 编辑器宽度百分比
+const isResizing = ref(false)
+const mainContentRef = ref<HTMLElement | null>(null)
+
+// 计算编辑器和预览区样式
+const editorPaneStyle = computed(() => {
+  if (previewOnlyMode.value || !showPreview.value) {
+    return { width: '100%' }
+  }
+  return { width: `${editorWidth.value}%` }
+})
+
+const previewPaneStyle = computed(() => {
+  if (previewOnlyMode.value) {
+    return { width: '100%' }
+  }
+  if (!showPreview.value) {
+    return { width: '0%' }
+  }
+  return { width: `${100 - editorWidth.value}%` }
+})
+
+// 开始拖动分割器
+function startResize(event: MouseEvent) {
+  event.preventDefault()
+  isResizing.value = true
+  document.addEventListener('mousemove', handleResize)
+  document.addEventListener('mouseup', stopResize)
+  document.body.style.cursor = 'col-resize'
+  document.body.style.userSelect = 'none'
+}
+
+// 处理拖动
+function handleResize(event: MouseEvent) {
+  if (!isResizing.value) return
+
+  const mainContent = document.querySelector('.main-content') as HTMLElement
+  if (!mainContent) return
+
+  const rect = mainContent.getBoundingClientRect()
+  const newWidth = ((event.clientX - rect.left) / rect.width) * 100
+
+  // 限制最小和最大宽度
+  editorWidth.value = Math.min(80, Math.max(20, newWidth))
+}
+
+// 停止拖动
+function stopResize() {
+  isResizing.value = false
+  document.removeEventListener('mousemove', handleResize)
+  document.removeEventListener('mouseup', stopResize)
+  document.body.style.cursor = ''
+  document.body.style.userSelect = ''
+}
 
 // 处理 Ctrl + 鼠标滚轮缩放
 function handleWheel(event: WheelEvent) {
@@ -384,29 +445,46 @@ onUnmounted(() => {
 
 .editor-pane,
 .preview-pane {
-  flex: 1;
   min-width: 0;
   overflow: hidden;
+  flex-shrink: 0;
 }
 
 .editor-pane {
-  border-right: 1px solid #e2e8f0;
-}
-
-.editor-pane.full-width {
-  flex: 1;
   border-right: none;
 }
 
 .dark .editor-pane {
-  border-right-color: #334155;
-}
-
-.dark .editor-pane.full-width {
   border-right-color: transparent;
 }
 
-.preview-pane.full-width {
-  flex: 1;
+/* 分割器样式 */
+.splitter {
+  width: 5px;
+  background-color: #e2e8f0;
+  cursor: col-resize;
+  flex-shrink: 0;
+  transition: background-color 0.2s;
+  position: relative;
+}
+
+.splitter:hover {
+  background-color: #3b82f6;
+}
+
+.splitter:active {
+  background-color: #2563eb;
+}
+
+.dark .splitter {
+  background-color: #334155;
+}
+
+.dark .splitter:hover {
+  background-color: #3b82f6;
+}
+
+.dark .splitter:active {
+  background-color: #60a5fa;
 }
 </style>
