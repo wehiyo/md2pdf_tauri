@@ -4,6 +4,7 @@ import { readFile, writeFile } from '@tauri-apps/plugin-fs'
 import { invoke } from '@tauri-apps/api/core'
 import fontkit from '@pdf-lib/fontkit'
 import mermaid from 'mermaid'
+import wavedrom from 'wavedrom'
 import type { Metadata } from './useMarkdown'
 import { useExportProgress } from './useExportProgress'
 
@@ -120,7 +121,28 @@ export function usePDF() {
       }
     }
 
-    console.log(`[PDF导出] 图表预渲染完成: ${mermaidMatches.length} Mermaid, ${plantumlMatches.length} PlantUML`)
+    // 预渲染 WaveDrom 时序图
+    const wavedromRegex = /<div class="wavedrom">([\s\S]*?)<\/div>/g
+    const wavedromMatches: { full: string; code: string }[] = []
+    while ((match = wavedromRegex.exec(result)) !== null) {
+      wavedromMatches.push({ full: match[0], code: match[1].trim() })
+    }
+
+    for (let i = 0; i < wavedromMatches.length; i++) {
+      const { full, code } = wavedromMatches[i]
+      try {
+        // WaveDrom 使用 JavaScript 对象字面量语法，不是标准 JSON
+        const data = new Function('return ' + code)()
+        // 使用 wavedrom 的内部渲染函数生成 SVG
+        const svgContent = wavedrom.renderAny(0, data, wavedrom.waveSkin)
+        result = result.replace(full, `<div class="wavedrom" data-processed="true">${svgContent}</div>`)
+        console.log(`[PDF导出] WaveDrom 时序图 ${i + 1}/${wavedromMatches.length} 渲染完成`)
+      } catch (e) {
+        console.warn(`[PDF导出] WaveDrom 渲染失败:`, e)
+      }
+    }
+
+    console.log(`[PDF导出] 图表预渲染完成: ${mermaidMatches.length} Mermaid, ${plantumlMatches.length} PlantUML, ${wavedromMatches.length} WaveDrom`)
     return result
   }
 
@@ -538,6 +560,8 @@ function getMarkdownStyles(): string {
 .markdown-body .admonition.info .admonition-title { color: #4b5563; }
 .markdown-body .plantuml { margin: 1em 0; text-align: center; }
 .markdown-body .plantuml svg { max-width: 100%; }
+.markdown-body .wavedrom { margin: 1em 0; text-align: center; }
+.markdown-body .wavedrom svg { max-width: 100%; }
 .markdown-body figure.figure-span { display: flex; flex-direction: column; align-items: center; margin: 1.5em 0; text-align: center; page-break-inside: avoid; }
 .markdown-body figure.figure-span img { max-width: 100%; height: auto; }
 .markdown-body figure.figure-span figcaption { margin-top: 0.5em; font-size: 0.9em; color: #6b7280; text-align: center; }
@@ -578,7 +602,7 @@ function getFullHtml(title: string, metaHtml: string, content: string): string {
     .markdown-body { max-width: none; }
 
     h1, h2, h3, h4 { page-break-after: avoid; }
-    pre, blockquote, table, figure, img, svg, .mermaid { page-break-inside: avoid; }
+    pre, blockquote, table, figure, img, svg, .mermaid, .wavedrom { page-break-inside: avoid; }
     * { -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
   </style>
 </head>

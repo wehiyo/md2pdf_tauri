@@ -169,6 +169,40 @@ gantt
     集成测试      :a5, after a3, 7d
 ```
 
+### WaveDrom 时序图
+
+WaveDrom 是一个用于绘制数字时序波形图的工具，常用于硬件设计文档。
+
+#### 简单时钟信号
+
+```wavedrom
+{ signal: [
+  { name: 'clk', wave: 'p....' },
+  { name: 'data', wave: 'x3.x', data: ['A', 'B'] },
+  { name: 'req', wave: '0.1..0.1' },
+  { name: 'ack', wave: '1....1' }
+]}
+```
+
+#### 带标注的总线时序图
+
+```wavedrom
+{ signal: [
+  { name: 'clk', wave: 'P.......' },
+  { name: 'addr', wave: 'x=.=.=.=x', data: ['A1', 'A2', 'A3', 'A4'] },
+  { name: 'data', wave: 'x.=.=.=.x', data: ['D1', 'D2', 'D3', 'D4'] },
+  { name: 'rd', wave: '0.1..0.1.' },
+  { name: 'wr', wave: '0....10.' },
+  {},
+  { name: 'ack', wave: '1....01.' }
+],
+  head: {
+    text: 'Memory Read/Write Cycle',
+    tick: 0
+  }
+}
+```
+
 ### PlantUML 图表
 
 PlantUML 是另一种图表语言，支持更多图表类型（需要安装 Java 运行时）。
@@ -246,7 +280,9 @@ class Cat extends Animal {
 |------|------|----------|
 | 数学公式 | LaTeX 公式渲染 | ✅ 支持 |
 | 代码高亮 | 语法着色 + 行号 | ✅ 支持 |
-| Mermaid | 图表绘制 | ✅ 支持 |
+| Mermaid | 流程图/时序图等 | ✅ 支持 |
+| PlantUML | UML 图表（需 Java） | ✅ 支持 |
+| WaveDrom | 数字时序波形图 | ✅ 支持 |
 | 图片 | 本地/网络图片 | ✅ 支持 |
 | 导出 PDF | 生成 PDF 文件 | ✅ 支持 |
 | 导出 HTML | 生成 HTML 文件 | ✅ 支持 |

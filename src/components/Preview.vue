@@ -12,6 +12,7 @@
 <script setup lang="ts">
 import { ref, onMounted, onUpdated, watch, nextTick } from 'vue'
 import mermaid from 'mermaid'
+import wavedrom from 'wavedrom'
 import { convertFileSrc, invoke } from '@tauri-apps/api/core'
 
 const props = defineProps<{
@@ -96,6 +97,31 @@ async function renderPlantuml() {
   }
 }
 
+// 渲染 WaveDrom 时序图
+function renderWavedrom() {
+  if (!previewRef.value) return
+
+  const wavedromElements = previewRef.value.querySelectorAll('.wavedrom')
+
+  for (const element of wavedromElements) {
+    if (element.getAttribute('data-processed')) continue
+
+    try {
+      const jsonText = element.textContent || ''
+      // WaveDrom 使用 JavaScript 对象字面量语法，不是标准 JSON
+      // 使用 Function 构造函数安全地解析
+      const data = new Function('return ' + jsonText)()
+      // wavedrom.renderWaveElement 直接渲染 SVG 到 DOM 元素
+      wavedrom.renderWaveElement(0, data, element as HTMLElement, wavedrom.waveSkin)
+      element.setAttribute('data-processed', 'true')
+    } catch (error) {
+      console.error('WaveDrom render error:', error)
+      element.innerHTML = `<pre class="error">WaveDrom 渲染失败: ${error}</pre>`
+      element.setAttribute('data-processed', 'true')
+    }
+  }
+}
+
 // 修复本地图片路径
 function fixImagePaths() {
   console.log('fixImagePaths called, fileDir:', props.fileDir)
@@ -134,12 +160,14 @@ watch(() => props.html, async () => {
   await nextTick()
   await renderMermaid()
   await renderPlantuml()
+  renderWavedrom()
   fixImagePaths()
 }, { immediate: true })
 
 onUpdated(async () => {
   await renderMermaid()
   await renderPlantuml()
+  renderWavedrom()
   fixImagePaths()
 })
 </script>

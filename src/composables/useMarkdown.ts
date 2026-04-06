@@ -281,6 +281,11 @@ md.renderer.rules.fence = (tokens, idx, _options, _env, _self) => {
     return `<div class="plantuml" data-plantuml="${encoded}">Loading PlantUML...</div>`
   }
 
+  // WaveDrom 时序图
+  if (lang === 'wavedrom') {
+    return `<div class="wavedrom">${token.content}</div>`
+  }
+
   // 数学公式代码块
   if (lang === 'math' || lang === 'latex') {
     try {
