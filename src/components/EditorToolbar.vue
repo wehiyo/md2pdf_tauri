@@ -166,6 +166,9 @@ function execCmd(cmd: string) {
     props.editor.execCommand(cmd as any)
   }
 }
+
+// 导出 emit 供模板使用
+defineExpose({ emit })
 </script>
 
 <style scoped>
