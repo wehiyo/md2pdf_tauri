@@ -1,4 +1,4 @@
-import { ref, onMounted, onUnmounted, type Ref } from 'vue'
+import { ref, onUnmounted, type Ref } from 'vue'
 
 /**
  * 编辑器和预览区滚动同步 composable
@@ -10,6 +10,10 @@ export function useScrollSync(
   const isSyncing = ref(false)
   let syncTimeout: ReturnType<typeof setTimeout> | null = null
 
+  // 记录上一次的滚动位置，用于判断是否是真正的滚动
+  let lastEditorScrollTop = 0
+  let lastPreviewScrollTop = 0
+
   /**
    * 计算滚动比例 (0-1)
    */
@@ -17,7 +21,9 @@ export function useScrollSync(
     const scrollTop = element.scrollTop
     const scrollHeight = element.scrollHeight
     const clientHeight = element.clientHeight
-    return scrollTop / (scrollHeight - clientHeight)
+    const maxScroll = scrollHeight - clientHeight
+    if (maxScroll <= 0) return 0
+    return scrollTop / maxScroll
   }
 
   /**
@@ -27,6 +33,7 @@ export function useScrollSync(
     const scrollHeight = element.scrollHeight
     const clientHeight = element.clientHeight
     const maxScroll = scrollHeight - clientHeight
+    if (maxScroll <= 0) return
     element.scrollTop = ratio * maxScroll
   }
 
@@ -36,6 +43,14 @@ export function useScrollSync(
   function syncEditorToPreview(): void {
     if (isSyncing.value || !editorScrollContainer.value || !previewScrollContainer.value) return
 
+    const currentScrollTop = editorScrollContainer.value.scrollTop
+
+    // 如果滚动位置没有实际变化，跳过同步
+    if (Math.abs(currentScrollTop - lastEditorScrollTop) < 1) {
+      return
+    }
+
+    lastEditorScrollTop = currentScrollTop
     isSyncing.value = true
     const ratio = getScrollRatio(editorScrollContainer.value)
     setScrollRatio(previewScrollContainer.value, ratio)
@@ -43,7 +58,7 @@ export function useScrollSync(
     if (syncTimeout) clearTimeout(syncTimeout)
     syncTimeout = setTimeout(() => {
       isSyncing.value = false
-    }, 50)
+    }, 100)
   }
 
   /**
@@ -52,6 +67,14 @@ export function useScrollSync(
   function syncPreviewToEditor(): void {
     if (isSyncing.value || !editorScrollContainer.value || !previewScrollContainer.value) return
 
+    const currentScrollTop = previewScrollContainer.value.scrollTop
+
+    // 如果滚动位置没有实际变化，跳过同步
+    if (Math.abs(currentScrollTop - lastPreviewScrollTop) < 1) {
+      return
+    }
+
+    lastPreviewScrollTop = currentScrollTop
     isSyncing.value = true
     const ratio = getScrollRatio(previewScrollContainer.value)
     setScrollRatio(editorScrollContainer.value, ratio)
@@ -59,7 +82,7 @@ export function useScrollSync(
     if (syncTimeout) clearTimeout(syncTimeout)
     syncTimeout = setTimeout(() => {
       isSyncing.value = false
-    }, 50)
+    }, 100)
   }
 
   /**
@@ -85,10 +108,6 @@ export function useScrollSync(
       previewScrollContainer.value.removeEventListener('scroll', syncPreviewToEditor)
     }
   }
-
-  onMounted(() => {
-    startSync()
-  })
 
   onUnmounted(() => {
     stopSync()
