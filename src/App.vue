@@ -336,8 +336,10 @@ async function openFile() {
 
     if (selected && typeof selected === 'string') {
       const text = await readTextFile(selected)
-      content.value = text
-      savedContent.value = text
+      // 规范化换行符，与编辑器内部处理保持一致
+      const normalizedText = text.replace(/\r\n/g, '\n')
+      content.value = normalizedText
+      savedContent.value = normalizedText
 
       // 从文件路径提取目录（使用字符串操作，不导入 Tauri API）
       const lastSep = Math.max(selected.lastIndexOf('/'), selected.lastIndexOf('\\'))
