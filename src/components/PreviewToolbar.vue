@@ -8,24 +8,48 @@
         </svg>
         <span>仅预览</span>
       </button>
-      <button class="toolbar-btn" title="导出HTML" @click="$emit('export-html')">
+      <button class="toolbar-btn" :class="{ active: showToc }" title="目录" @click="$emit('toggle-toc')">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-          <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
-          <polyline points="7 10 12 15 17 10"/>
-          <line x1="12" y1="15" x2="12" y2="3"/>
+          <line x1="3" y1="6" x2="21" y2="6"/>
+          <line x1="3" y1="12" x2="15" y2="12"/>
+          <line x1="3" y1="18" x2="18" y2="18"/>
         </svg>
-        <span>导出HTML</span>
+        <span>目录</span>
       </button>
-      <button class="toolbar-btn" title="导出PDF" @click="$emit('export-pdf')">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-          <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
-          <polyline points="14 2 14 8 20 8"/>
-          <line x1="16" y1="13" x2="8" y2="13"/>
-          <line x1="16" y1="17" x2="8" y2="17"/>
-          <polyline points="10 9 9 9 8 9"/>
-        </svg>
-        <span>导出PDF</span>
-      </button>
+      <div class="dropdown">
+        <button class="toolbar-btn dropdown-trigger" @click="toggleDropdown">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+            <polyline points="7 10 12 15 17 10"/>
+            <line x1="12" y1="15" x2="12" y2="3"/>
+          </svg>
+          <span>导出文件</span>
+          <svg class="dropdown-arrow" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <polyline points="6 9 12 15 18 9"/>
+          </svg>
+        </button>
+        <div v-show="dropdownOpen" class="dropdown-menu">
+          <button class="dropdown-item" @click="exportHtml">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+              <polyline points="14 2 14 8 20 8"/>
+              <line x1="16" y1="13" x2="8" y2="13"/>
+              <line x1="16" y1="17" x2="8" y2="17"/>
+              <polyline points="10 9 9 9 8 9"/>
+            </svg>
+            <span>导出 HTML</span>
+          </button>
+          <button class="dropdown-item" @click="exportPdf">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+              <polyline points="14 2 14 8 20 8"/>
+              <path d="M9 13h6v4h-6z"/>
+              <path d="M12 13v4"/>
+            </svg>
+            <span>导出 PDF</span>
+          </button>
+        </div>
+      </div>
     </div>
     <div class="toolbar-right">
     </div>
@@ -33,15 +57,51 @@
 </template>
 
 <script setup lang="ts">
-defineEmits<{
+import { ref, onMounted, onUnmounted } from 'vue'
+
+const emit = defineEmits<{
   'preview-only': []
+  'toggle-toc': []
   'export-html': []
   'export-pdf': []
 }>()
 
 defineProps<{
   previewOnlyMode?: boolean
+  showToc?: boolean
 }>()
+
+const dropdownOpen = ref(false)
+
+function toggleDropdown() {
+  dropdownOpen.value = !dropdownOpen.value
+}
+
+function exportHtml() {
+  dropdownOpen.value = false
+  emit('export-html')
+}
+
+function exportPdf() {
+  dropdownOpen.value = false
+  emit('export-pdf')
+}
+
+// 点击外部关闭下拉菜单
+function handleClickOutside(event: MouseEvent) {
+  const dropdown = document.querySelector('.dropdown')
+  if (dropdown && !dropdown.contains(event.target as Node)) {
+    dropdownOpen.value = false
+  }
+}
+
+onMounted(() => {
+  document.addEventListener('click', handleClickOutside)
+})
+
+onUnmounted(() => {
+  document.removeEventListener('click', handleClickOutside)
+})
 </script>
 
 <style scoped>
@@ -112,5 +172,71 @@ defineProps<{
 .dark .toolbar-btn.active {
   background-color: #1e3a5f;
   color: #60a5fa;
+}
+
+/* 下拉菜单样式 */
+.dropdown {
+  position: relative;
+}
+
+.dropdown-arrow {
+  width: 12px;
+  height: 12px;
+  transition: transform 0.2s;
+}
+
+.dropdown-open .dropdown-arrow {
+  transform: rotate(180deg);
+}
+
+.dropdown-menu {
+  position: absolute;
+  top: 100%;
+  left: 0;
+  min-width: 140px;
+  background-color: #ffffff;
+  border: 1px solid #e2e8f0;
+  border-radius: 4px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+  z-index: 100;
+  padding: 4px 0;
+}
+
+.dark .dropdown-menu {
+  background-color: #1e293b;
+  border-color: #334155;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+}
+
+.dropdown-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  width: 100%;
+  border: none;
+  background-color: transparent;
+  color: #374151;
+  cursor: pointer;
+  transition: background-color 0.2s;
+  font-size: 12px;
+  text-align: left;
+}
+
+.dropdown-item:hover {
+  background-color: #f3f4f6;
+}
+
+.dropdown-item svg {
+  width: 16px;
+  height: 16px;
+}
+
+.dark .dropdown-item {
+  color: #e2e8f0;
+}
+
+.dark .dropdown-item:hover {
+  background-color: #334155;
 }
 </style>
