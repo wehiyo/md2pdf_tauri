@@ -46,7 +46,8 @@ import { usePDF } from './composables/usePDF'
 import { useTheme } from './composables/useTheme'
 import { useScrollSync } from './composables/useScrollSync'
 import { save, open, message, ask } from '@tauri-apps/plugin-dialog'
-import { writeTextFile, readTextFile } from '@tauri-apps/plugin-fs'
+import { writeTextFile } from '@tauri-apps/plugin-fs'
+import { invoke } from '@tauri-apps/api/core'
 // @ts-ignore
 import katexStyles from './assets/katex/katex-inline.css?raw'
 // @ts-ignore
@@ -335,7 +336,8 @@ async function openFile() {
     })
 
     if (selected && typeof selected === 'string') {
-      const text = await readTextFile(selected)
+      // 使用支持 GB18030 编码的读取命令
+      const [text, encoding] = await invoke<[string, string]>('read_file_with_encoding', { path: selected })
       // 规范化换行符，与编辑器内部处理保持一致
       const normalizedText = text.replace(/\r\n/g, '\n')
       content.value = normalizedText
@@ -345,7 +347,7 @@ async function openFile() {
       const lastSep = Math.max(selected.lastIndexOf('/'), selected.lastIndexOf('\\'))
       currentFileDir.value = lastSep > 0 ? selected.substring(0, lastSep) : null
       currentFilePath.value = selected
-      console.log('Opened file:', selected)
+      console.log('Opened file:', selected, 'Encoding:', encoding)
       console.log('File directory:', currentFileDir.value)
     }
   } catch (error) {

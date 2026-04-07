@@ -26,6 +26,9 @@ lopdf = "0.34"
 # PDF 文本提取（支持 ToUnicode CMap 解析）
 pdf-extract = "0.10.0"
 
+# 文件编码支持（GB18030 等）
+encoding_rs = "0.8"
+
 # WebView2 PDF 打印支持
 [target.'cfg(windows)'.dependencies]
 webview2-com = "0.38"
