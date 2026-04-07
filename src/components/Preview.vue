@@ -2,16 +2,40 @@
   <div class="preview-container">
     <PreviewToolbar
       :preview-only-mode="previewOnlyMode"
+      :show-toc="showToc"
       @preview-only="emit('preview-only')"
+      @toggle-toc="toggleToc"
       @export-html="emit('export-html')"
       @export-pdf="emit('export-pdf')"
     />
-    <div
-      ref="previewRef"
-      class="preview-content markdown-body"
-      v-html="html"
-      @click.stop="handleLinkClick"
-    />
+    <div class="preview-body">
+      <div
+        ref="previewRef"
+        class="preview-content markdown-body"
+        v-html="html"
+        @click.stop="handleLinkClick"
+      />
+      <div v-if="showToc" class="toc-panel">
+        <div class="toc-header">
+          <span>目录</span>
+          <button class="toc-close" @click="showToc = false">×</button>
+        </div>
+        <div class="toc-content">
+          <div
+            v-for="item in tocItems"
+            :key="item.id"
+            class="toc-item"
+            :class="'toc-level-' + item.level"
+            @click="scrollToHeading(item.id)"
+          >
+            {{ item.text }}
+          </div>
+          <div v-if="tocItems.length === 0" class="toc-empty">
+            暂无标题
+          </div>
+        </div>
+      </div>
+    </div>
   </div>
 </template>
 
@@ -21,6 +45,12 @@ import mermaid from 'mermaid'
 import wavedrom from 'wavedrom'
 import { convertFileSrc, invoke } from '@tauri-apps/api/core'
 import PreviewToolbar from './PreviewToolbar.vue'
+
+interface TocItem {
+  id: string
+  text: string
+  level: number
+}
 
 const props = defineProps<{
   html: string
@@ -35,11 +65,51 @@ const emit = defineEmits<{
 }>()
 
 const previewRef = ref<HTMLDivElement>()
+const showToc = ref(false)
+const tocItems = ref<TocItem[]>([])
 
 // 暴露滚动容器
 defineExpose({
   getScrollContainer: (): HTMLElement | null => previewRef.value ?? null
 })
+
+// 切换目录显示
+function toggleToc() {
+  showToc.value = !showToc.value
+  if (showToc.value) {
+    extractToc()
+  }
+}
+
+// 从预览区提取目录
+function extractToc() {
+  if (!previewRef.value) return
+
+  const headings = previewRef.value.querySelectorAll('h1, h2, h3, h4')
+  const items: TocItem[] = []
+
+  headings.forEach(heading => {
+    const id = heading.id
+    const text = heading.textContent || ''
+    const level = parseInt(heading.tagName.charAt(1))
+
+    if (id && level >= 1 && level <= 4) {
+      items.push({ id, text, level })
+    }
+  })
+
+  tocItems.value = items
+}
+
+// 滚动到指定标题
+function scrollToHeading(id: string) {
+  if (!previewRef.value) return
+
+  const element = previewRef.value.querySelector(`#${CSS.escape(id)}`)
+  if (element) {
+    element.scrollIntoView({ behavior: 'smooth', block: 'start' })
+  }
+}
 
 // 处理文档内链接跳转
 function handleLinkClick(event: MouseEvent) {
@@ -181,6 +251,9 @@ watch(() => props.html, async () => {
   await renderPlantuml()
   renderWavedrom()
   fixImagePaths()
+  if (showToc.value) {
+    extractToc()
+  }
 }, { immediate: true })
 
 onUpdated(async () => {
@@ -203,6 +276,12 @@ onUpdated(async () => {
   background-color: #1e293b;
 }
 
+.preview-body {
+  display: flex;
+  flex: 1;
+  overflow: hidden;
+}
+
 .preview-content {
   flex: 1;
   overflow: auto;
@@ -210,5 +289,113 @@ onUpdated(async () => {
   margin: 0 auto;
   padding: 2rem;
   width: 100%;
+}
+
+.preview-body:has(.toc-panel) .preview-content {
+  max-width: none;
+  flex: 1;
+}
+
+/* 目录面板 */
+.toc-panel {
+  width: 280px;
+  border-left: 1px solid #e2e8f0;
+  background-color: #f8fafc;
+  display: flex;
+  flex-direction: column;
+  flex-shrink: 0;
+}
+
+.dark .toc-panel {
+  border-left-color: #334155;
+  background-color: #0f172a;
+}
+
+.toc-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 16px;
+  border-bottom: 1px solid #e2e8f0;
+  font-weight: 600;
+  font-size: 14px;
+  color: #374151;
+}
+
+.dark .toc-header {
+  border-bottom-color: #334155;
+  color: #e2e8f0;
+}
+
+.toc-close {
+  background: none;
+  border: none;
+  font-size: 20px;
+  color: #6b7280;
+  cursor: pointer;
+  padding: 0;
+  line-height: 1;
+}
+
+.toc-close:hover {
+  color: #374151;
+}
+
+.dark .toc-close:hover {
+  color: #e2e8f0;
+}
+
+.toc-content {
+  flex: 1;
+  overflow-y: auto;
+  padding: 8px 0;
+}
+
+.toc-item {
+  padding: 6px 16px;
+  font-size: 13px;
+  color: #4b5563;
+  cursor: pointer;
+  transition: background-color 0.2s;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.toc-item:hover {
+  background-color: #e2e8f0;
+}
+
+.dark .toc-item {
+  color: #9ca3af;
+}
+
+.dark .toc-item:hover {
+  background-color: #1e293b;
+}
+
+.toc-level-1 {
+  font-weight: 600;
+  padding-left: 16px;
+}
+
+.toc-level-2 {
+  padding-left: 28px;
+}
+
+.toc-level-3 {
+  padding-left: 40px;
+}
+
+.toc-level-4 {
+  padding-left: 52px;
+  font-size: 12px;
+}
+
+.toc-empty {
+  padding: 16px;
+  text-align: center;
+  color: #9ca3af;
+  font-size: 13px;
 }
 </style>

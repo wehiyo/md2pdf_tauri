@@ -114,7 +114,6 @@ const MAX_ZOOM = 200
 // 分割器相关
 const editorWidth = ref(50) // 编辑器宽度百分比
 const isResizing = ref(false)
-const mainContentRef = ref<HTMLElement | null>(null)
 
 // 计算编辑器和预览区样式
 const editorPaneStyle = computed(() => {
@@ -177,11 +176,6 @@ function handleWheel(event: WheelEvent) {
 
     zoomLevel.value = newZoom
   }
-}
-
-// 重置缩放
-function resetZoom() {
-  zoomLevel.value = 100
 }
 
 // 切换预览区显示
