@@ -10,22 +10,14 @@
       </button>
     </div>
     <div class="file-tree-content">
-      <div
-        v-for="file in files"
-        :key="file.path"
-        class="file-item"
-        :class="{ active: file.path === currentFile }"
-        @click="$emit('select', file.path)"
-        :title="file.path"
-      >
-        <svg class="file-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-          <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
-          <polyline points="14 2 14 8 20 8"/>
-          <line x1="16" y1="13" x2="8" y2="13"/>
-          <line x1="16" y1="17" x2="8" y2="17"/>
-        </svg>
-        <span class="file-name">{{ file.name }}</span>
-      </div>
+      <FileTreeItem
+        v-for="(file, index) in files"
+        :key="index"
+        :item="file"
+        :current-file="currentFile"
+        :level="0"
+        @select="$emit('select', $event)"
+      />
       <div v-if="files.length === 0" class="empty-message">
         无 Markdown 文件
       </div>
@@ -35,10 +27,13 @@
 
 <script setup lang="ts">
 import { computed } from 'vue'
+import FileTreeItem from './FileTreeItem.vue'
 
 interface MdFile {
   name: string
-  path: string
+  path?: string
+  children?: MdFile[]
+  isFolder?: boolean
 }
 
 const props = defineProps<{
@@ -136,51 +131,6 @@ const folderName = computed(() => {
   flex: 1;
   overflow-y: auto;
   padding: 4px 0;
-}
-
-.file-item {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  padding: 6px 12px;
-  cursor: pointer;
-  transition: background-color 0.2s;
-  font-size: 12px;
-  color: #374151;
-}
-
-.file-item:hover {
-  background-color: #e2e8f0;
-}
-
-.dark .file-item {
-  color: #e2e8f0;
-}
-
-.dark .file-item:hover {
-  background-color: #334155;
-}
-
-.file-item.active {
-  background-color: #dbeafe;
-  color: #2563eb;
-}
-
-.dark .file-item.active {
-  background-color: #1e3a5f;
-  color: #60a5fa;
-}
-
-.file-icon {
-  width: 14px;
-  height: 14px;
-  flex-shrink: 0;
-}
-
-.file-name {
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
 }
 
 .empty-message {

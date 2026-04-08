@@ -112,7 +112,12 @@ const previewRef = ref<InstanceType<typeof Preview>>()
 // 文件树相关状态
 const showFileTree = ref(false)
 const importedFolderPath = ref<string | null>(null)
-interface MdFile { name: string; path: string }
+interface MdFile {
+  name: string
+  path?: string  // 文件节点才有路径
+  children?: MdFile[]  // 目录节点才有子节点
+  isFolder?: boolean  // 是否为目录节点
+}
 const mdFiles = ref<MdFile[]>([])
 const fileTreeWidth = ref(200) // 文件树宽度（像素）
 const MIN_FILE_TREE_WIDTH = 150
@@ -476,7 +481,7 @@ async function importFolder() {
       mdFiles.value = entries
         .filter(e => !e.isDirectory && e.name.endsWith('.md'))
         .map(e => ({
-          name: e.name,
+          name: e.name.replace(/\.md$/i, ''),
           path: selected + '/' + e.name
         }))
         .sort((a, b) => a.name.localeCompare(b.name))
@@ -510,15 +515,15 @@ async function importMkdocs() {
 
       importedFolderPath.value = docsPath
 
-      // 从 nav 结构提取 md 文件
-      const files: MdFile[] = []
+      // 从 nav 结构提取 md 文件（保留层级结构）
       if (config.nav && Array.isArray(config.nav)) {
-        extractMdFilesFromNav(config.nav, docsPath, files)
+        mdFiles.value = extractMdFilesFromNav(config.nav, docsPath)
+      } else {
+        mdFiles.value = []
       }
 
-      mdFiles.value = files
       showFileTree.value = true
-      console.log('导入 Mkdocs:', selected, 'docs_dir:', docsPath, '文件数:', files.length)
+      console.log('导入 Mkdocs:', selected, 'docs_dir:', docsPath, '文件数:', mdFiles.value.length)
     }
   } catch (error) {
     console.error('导入 Mkdocs 失败:', error)
@@ -526,13 +531,15 @@ async function importMkdocs() {
   }
 }
 
-// 从 nav 结构递归提取 md 文件
-function extractMdFilesFromNav(nav: any[], basePath: string, files: MdFile[]) {
+// 从 nav 结构递归提取 md 文件（保留层级结构）
+function extractMdFilesFromNav(nav: any[], basePath: string): MdFile[] {
+  const files: MdFile[] = []
+
   for (const item of nav) {
     if (typeof item === 'string' && item.endsWith('.md')) {
       // 字符串形式："index.md"
       files.push({
-        name: item,
+        name: item.replace(/\.md$/i, ''),
         path: basePath + '/' + item
       })
     } else if (typeof item === 'object') {
@@ -545,11 +552,17 @@ function extractMdFilesFromNav(nav: any[], basePath: string, files: MdFile[]) {
           })
         } else if (Array.isArray(value)) {
           // 嵌套导航：{ "Section": [...] }
-          extractMdFilesFromNav(value, basePath, files)
+          files.push({
+            name: title,
+            isFolder: true,
+            children: extractMdFilesFromNav(value, basePath)
+          })
         }
       }
     }
   }
+
+  return files
 }
 
 // 从文件树打开文件
