@@ -1,13 +1,13 @@
 ---
-title: MD2PDF 功能展示
-author: MD2PDF Team
+title: MarkRefine 功能展示
+author: MarkRefine Team
 date: 2026-04-04
 security level: 外部公开
 ---
 
-# MD2PDF 功能展示
+# MarkRefine 功能展示
 
-本文档展示 MD2PDF 支持的所有 Markdown 特性和扩展功能。
+本文档展示 MarkRefine 支持的所有 Markdown 特性和扩展功能。
 
 **快速导航：** [基础语法](#基础语法) | [扩展功能](#扩展功能) | [文档元素](#文档元素) | [高级功能](#高级功能)
 
@@ -17,7 +17,7 @@ security level: 外部公开
 
 ### 段落和文本样式
 
-这是一个普通段落。MD2PDF 支持以下文本样式：
+这是一个普通段落。MarkRefine 支持以下文本样式：
 
 - **粗体文本** - 使用 `**内容**`
 - *斜体文本* - 使用 `*内容*`
@@ -121,7 +121,7 @@ print(quicksort([3, 6, 8, 10, 1, 2, 1]))
 ```rust
 // Rust 示例
 fn main() {
-    let message = "Hello, MD2PDF!";
+    let message = "Hello, MarkRefine!";
     println!("{}", message);
 }
 ```
@@ -246,7 +246,7 @@ class Cat extends Animal {
 
 #### 本地图片
 
-![MD2PDF Logo](example.png)
+![MarkRefine Logo](example.png)
 
 这是一张本地图片，使用相对路径引用。
 
@@ -414,7 +414,7 @@ CSS
 
 ### 链接
 
-- [MD2PDF GitHub 仓库](https://github.com)
+- [MarkRefine GitHub 仓库](https://github.com)
 - [Markdown 语法指南](https://markdownguide.org)
 
 ---

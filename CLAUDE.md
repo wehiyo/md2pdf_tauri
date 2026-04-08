@@ -69,7 +69,7 @@ PDF 书签支持 h1-h4 嵌套层级。标记定位确保精确的 Y 坐标。
 
 #### 状态管理
 - 不使用 Vuex/Pinia —— 使用普通 ref 和 composables
-- 主题持久化到 localStorage（`md2pdf-theme`）
+- 主题持久化到 localStorage（`markrefine-theme`）
 - 编辑器内容作为 App.vue 中的响应式 ref，通过 v-model 向下传递
 - 导出进度通过 `useExportProgress` composable 跟踪，带步骤 UI
 
@@ -130,7 +130,7 @@ src-tauri/src/
 
 9. **PDF 样式**：CSS 以字符串形式嵌入在 `usePDF.ts` 中（非导入），因为 PDF 在孤立 iframe 中渲染，无法访问应用样式表。
 
-10. **主题实现**：`<html>` 使用 Tailwind 的 `dark` 类。通过 localStorage 键 `md2pdf-theme` 持久化。
+10. **主题实现**：`<html>` 使用 Tailwind 的 `dark` 类。通过 localStorage 键 `markrefine-theme` 持久化。
 
 ## 开发注意事项
 

@@ -54,9 +54,9 @@ import katexStyles from './assets/katex/katex-inline.css?raw'
 import highlightStyles from './assets/github.min.css?raw'
 
 // 默认提示内容
-const defaultContent = `# MD2PDF - Markdown 编辑器
+const defaultContent = `# MarkRefine - Markdown 编辑器
 
-欢迎使用 MD2PDF！
+欢迎使用 MarkRefine！
 
 ## 使用说明
 

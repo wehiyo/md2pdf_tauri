@@ -5,7 +5,7 @@ const theme = ref<'light' | 'dark'>('light')
 export function useTheme() {
   // 初始化：从 localStorage 读取主题
   onMounted(() => {
-    const savedTheme = localStorage.getItem('md2pdf-theme')
+    const savedTheme = localStorage.getItem('markrefine-theme')
     if (savedTheme === 'dark' || savedTheme === 'light') {
       theme.value = savedTheme
       updateDocumentClass()
@@ -25,14 +25,14 @@ export function useTheme() {
   function toggleTheme() {
     theme.value = theme.value === 'light' ? 'dark' : 'light'
     updateDocumentClass()
-    localStorage.setItem('md2pdf-theme', theme.value)
+    localStorage.setItem('markrefine-theme', theme.value)
   }
 
   // 设置主题
   function setTheme(newTheme: 'light' | 'dark') {
     theme.value = newTheme
     updateDocumentClass()
-    localStorage.setItem('md2pdf-theme', newTheme)
+    localStorage.setItem('markrefine-theme', newTheme)
   }
 
   return {

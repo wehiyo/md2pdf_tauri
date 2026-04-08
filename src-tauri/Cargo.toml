@@ -1,5 +1,5 @@
 [package]
-name = "md2pdf"
+name = "markrefine"
 version = "1.0.0"
 description = "A Tauri App"
 authors = ["you"]

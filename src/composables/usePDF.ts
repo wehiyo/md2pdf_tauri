@@ -635,7 +635,7 @@ function getFullHtml(title: string, metaHtml: string, content: string): string {
 <body>
   <div class="cover-page">
     <h1>${escapeHtml(title)}</h1>
-    <div class="subtitle">MD2PDF 生成文档</div>
+    <div class="subtitle">MarkRefine 生成文档</div>
     ${metaHtml}
   </div>
 

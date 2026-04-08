@@ -1,41 +1,61 @@
-# MD2PDF - Markdown 转 HTML/PDF 编辑器
+# MarkRefine - Markdown 转 HTML/PDF 编辑器
 
-一个专业的 Markdown 编辑器，支持实时预览、导出 HTML 和 PDF，支持科学文档所需的各种特性。
+一个专业的 Markdown 编辑器，支持实时预览、导出 HTML 和 PDF，专为科学文档和技术文档设计。
 
 ## 特性
 
-- ✨ 实时预览：边编辑边预览
-- 📄 HTML 导出：导出为标准 HTML 文件
-- 📑 PDF 导出：导出为专业格式 PDF
+### 核心功能
+- ✨ 实时预览：边编辑边预览，同步滚动
+- 📄 HTML 导出：导出为独立 HTML 文件，包含所有样式
+- 📑 PDF 导出：专业格式 PDF，支持书签、封面、页眉页脚
 - 🎨 主题切换：支持浅色/深色主题
-- 📐 数学公式：支持 LaTeX 公式（KaTeX）
-- 📊 Mermaid 图表：流程图、时序图等
-- 📝 代码高亮：支持多种编程语言
-- ✅ 任务列表：GitHub 风格的任务列表
-- 📋 目录生成：自动生成文档目录
-- 📌 脚注支持：学术论文必备
+- 🖼️ 图片支持：本地图片自动加载，支持尺寸属性
+- 📁 文件编码：支持 UTF-8 和 GB18030 编码文件
+
+### Markdown 扩展
+- 📐 数学公式：LaTeX 公式（KaTeX），支持行内 `$...$` 和块级 `$$...$$`
+- 📊 Mermaid 图表：流程图、时序图、甘特图等
+- 🌿 PlantUML 图表：UML 图、架构图等（需 Java）
+- 📈 WaveDrom：数字时序图
+- 📝 代码高亮：多种编程语言，带行号显示
+- 📋 Admonition：12 种提示框类型（note、tip、warning、danger 等）
+- 🔢 标题编号：h2-h4 自动层级编号（如 1.2.3）
+- 📌 脚注：学术论文必备
+- ✅ 任务列表：GitHub 风格
+- 📑 YAML Frontmatter：元数据提取（title、author、date、密级等）
+
+### PDF 高级功能
+- 📖 书签：h1-h4 自动生成嵌套书签
+- 📄 封面页：自动生成文档封面
+- 🔖 页眉页脚：标题、密级、页码
+- 📏 分页控制：h1 标题自动分页
 
 ## 技术栈
 
-- **GUI 框架**: Tauri 2.x
-- **前端**: Vue 3 + TypeScript + Vite
-- **样式**: Tailwind CSS
-- **Markdown**: markdown-it + 插件生态
-- **数学公式**: KaTeX
-- **图表**: Mermaid
+| 类别 | 技术 |
+|------|------|
+| GUI 框架 | Tauri 2.x（Rust + WebView） |
+| 前端 | Vue 3 + TypeScript + Vite |
+| 样式 | Tailwind CSS |
+| Markdown | markdown-it + 插件生态 |
+| 数学公式 | KaTeX（离线渲染） |
+| 图表 | Mermaid、PlantUML、WaveDrom |
+| 代码高亮 | highlight.js |
+| PDF 处理 | lopdf、pdf-extract、pdf-lib |
 
 ## 开发环境要求
 
 - [Node.js](https://nodejs.org/) (v18+)
 - [Rust](https://www.rust-lang.org/) (最新稳定版)
-- [Tauri CLI](https://tauri.app/v1/guides/getting-started/prerequisites)
+- [Tauri CLI](https://tauri.app/start/prerequisites/)
+- [Java 8+](https://www.java.com/)（可选，PlantUML 功能需要）
 
 ## 快速开始
 
 ```bash
 # 1. 克隆项目
 git clone <repository-url>
-cd md2pdf
+cd markrefine
 
 # 2. 安装依赖
 npm install
@@ -50,45 +70,161 @@ npm run tauri:build
 ## 项目结构
 
 ```
-md2pdf/
-├── src/                      # Vue 前端源码
-│   ├── components/           # 组件
-│   ├── composables/          # 组合式函数
-│   ├── styles/               # 样式文件
-│   └── main.ts               # 入口文件
-├── src-tauri/                # Tauri 后端源码
-│   └── src/main.rs           # Rust 主程序
+markrefine/
+├── src/                        # Vue 前端源码
+│   ├── components/
+│   │   ├── Editor.vue          # 文本编辑器
+│   │   ├── Preview.vue         # HTML 预览
+│   │   ├── Toolbar.vue         # 工具栏
+│   │   └── ExportProgress.vue  # PDF 导出进度
+│   ├── composables/
+│   │   ├── useMarkdown.ts      # Markdown 渲染
+│   │   ├── usePDF.ts           # PDF 导出
+│   │   ├── useTheme.ts         # 主题管理
+│   │   ├── useScrollSync.ts    # 滚动同步
+│   │   └── useExportProgress.ts # 导出进度
+│   ├── styles/
+│   │   ├── markdown.css        # GitHub 风格样式
+│   │   ├── pdf.css             # 打印样式
+│   │   └── index.css           # Tailwind 入口
+│   └── assets/                 # 示例文件、字体
+│   └── main.ts                 # 入口文件
+├── src-tauri/                  # Tauri 后端源码
+│   ├── src/
+│   │   ├── main.rs             # Tauri 入口
+│   │   ├── print.rs            # PDF 打印
+│   │   ├── bookmark.rs         # 书签注入
+│   │   ├── pdf_extract.rs      # 标记提取
+│   │   ├── plantuml.rs         # PlantUML 渲染
+│   │   └── encoding.rs         # 文件编码支持
+│   ├── assets/                 # plantuml.jar
+│   └── tauri.conf.json         # Tauri 配置
 ├── package.json
 ├── vite.config.ts
-└── tailwind.config.js
+├── tailwind.config.js
+└── CLAUDE.md                   # 架构文档
 ```
 
 ## 使用说明
 
 ### 基本操作
 
-1. **打开文件**: 点击工具栏的"打开"按钮或使用快捷键
-2. **保存文件**: 点击工具栏的"保存"按钮
-3. **导出 HTML**: 点击"导出 HTML"按钮
-4. **导出 PDF**: 点击"导出 PDF"按钮
-5. **切换主题**: 点击右上角的主题图标
+| 操作 | 说明 |
+|------|------|
+| 打开文件 | 支持 .md、.markdown、.txt 文件 |
+| 保存文件 | Ctrl+S 快捷键 |
+| 导出 HTML | 导出完整 HTML 文件，可在浏览器中查看 |
+| 导出 PDF | 导出专业 PDF，包含书签和页眉页脚 |
+| 切换主题 | 浅色/深色主题切换 |
+| 缩放 | Ctrl + 鼠标滚轮调整界面缩放 |
 
 ### Markdown 语法支持
 
-- 标准 Markdown 语法
+#### 标准语法
+- 段落、标题、粗体、斜体、删除线
+- 有序列表、无序列表、任务列表
 - 表格、代码块、引用块
-- 数学公式：`$...$` 行内公式，`$$...$$` 块级公式
-- Mermaid 图表：使用 ```mermaid 代码块
-- 任务列表：`- [ ]` 和 `- [x]`
-- 脚注：`[^1]` 和 `[^1]: 内容`
+- 链接、图片（支持本地路径）
 
-### PDF 导出
+#### 数学公式
+```markdown
+行内公式：$E = mc^2$
 
-PDF 导出使用 Tauri 的 `print_to_pdf` API，生成的 PDF：
-- 使用 A4 纸张大小
-- 自动分页
-- 保留所有样式和格式
-- 支持打印优化
+块级公式：
+$$
+\int_{-\infty}^{\infty} e^{-x^2} dx = \sqrt{\pi}
+$$
+
+或使用代码块：
+```math
+\frac{a}{b}
+\```
+```
+
+#### 图表
+
+**Mermaid：**
+```markdown
+\```mermaid
+graph LR
+    A[开始] --> B[处理]
+    B --> C[结束]
+\```
+```
+
+**PlantUML：**
+```markdown
+\```plantuml
+@startuml
+Alice -> Bob: Hello
+@enduml
+\```
+```
+
+**WaveDrom：**
+```markdown
+\```wavedrom
+{ signal: [
+  { name: "clk", wave: "p...." },
+  { name: "data", wave: "x345x" }
+]}
+\```
+```
+
+#### Admonition 提示框
+```markdown
+!!! note 注意
+    这是一个提示框
+
+!!! warning 警告
+    这是警告信息
+```
+
+支持类型：`note`、`tip`、`warning`、`danger`、`info`、`success`、`failure`、`bug`、`example`、`quote`、`abstract`、`question`
+
+#### YAML Frontmatter
+```yaml
+---
+title: 文档标题
+author: 作者
+date: 2026-04-08
+security level: 内部资料
+---
+
+# 文档内容
+```
+
+#### 图片属性
+```markdown
+![图片描述](image.png){ width="300" }
+```
+
+#### 脚注
+```markdown
+正文内容[^1]
+
+[^1]: 脚注内容
+```
+
+### PDF 导出特性
+
+PDF 导出使用 WebView2 PrintToPdf API（Windows），生成特性：
+
+- **封面页**：自动生成，显示标题、作者、日期、密级
+- **书签**：h1-h4 标题自动生成嵌套书签
+- **页眉**：文档标题 + 密级信息
+- **页脚**：页码
+- **分页**：h1 标题自动分页（除第一个）
+- **样式保留**：完整保留 Markdown 渲染样式
+- **图表嵌入**：Mermaid、PlantUML、WaveDrom 预渲染为 SVG
+
+## PlantUML 配置
+
+PlantUML 功能需要 Java 环境：
+
+1. 安装 Java 8 或更高版本
+2. 将 `plantuml.jar` 放置到 `src-tauri/assets/` 目录
+3. 下载地址：https://plantuml.com/download
 
 ## 许可证
 
