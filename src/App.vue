@@ -6,8 +6,14 @@
         :folder-path="importedFolderPath || ''"
         :files="mdFiles"
         :current-file="currentFilePath"
+        :style="{ width: fileTreeWidth + 'px' }"
         @select="openFileFromTree"
         @close="showFileTree = false"
+      />
+      <div
+        v-if="showFileTree"
+        class="splitter file-tree-splitter"
+        @mousedown="startFileTreeResize"
       />
       <Editor
         ref="editorRef"
@@ -108,6 +114,9 @@ const showFileTree = ref(false)
 const importedFolderPath = ref<string | null>(null)
 interface MdFile { name: string; path: string }
 const mdFiles = ref<MdFile[]>([])
+const fileTreeWidth = ref(200) // 文件树宽度（像素）
+const MIN_FILE_TREE_WIDTH = 150
+const MAX_FILE_TREE_WIDTH = 400
 
 // 检测是否有未保存的改动
 const hasUnsavedChanges = computed(() => content.value !== savedContent.value)
@@ -136,20 +145,23 @@ const isResizing = ref(false)
 
 // 计算编辑器和预览区样式
 const editorPaneStyle = computed(() => {
-  if (previewOnlyMode.value || !showPreview.value) {
-    return { width: '100%' }
+  if (previewOnlyMode.value) {
+    return { display: 'none' }
   }
-  return { width: `${editorWidth.value}%` }
+  if (!showPreview.value) {
+    return { flex: '1', width: '0' }
+  }
+  return { flex: `${editorWidth.value} 1 0` }
 })
 
 const previewPaneStyle = computed(() => {
   if (previewOnlyMode.value) {
-    return { width: '100%' }
+    return { flex: '1', width: '100%' }
   }
   if (!showPreview.value) {
-    return { width: '0%' }
+    return { display: 'none' }
   }
-  return { width: `${100 - editorWidth.value}%` }
+  return { flex: `${100 - editorWidth.value} 1 0` }
 })
 
 // 开始拖动分割器
@@ -181,6 +193,39 @@ function stopResize() {
   isResizing.value = false
   document.removeEventListener('mousemove', handleResize)
   document.removeEventListener('mouseup', stopResize)
+  document.body.style.cursor = ''
+  document.body.style.userSelect = ''
+}
+
+// 文件树分割器拖动
+let isFileTreeResizing = false
+
+function startFileTreeResize(event: MouseEvent) {
+  event.preventDefault()
+  isFileTreeResizing = true
+  document.addEventListener('mousemove', handleFileTreeResize)
+  document.addEventListener('mouseup', stopFileTreeResize)
+  document.body.style.cursor = 'col-resize'
+  document.body.style.userSelect = 'none'
+}
+
+function handleFileTreeResize(event: MouseEvent) {
+  if (!isFileTreeResizing) return
+
+  const mainContent = document.querySelector('.main-content') as HTMLElement
+  if (!mainContent) return
+
+  const rect = mainContent.getBoundingClientRect()
+  const zoom = zoomLevel.value / 100
+  const newWidth = (event.clientX - rect.left) / zoom
+
+  fileTreeWidth.value = Math.min(MAX_FILE_TREE_WIDTH, Math.max(MIN_FILE_TREE_WIDTH, newWidth))
+}
+
+function stopFileTreeResize() {
+  isFileTreeResizing = false
+  document.removeEventListener('mousemove', handleFileTreeResize)
+  document.removeEventListener('mouseup', stopFileTreeResize)
   document.body.style.cursor = ''
   document.body.style.userSelect = ''
 }

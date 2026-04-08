@@ -63,9 +63,7 @@ const folderName = computed(() => {
 .file-tree {
   display: flex;
   flex-direction: column;
-  width: 200px;
-  min-width: 150px;
-  max-width: 300px;
+  height: 100%;
   background-color: #f8fafc;
   border-right: 1px solid #e2e8f0;
   flex-shrink: 0;
