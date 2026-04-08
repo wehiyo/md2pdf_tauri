@@ -545,7 +545,7 @@ function getMarkdownStyles(): string {
 .markdown-body hr { height: 0.25em; padding: 0; margin: 1.5em 0; background-color: #e5e7eb; border: 0; }
 .markdown-body img { max-width: 100%; box-sizing: content-box; border-style: none; }
 .markdown-body .katex { font-size: 1.1em; }
-.markdown-body .katex-display { margin: 1em 0; overflow-x: auto; overflow-y: hidden; }
+.markdown-body .katex-display { margin: 1em 0; overflow-x: hidden; overflow-y: hidden; }
 .markdown-body .footnotes { margin-top: 2em; padding-top: 1em; border-top: 1px solid #e5e7eb; }
 .markdown-body .table-of-contents { margin-bottom: 1.5em; padding: 1em; background-color: #f9fafb; border: 1px solid #e5e7eb; border-radius: 6px; }
 .markdown-body .task-list-item { list-style-type: none; padding-left: 0; }
