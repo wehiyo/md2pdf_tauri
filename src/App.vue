@@ -490,36 +490,47 @@ async function importFolder() {
 
 // 递归读取文件夹，构建树状结构
 async function readFolderRecursive(folderPath: string): Promise<MdFile[]> {
-  const entries = await readDir(folderPath)
   const result: MdFile[] = []
 
-  // 先添加文件，再添加文件夹
-  const files = entries
-    .filter(e => !e.isDirectory && e.name.endsWith('.md'))
-    .map(e => ({
-      name: e.name.replace(/\.md$/i, ''),
-      path: folderPath + '/' + e.name
-    }))
-    .sort((a, b) => a.name.localeCompare(b.name))
+  try {
+    const entries = await readDir(folderPath)
 
-  // 获取子文件夹（排除以 . 或 _ 开头的隐藏文件夹）
-  const subFolders = entries
-    .filter(e => e.isDirectory && !e.name.startsWith('.') && !e.name.startsWith('_'))
-    .sort((a, b) => a.name.localeCompare(b.name))
+    // 先添加文件，再添加文件夹
+    const files = entries
+      .filter(e => !e.isDirectory && e.name.endsWith('.md'))
+      .map(e => ({
+        name: e.name.replace(/\.md$/i, ''),
+        path: folderPath + '/' + e.name
+      }))
+      .sort((a, b) => a.name.localeCompare(b.name))
 
-  // 先添加文件
-  result.push(...files)
+    // 获取子文件夹（排除以 . 或 _ 开头的隐藏文件夹）
+    const subFolders = entries
+      .filter(e => e.isDirectory && !e.name.startsWith('.') && !e.name.startsWith('_'))
+      .sort((a, b) => a.name.localeCompare(b.name))
 
-  // 再递归添加子文件夹
-  for (const folder of subFolders) {
-    const children = await readFolderRecursive(folderPath + '/' + folder.name)
-    if (children.length > 0) {
-      result.push({
-        name: folder.name,
-        isFolder: true,
-        children
-      })
+    // 先添加文件
+    result.push(...files)
+
+    // 再递归添加子文件夹
+    for (const folder of subFolders) {
+      try {
+        const children = await readFolderRecursive(folderPath + '/' + folder.name)
+        if (children.length > 0) {
+          result.push({
+            name: folder.name,
+            isFolder: true,
+            children
+          })
+        }
+      } catch {
+        // 跳过无法访问的文件夹
+        console.warn('跳过无法访问的文件夹:', folderPath + '/' + folder.name)
+      }
     }
+  } catch {
+    // 跳过无法访问的文件夹
+    console.warn('无法读取文件夹:', folderPath)
   }
 
   return result
