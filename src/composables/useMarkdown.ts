@@ -10,6 +10,13 @@ import hljs from 'highlight.js'
 import katex from 'katex'
 import { parse as parseYaml } from 'yaml'
 
+// KaTeX 宏定义，支持常见的 LaTeX 命令扩展
+// 参考 KaTeX 官网：% \f is defined as #1f(#2) using the macro
+const KATEX_MACROS: Record<string, string> = {
+  '\\f': '#1f(#2)',   // \f{#1}{#2} -> #1f(#2)
+  '\\relax': '',      // \relax 不做任何事情
+}
+
 // Metadata 类型定义
 export interface Metadata {
   title?: string
@@ -253,7 +260,8 @@ md.renderer.rules.math_block = (tokens, idx) => {
   try {
     return katex.renderToString(content, {
       displayMode: true,
-      throwOnError: false
+      throwOnError: false,
+      macros: KATEX_MACROS
     })
   } catch (error) {
     return `<pre class="error">${content}</pre>`
@@ -287,7 +295,8 @@ md.renderer.rules.fence = (tokens, idx, _options, _env, _self) => {
     try {
       const rendered = katex.renderToString(token.content, {
         displayMode: true,
-        throwOnError: false
+        throwOnError: false,
+        macros: KATEX_MACROS
       })
       return `<div class="katex-display">${rendered}</div>`
     } catch (error) {
@@ -350,7 +359,8 @@ md.renderer.rules.text = (tokens, idx, _options, _env, _self) => {
     try {
       return katex.renderToString(formula, {
         displayMode: false,
-        throwOnError: false
+        throwOnError: false,
+        macros: KATEX_MACROS
       })
     } catch (error) {
       return match
