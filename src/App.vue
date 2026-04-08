@@ -465,7 +465,7 @@ async function saveFile(): Promise<boolean> {
   }
 }
 
-// 导入文件夹
+// 导入文件夹（递归读取子文件夹）
 async function importFolder() {
   try {
     const selected = await open({
@@ -476,23 +476,66 @@ async function importFolder() {
     if (selected && typeof selected === 'string') {
       importedFolderPath.value = selected
 
-      // 读取文件夹中的 md 文件（单层，不递归）
-      const entries = await readDir(selected)
-      mdFiles.value = entries
-        .filter(e => !e.isDirectory && e.name.endsWith('.md'))
-        .map(e => ({
-          name: e.name.replace(/\.md$/i, ''),
-          path: selected + '/' + e.name
-        }))
-        .sort((a, b) => a.name.localeCompare(b.name))
+      // 递归读取文件夹结构
+      mdFiles.value = await readFolderRecursive(selected)
 
       showFileTree.value = true
-      console.log('导入文件夹:', selected, '文件数:', mdFiles.value.length)
+      console.log('导入文件夹:', selected, '文件数:', countMdFiles(mdFiles.value))
     }
   } catch (error) {
     console.error('导入文件夹失败:', error)
     await message('导入文件夹失败：' + String(error), { title: '错误', kind: 'error' })
   }
+}
+
+// 递归读取文件夹，构建树状结构
+async function readFolderRecursive(folderPath: string): Promise<MdFile[]> {
+  const entries = await readDir(folderPath)
+  const result: MdFile[] = []
+
+  // 先添加文件，再添加文件夹
+  const files = entries
+    .filter(e => !e.isDirectory && e.name.endsWith('.md'))
+    .map(e => ({
+      name: e.name.replace(/\.md$/i, ''),
+      path: folderPath + '/' + e.name
+    }))
+    .sort((a, b) => a.name.localeCompare(b.name))
+
+  // 获取子文件夹（排除以 . 或 _ 开头的隐藏文件夹）
+  const subFolders = entries
+    .filter(e => e.isDirectory && !e.name.startsWith('.') && !e.name.startsWith('_'))
+    .sort((a, b) => a.name.localeCompare(b.name))
+
+  // 先添加文件
+  result.push(...files)
+
+  // 再递归添加子文件夹
+  for (const folder of subFolders) {
+    const children = await readFolderRecursive(folderPath + '/' + folder.name)
+    if (children.length > 0) {
+      result.push({
+        name: folder.name,
+        isFolder: true,
+        children
+      })
+    }
+  }
+
+  return result
+}
+
+// 统计 md 文件数量
+function countMdFiles(files: MdFile[]): number {
+  let count = 0
+  for (const file of files) {
+    if (file.isFolder && file.children) {
+      count += countMdFiles(file.children)
+    } else if (file.path) {
+      count++
+    }
+  }
+  return count
 }
 
 // 导入 Mkdocs（解析完整导航结构）
