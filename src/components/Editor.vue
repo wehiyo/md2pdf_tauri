@@ -138,6 +138,11 @@ function togglePreview() {
   height: 100%;
 }
 
+/* CodeMirror 滚动区域底部 padding，确保最后几行可见 */
+.md-editor:deep(.cm-scroller) {
+  padding-bottom: 80px;
+}
+
 .md-editor:deep(textarea.md-editor-input) {
   font-family: 'JetBrains Mono', 'Fira Code', Consolas, Monaco, monospace;
   font-size: 14px;
