@@ -17,6 +17,36 @@
         <span>目录</span>
       </button>
       <div class="dropdown">
+        <button class="toolbar-btn dropdown-trigger" @click="toggleImportDropdown">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+            <polyline points="17 8 12 3 7 8"/>
+            <line x1="12" y1="3" x2="12" y2="15"/>
+          </svg>
+          <span>导入</span>
+          <svg class="dropdown-arrow" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <polyline points="6 9 12 15 18 9"/>
+          </svg>
+        </button>
+        <div v-show="importDropdownOpen" class="dropdown-menu">
+          <button class="dropdown-item" @click="importFolder">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M22 19a2 2 0 0 0-2 2H4a2 2 0 0 0-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/>
+            </svg>
+            <span>导入文件夹</span>
+          </button>
+          <button class="dropdown-item" @click="importMkdocs">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+              <polyline points="14 2 14 8 20 8"/>
+              <line x1="16" y1="13" x2="8" y2="13"/>
+              <line x1="16" y1="17" x2="8" y2="17"/>
+            </svg>
+            <span>导入 Mkdocs</span>
+          </button>
+        </div>
+      </div>
+      <div class="dropdown">
         <button class="toolbar-btn dropdown-trigger" @click="toggleDropdown">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
             <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
@@ -62,6 +92,8 @@ import { ref, onMounted, onUnmounted } from 'vue'
 const emit = defineEmits<{
   'preview-only': []
   'toggle-toc': []
+  'import-folder': []
+  'import-mkdocs': []
   'export-html': []
   'export-pdf': []
 }>()
@@ -72,9 +104,26 @@ defineProps<{
 }>()
 
 const dropdownOpen = ref(false)
+const importDropdownOpen = ref(false)
 
 function toggleDropdown() {
   dropdownOpen.value = !dropdownOpen.value
+  importDropdownOpen.value = false  // 关闭另一个下拉菜单
+}
+
+function toggleImportDropdown() {
+  importDropdownOpen.value = !importDropdownOpen.value
+  dropdownOpen.value = false  // 关闭另一个下拉菜单
+}
+
+function importFolder() {
+  importDropdownOpen.value = false
+  emit('import-folder')
+}
+
+function importMkdocs() {
+  importDropdownOpen.value = false
+  emit('import-mkdocs')
 }
 
 function exportHtml() {
@@ -89,9 +138,16 @@ function exportPdf() {
 
 // 点击外部关闭下拉菜单
 function handleClickOutside(event: MouseEvent) {
-  const dropdown = document.querySelector('.dropdown')
-  if (dropdown && !dropdown.contains(event.target as Node)) {
+  const dropdowns = document.querySelectorAll('.dropdown')
+  let clickedInside = false
+  dropdowns.forEach(dropdown => {
+    if (dropdown.contains(event.target as Node)) {
+      clickedInside = true
+    }
+  })
+  if (!clickedInside) {
     dropdownOpen.value = false
+    importDropdownOpen.value = false
   }
 }
 

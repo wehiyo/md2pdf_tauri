@@ -5,6 +5,8 @@
       :show-toc="showToc"
       @preview-only="emit('preview-only')"
       @toggle-toc="toggleToc"
+      @import-folder="emit('import-folder')"
+      @import-mkdocs="emit('import-mkdocs')"
       @export-html="emit('export-html')"
       @export-pdf="emit('export-pdf')"
     />
@@ -60,6 +62,8 @@ const props = defineProps<{
 
 const emit = defineEmits<{
   'preview-only': []
+  'import-folder': []
+  'import-mkdocs': []
   'export-html': []
   'export-pdf': []
 }>()

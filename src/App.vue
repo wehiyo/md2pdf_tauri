@@ -1,6 +1,14 @@
 <template>
   <div class="app-container">
     <div class="main-content" :style="{ zoom: zoomLevel + '%' }">
+      <FileTree
+        v-if="showFileTree"
+        :folder-path="importedFolderPath || ''"
+        :files="mdFiles"
+        :current-file="currentFilePath"
+        @select="openFileFromTree"
+        @close="showFileTree = false"
+      />
       <Editor
         ref="editorRef"
         v-show="!previewOnlyMode"
@@ -27,6 +35,8 @@
         class="preview-pane"
         :style="previewPaneStyle"
         @preview-only="togglePreviewOnly"
+        @import-folder="importFolder"
+        @import-mkdocs="importMkdocs"
         @export-html="exportHTML"
         @export-pdf="exportPDF"
       />
@@ -39,6 +49,7 @@
 import { ref, computed, onMounted, onUnmounted, nextTick } from 'vue'
 import Editor from './components/Editor.vue'
 import Preview from './components/Preview.vue'
+import FileTree from './components/FileTree.vue'
 import ExportProgress from './components/ExportProgress.vue'
 import { useMarkdown } from './composables/useMarkdown'
 import type { Metadata } from './composables/useMarkdown'
@@ -46,8 +57,9 @@ import { usePDF } from './composables/usePDF'
 import { useTheme } from './composables/useTheme'
 import { useScrollSync } from './composables/useScrollSync'
 import { save, open, message, ask } from '@tauri-apps/plugin-dialog'
-import { writeTextFile } from '@tauri-apps/plugin-fs'
+import { writeTextFile, readDir, readTextFile } from '@tauri-apps/plugin-fs'
 import { invoke } from '@tauri-apps/api/core'
+import { parse as parseYaml } from 'yaml'
 // @ts-ignore
 import katexStyles from './assets/katex/katex-inline.css?raw'
 // @ts-ignore
@@ -90,6 +102,12 @@ const { exportToPDF } = usePDF()
 const { theme } = useTheme()
 const editorRef = ref<InstanceType<typeof Editor>>()
 const previewRef = ref<InstanceType<typeof Preview>>()
+
+// 文件树相关状态
+const showFileTree = ref(false)
+const importedFolderPath = ref<string | null>(null)
+interface MdFile { name: string; path: string }
+const mdFiles = ref<MdFile[]>([])
 
 // 检测是否有未保存的改动
 const hasUnsavedChanges = computed(() => content.value !== savedContent.value)
@@ -394,6 +412,119 @@ async function saveFile(): Promise<boolean> {
     console.error('保存文件失败:', error)
     await message('保存失败：' + String(error), { title: '错误', kind: 'error' })
     return false
+  }
+}
+
+// 导入文件夹
+async function importFolder() {
+  try {
+    const selected = await open({
+      directory: true,
+      multiple: false
+    })
+
+    if (selected && typeof selected === 'string') {
+      importedFolderPath.value = selected
+
+      // 读取文件夹中的 md 文件（单层，不递归）
+      const entries = await readDir(selected)
+      mdFiles.value = entries
+        .filter(e => !e.isDirectory && e.name.endsWith('.md'))
+        .map(e => ({
+          name: e.name,
+          path: selected + '/' + e.name
+        }))
+        .sort((a, b) => a.name.localeCompare(b.name))
+
+      showFileTree.value = true
+      console.log('导入文件夹:', selected, '文件数:', mdFiles.value.length)
+    }
+  } catch (error) {
+    console.error('导入文件夹失败:', error)
+    await message('导入文件夹失败：' + String(error), { title: '错误', kind: 'error' })
+  }
+}
+
+// 导入 Mkdocs（解析完整导航结构）
+async function importMkdocs() {
+  try {
+    const selected = await open({
+      multiple: false,
+      filters: [{ name: 'YAML', extensions: ['yml', 'yaml'] }]
+    })
+
+    if (selected && typeof selected === 'string') {
+      // 读取 mkdocs.yml 内容
+      const ymlContent = await readTextFile(selected)
+      const config = parseYaml(ymlContent) as { nav?: any[]; docs_dir?: string }
+
+      // 获取 docs_dir（默认 docs）
+      const mkdocsPath = selected.substring(0, Math.max(selected.lastIndexOf('/'), selected.lastIndexOf('\\')))
+      const docsDir = config.docs_dir || 'docs'
+      const docsPath = mkdocsPath + '/' + docsDir
+
+      importedFolderPath.value = docsPath
+
+      // 从 nav 结构提取 md 文件
+      const files: MdFile[] = []
+      if (config.nav && Array.isArray(config.nav)) {
+        extractMdFilesFromNav(config.nav, docsPath, files)
+      }
+
+      mdFiles.value = files
+      showFileTree.value = true
+      console.log('导入 Mkdocs:', selected, 'docs_dir:', docsPath, '文件数:', files.length)
+    }
+  } catch (error) {
+    console.error('导入 Mkdocs 失败:', error)
+    await message('导入 Mkdocs 失败：' + String(error), { title: '错误', kind: 'error' })
+  }
+}
+
+// 从 nav 结构递归提取 md 文件
+function extractMdFilesFromNav(nav: any[], basePath: string, files: MdFile[]) {
+  for (const item of nav) {
+    if (typeof item === 'string' && item.endsWith('.md')) {
+      // 字符串形式："index.md"
+      files.push({
+        name: item,
+        path: basePath + '/' + item
+      })
+    } else if (typeof item === 'object') {
+      for (const [title, value] of Object.entries(item)) {
+        if (typeof value === 'string' && value.endsWith('.md')) {
+          // 对象形式：{ "Home": "index.md" }
+          files.push({
+            name: title,
+            path: basePath + '/' + value
+          })
+        } else if (Array.isArray(value)) {
+          // 嵌套导航：{ "Section": [...] }
+          extractMdFilesFromNav(value, basePath, files)
+        }
+      }
+    }
+  }
+}
+
+// 从文件树打开文件
+async function openFileFromTree(path: string) {
+  const canProceed = await checkUnsavedChanges()
+  if (!canProceed) return
+
+  try {
+    const [text, encoding] = await invoke<[string, string]>('read_file_with_encoding', { path })
+    const normalizedText = text.replace(/\r\n/g, '\n')
+    content.value = normalizedText
+    savedContent.value = normalizedText
+
+    const lastSep = Math.max(path.lastIndexOf('/'), path.lastIndexOf('\\'))
+    currentFileDir.value = lastSep > 0 ? path.substring(0, lastSep) : null
+    currentFilePath.value = path
+    console.log('从文件树打开:', path, '编码:', encoding)
+  } catch (error) {
+    console.error('打开文件失败:', error)
+    await message('打开文件失败：' + String(error), { title: '错误', kind: 'error' })
   }
 }
 
