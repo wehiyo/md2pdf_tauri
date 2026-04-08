@@ -490,6 +490,9 @@ export function useMarkdown() {
           imgMarkdown = content.replace(/<figcaption>[\s\S]*?<\/figcaption>/, '').trim()
         }
 
+        // 移除每行前导空白，避免被解析为代码块
+        imgMarkdown = imgMarkdown.split('\n').map(line => line.trim()).join('\n').trim()
+
         // 先处理图片属性语法 { width="300" }，在 Markdown 源码层面替换
         // 将 ![alt](src){ width="300" } 转换为带 style 的 img 标签
         imgMarkdown = imgMarkdown.replace(/!\[([^\]]*)\]\(([^)]+)\)\s*\{\s*width\s*=\s*"([^"]*)"\s*\}/g,
