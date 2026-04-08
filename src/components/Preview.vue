@@ -11,12 +11,14 @@
       @export-pdf="emit('export-pdf')"
     />
     <div class="preview-body">
-      <div
-        ref="previewRef"
-        class="preview-content markdown-body"
-        v-html="html"
-        @click.stop="handleLinkClick"
-      />
+      <div class="preview-content-wrapper">
+        <div
+          ref="previewRef"
+          class="preview-content markdown-body"
+          v-html="html"
+          @click.stop="handleLinkClick"
+        />
+      </div>
       <div v-if="showToc" class="toc-panel">
         <div class="toc-header">
           <span>目录</span>
@@ -284,20 +286,22 @@ onUpdated(async () => {
   display: flex;
   flex: 1;
   overflow: hidden;
+  position: relative;
 }
 
 .preview-content {
   flex: 1;
   overflow: auto;
   max-width: 900px;
-  margin: 0 auto;
   padding: 2rem;
   width: 100%;
 }
 
-.preview-body:has(.toc-panel) .preview-content {
-  max-width: none;
+.preview-content-wrapper {
   flex: 1;
+  display: flex;
+  justify-content: center;
+  overflow: hidden;
 }
 
 /* 目录面板 */
