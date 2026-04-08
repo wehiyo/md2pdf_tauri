@@ -523,6 +523,11 @@ function getMarkdownStyles(): string {
 .markdown-body pre { margin-top: 0; margin-bottom: 1em; padding: 1em; overflow: auto; font-size: 85%; line-height: 1.45; background-color: #f3f4f6; border-radius: 6px; }
 .markdown-body pre code { padding: 0; background-color: transparent; border-radius: 0; font-size: 100%; white-space: pre; word-break: normal; word-wrap: normal; display: block; }
 .markdown-body .code-lines-container { display: table; width: 100%; border-collapse: collapse; }
+.markdown-body .code-lines-container.line-num-width-1 .line-number { width: 1.5em; }
+.markdown-body .code-lines-container.line-num-width-2 .line-number { width: 2.5em; }
+.markdown-body .code-lines-container.line-num-width-3 .line-number { width: 3.5em; }
+.markdown-body .code-lines-container.line-num-width-4 .line-number { width: 4.5em; }
+.markdown-body .code-lines-container.line-num-width-5 .line-number { width: 5.5em; }
 .markdown-body .code-line { display: table-row; }
 .markdown-body .code-line .line-number { display: table-cell; text-align: right; padding-right: 0.75em; border-right: 1px solid #e5e7eb; color: #9ca3af; font-family: 'JetBrains Mono', 'Fira Code', Consolas, monospace; font-size: 85%; line-height: 1.45; user-select: none; -webkit-user-select: none; white-space: pre; }
 .markdown-body .code-line .line-number::before { content: attr(data-num); }

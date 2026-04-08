@@ -306,6 +306,11 @@ md.renderer.rules.fence = (tokens, idx, _options, _env, _self) => {
     startLineNum = parseInt(lineNumMatch[1] || lineNumMatch[2], 10)
   }
 
+  // 计算最大行号并确定行号列宽度类
+  const maxLineNum = startLineNum + lines.length - 1
+  const digitCount = String(maxLineNum).length
+  const widthClass = `line-num-width-${Math.min(digitCount, 5)}`
+
   let linesHtml = ''
 
   if (lang && hljs.getLanguage(lang)) {
@@ -333,7 +338,7 @@ md.renderer.rules.fence = (tokens, idx, _options, _env, _self) => {
   }
 
   const langClass = lang ? ` class="language-${lang}"` : ''
-  return `<pre${langClass}><code${langClass}><div class="code-lines-container">${linesHtml}</div></code></pre>`
+  return `<pre${langClass}><code${langClass}><div class="code-lines-container ${widthClass}">${linesHtml}</div></code></pre>`
 }
 
 // 处理行内数学公式

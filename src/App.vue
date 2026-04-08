@@ -300,7 +300,7 @@ async function checkUnsavedChanges(): Promise<boolean> {
 
   if (shouldSave) {
     // 用户选择保存，尝试保存
-    const saved = await saveFile()
+    await saveFile()
     // 即使保存失败（用户取消），也允许继续操作
     return true
   }

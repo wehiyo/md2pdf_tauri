@@ -165,6 +165,13 @@
   border-collapse: collapse;
 }
 
+/* 行号列宽度根据行数动态调整 */
+.markdown-body .code-lines-container.line-num-width-1 .line-number { width: 1.5em; }
+.markdown-body .code-lines-container.line-num-width-2 .line-number { width: 2.5em; }
+.markdown-body .code-lines-container.line-num-width-3 .line-number { width: 3.5em; }
+.markdown-body .code-lines-container.line-num-width-4 .line-number { width: 4.5em; }
+.markdown-body .code-lines-container.line-num-width-5 .line-number { width: 5.5em; }
+
 .markdown-body .code-line {
   display: table-row;
 }
