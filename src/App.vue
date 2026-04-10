@@ -478,6 +478,12 @@ async function importFolder() {
 
       showFileTree.value = true
       console.log('导入文件夹:', selected, '文件数:', countMdFiles(mdFiles.value))
+
+      // 自动打开第一个 md 文件
+      const firstFilePath = findFirstMdFilePath(mdFiles.value)
+      if (firstFilePath) {
+        await openFileFromTree(firstFilePath)
+      }
     }
   } catch (error) {
     await handleError(error, '导入文件夹')
@@ -545,6 +551,19 @@ function countMdFiles(files: MdFile[]): number {
   return count
 }
 
+// 查找第一个 md 文件路径（递归）
+function findFirstMdFilePath(files: MdFile[]): string | null {
+  for (const file of files) {
+    if (file.isFolder && file.children && file.children.length > 0) {
+      const found = findFirstMdFilePath(file.children)
+      if (found) return found
+    } else if (file.path) {
+      return file.path
+    }
+  }
+  return null
+}
+
 // 导入 Mkdocs（解析完整导航结构）
 async function importMkdocs() {
   try {
@@ -574,6 +593,12 @@ async function importMkdocs() {
 
       showFileTree.value = true
       console.log('导入 Mkdocs:', selected, 'docs_dir:', docsPath, '文件数:', mdFiles.value.length)
+
+      // 自动打开第一个 md 文件
+      const firstFilePath = findFirstMdFilePath(mdFiles.value)
+      if (firstFilePath) {
+        await openFileFromTree(firstFilePath)
+      }
     }
   } catch (error) {
     await handleError(error, '导入 Mkdocs')
