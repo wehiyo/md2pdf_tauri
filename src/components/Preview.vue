@@ -217,6 +217,22 @@ function renderWavedrom() {
   }
 }
 
+// 规范化路径，解析 . 和 ..
+function normalizePath(path: string): string {
+  const parts = path.split('/')
+  const result: string[] = []
+
+  for (const part of parts) {
+    if (part === '..') {
+      result.pop()
+    } else if (part !== '.' && part !== '') {
+      result.push(part)
+    }
+  }
+
+  return result.join('/')
+}
+
 // 修复本地图片路径
 function fixImagePaths() {
   console.log('fixImagePaths called, fileDir:', props.fileDir)
@@ -236,9 +252,9 @@ function fixImagePaths() {
     const src = img.getAttribute('src')
     console.log('Image src:', src)
     if (src && !src.match(/^https?:\/\//) && !src.startsWith('data:') && !src.startsWith('asset:') && !src.includes('asset.localhost')) {
-      // 相对路径，转换为绝对路径
+      // 相对路径，转换为绝对路径并规范化
       const absolutePath = props.fileDir + '/' + src
-      const normalizedPath = absolutePath.replace(/\\/g, '/')
+      const normalizedPath = normalizePath(absolutePath).replace(/\\/g, '/')
 
       // 使用 convertFileSrc 转换为 asset 协议 URL
       const assetUrl = convertFileSrc(normalizedPath)
