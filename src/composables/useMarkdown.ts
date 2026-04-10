@@ -103,7 +103,7 @@ md.core.ruler.at('replacements', function replacements(state) {
 
       // 先提取并保护 $...$ 格式的公式
       const dollarFormulaRanges: { start: number; end: number; content: string }[] = []
-      content = content.replace(/\$([^$]+)\$/g, (match, formula, offset) => {
+      content = content.replace(/\$([^$]+)\$/g, (match, _formula, offset) => {
         dollarFormulaRanges.push({ start: offset, end: offset + match.length, content: match })
         return `\x00DOLLAR${dollarFormulaRanges.length - 1}\x00`
       })
