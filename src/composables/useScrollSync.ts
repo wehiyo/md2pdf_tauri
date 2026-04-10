@@ -2,6 +2,7 @@ import { ref, onUnmounted, type Ref } from 'vue'
 
 /**
  * 编辑器和预览区滚动同步 composable
+ * 只在用户主动滚动时同步， 不在内容变化导致的自动滚动时同步
  */
 export function useScrollSync(
   editorScrollContainer: Ref<HTMLElement | null>,
@@ -10,12 +11,26 @@ export function useScrollSync(
   const isSyncing = ref(false)
   let syncTimeout: ReturnType<typeof setTimeout> | null = null
 
-  // 记录上一次的滚动位置，用于判断是否是真正的滚动
+  // 记录上一次的滚动位置， 用于判断是否是真正的滚动
   let lastEditorScrollTop = 0
   let lastPreviewScrollTop = 0
 
+  // 标记是否是用户主动滚动（通过鼠标滚轮或触摸)
+  let isUserScrolling = false
+
   /**
-   * 计算滚动比例 (0-1)
+   * 讻录用户开始滚动
+   */
+  function onScrollStart(): void {
+    isUserScrolling = true
+    // 滚动结束后重置状态
+    setTimeout(() => {
+      isUserScrolling = false
+    }, 150)
+  }
+
+  /**
+   * 讻算滚动比例 (0-1)
    */
   function getScrollRatio(element: HTMLElement): number {
     const scrollTop = element.scrollTop
@@ -42,6 +57,8 @@ export function useScrollSync(
    */
   function syncEditorToPreview(): void {
     if (isSyncing.value || !editorScrollContainer.value || !previewScrollContainer.value) return
+    // 只有用户主动滚动时才同步
+    if (!isUserScrolling) return
 
     const currentScrollTop = editorScrollContainer.value.scrollTop
 
@@ -67,6 +84,9 @@ export function useScrollSync(
   function syncPreviewToEditor(): void {
     if (isSyncing.value || !editorScrollContainer.value || !previewScrollContainer.value) return
 
+    // 只有用户主动滚动时才同步
+    if (!isUserScrolling) return
+
     const currentScrollTop = previewScrollContainer.value.scrollTop
 
     // 如果滚动位置没有实际变化，跳过同步
@@ -91,9 +111,13 @@ export function useScrollSync(
   function startSync(): void {
     if (editorScrollContainer.value) {
       editorScrollContainer.value.addEventListener('scroll', syncEditorToPreview)
+      editorScrollContainer.value.addEventListener('wheel', onScrollStart)
+      editorScrollContainer.value.addEventListener('touchstart', onScrollStart)
     }
     if (previewScrollContainer.value) {
       previewScrollContainer.value.addEventListener('scroll', syncPreviewToEditor)
+      previewScrollContainer.value.addEventListener('wheel', onScrollStart)
+      previewScrollContainer.value.addEventListener('touchstart', onScrollStart)
     }
   }
 
@@ -103,9 +127,13 @@ export function useScrollSync(
   function stopSync(): void {
     if (editorScrollContainer.value) {
       editorScrollContainer.value.removeEventListener('scroll', syncEditorToPreview)
+      editorScrollContainer.value.removeEventListener('wheel', onScrollStart)
+      editorScrollContainer.value.removeEventListener('touchstart', onScrollStart)
     }
     if (previewScrollContainer.value) {
       previewScrollContainer.value.removeEventListener('scroll', syncPreviewToEditor)
+      previewScrollContainer.value.removeEventListener('wheel', onScrollStart)
+      previewScrollContainer.value.removeEventListener('touchstart', onScrollStart)
     }
   }
 

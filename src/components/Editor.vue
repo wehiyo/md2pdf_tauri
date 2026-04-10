@@ -8,6 +8,7 @@
       :theme="theme"
       :language="language"
       :toolbars="toolbars"
+      :scrollAuto="false"
       class="md-editor"
       @onSave="saveFile"
     >
