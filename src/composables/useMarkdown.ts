@@ -73,6 +73,68 @@ const md = new MarkdownIt({
   highlight
 })
 
+// 禁用 typographer 的注册商标转换，避免公式中 (r) 被错误渲染
+// 保留其他排版功能（智能引号、破折号等），同时跳过公式内部
+md.core.ruler.at('replacements', function replacements(state) {
+  const typographerReplacements = [
+    ['+-', '±'],
+    ['...', '…'],
+    ['--', '–'],
+    ['---', '—'],
+    ['(c)', '©'],
+    ['(r)', '®'],
+    ['(tm)', '™'],
+    ['(C)', '©'],
+    ['(R)', '®'],
+    ['(TM)', '™']
+  ]
+
+  for (let i = 0; i < state.tokens.length; i++) {
+    const block = state.tokens[i]
+    if (block.type !== 'inline' || !block.children) continue
+
+    for (let j = 0; j < block.children.length; j++) {
+      const token = block.children[j]
+      if (token.type !== 'text') continue
+
+      // 跳过公式内部的内容：检查是否在 $...$ 或 \(...\) 范围内
+      // 方法：临时保护公式内容，执行替换后恢复
+      let content = token.content
+
+      // 先提取并保护 $...$ 格式的公式
+      const dollarFormulaRanges: { start: number; end: number; content: string }[] = []
+      content = content.replace(/\$([^$]+)\$/g, (match, formula, offset) => {
+        dollarFormulaRanges.push({ start: offset, end: offset + match.length, content: match })
+        return `\x00DOLLAR${dollarFormulaRanges.length - 1}\x00`
+      })
+
+      // 提取并保护 \(...\) 格式的公式
+      const bracketFormulaRanges: { start: number; end: number; content: string }[] = []
+      content = content.replace(/\\\([^)]+\\\)/g, (match, offset) => {
+        bracketFormulaRanges.push({ start: offset, end: offset + match.length, content: match })
+        return `\x00BRACKET${bracketFormulaRanges.length - 1}\x00`
+      })
+
+      // 执行 typographer 替换
+      for (const [pattern, replacement] of typographerReplacements) {
+        content = content.replace(pattern, replacement)
+      }
+
+      // 恢复 $...$ 公式
+      content = content.replace(/\x00DOLLAR(\d+)\x00/g, (_, idx) => {
+        return dollarFormulaRanges[parseInt(idx)].content
+      })
+
+      // 恢复 \(...\) 公式
+      content = content.replace(/\x00BRACKET(\d+)\x00/g, (_, idx) => {
+        return bracketFormulaRanges[parseInt(idx)].content
+      })
+
+      token.content = content
+    }
+  }
+})
+
 // 使用插件
 md.use(footnote)
 // 暂时禁用 task-lists 插件

@@ -133,6 +133,41 @@ security level: 内部
       const html = renderBody('```math\n\\frac{a}{b}\n```')
       expect(html).toContain('katex-display')
     })
+
+    it('行内公式 $...$ 内 (r) 不应被转换', () => {
+      const html = renderBody('测试 $a(r) + b$ 内容')
+      expect(html).not.toContain('®')
+      expect(html).toContain('katex')
+    })
+
+    it('行内公式 \\(...\\) 内 (r) 不应被转换', () => {
+      const html = renderBody('测试 \\(a(r) + b\\) 内容')
+      expect(html).not.toContain('®')
+      expect(html).toContain('katex')
+    })
+
+    it('块级公式 $$...$$ 内 (r) 不应被转换', () => {
+      const html = renderBody('$$\na(r) + b\n$$')
+      expect(html).not.toContain('®')
+      expect(html).toContain('katex-display')
+    })
+
+    it('块级公式 \\[...\\] 内 (r) 不应被转换', () => {
+      const html = renderBody('\\[\na(r) + b\n\\]')
+      expect(html).not.toContain('®')
+      expect(html).toContain('katex-display')
+    })
+
+    it('math 代码块内 (r) 不应被转换', () => {
+      const html = renderBody('```math\na(r) + b\n```')
+      expect(html).not.toContain('®')
+      expect(html).toContain('katex-display')
+    })
+
+    it('公式外 (r) 应被转换为注册商标符号', () => {
+      const html = renderBody('产品名称(r) 注册商标')
+      expect(html).toContain('®')
+    })
   })
 
   describe('图表语法', () => {
