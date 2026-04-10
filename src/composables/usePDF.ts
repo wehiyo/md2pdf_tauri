@@ -8,6 +8,7 @@ import wavedrom from 'wavedrom'
 import JSON5 from 'json5'
 import type { Metadata } from './useMarkdown'
 import { useExportProgress } from './useExportProgress'
+import { useErrorHandling } from './useErrorHandling'
 
 // 字体缓存
 let cachedChineseFont: Uint8Array | null = null
@@ -24,6 +25,7 @@ let isExporting = false
 
 export function usePDF() {
   const { startExport, updateStep, endExport } = useExportProgress()
+  const { handleError, handleWarning } = useErrorHandling()
 
   /**
    * 导出 HTML 为 PDF
@@ -54,8 +56,7 @@ export function usePDF() {
       await generatePDF(contentWithoutToc, headings, metadata)
 
     } catch (error) {
-      console.error('导出 PDF 失败:', error)
-      await message('导出失败：' + String(error), { title: '错误', kind: 'error' })
+      await handleError(error, '导出 PDF')
     } finally {
       endExport()
       isExporting = false
@@ -97,7 +98,7 @@ export function usePDF() {
         result = result.replace(full, `<div class="mermaid" data-processed="true">${svg}</div>`)
         console.log(`[PDF导出] Mermaid 图表 ${i + 1}/${mermaidMatches.length} 渲染完成`)
       } catch (e) {
-        console.warn(`[PDF导出] Mermaid 渲染失败:`, e)
+        handleWarning(e, 'Mermaid 渲染')
       }
     }
 
@@ -116,7 +117,7 @@ export function usePDF() {
         result = result.replace(full, `<div class="plantuml" data-processed="true">${svg}</div>`)
         console.log(`[PDF导出] PlantUML 图表 ${i + 1}/${plantumlMatches.length} 渲染完成`)
       } catch (e) {
-        console.warn(`[PDF导出] PlantUML 渲染失败:`, e)
+        handleWarning(e, 'PlantUML 渲染')
       }
     }
 
@@ -137,7 +138,7 @@ export function usePDF() {
         result = result.replace(full, `<div class="wavedrom" data-processed="true">${svgContent}</div>`)
         console.log(`[PDF导出] WaveDrom 时序图 ${i + 1}/${wavedromMatches.length} 渲染完成`)
       } catch (e) {
-        console.warn(`[PDF导出] WaveDrom 渲染失败:`, e)
+        handleWarning(e, 'WaveDrom 渲染')
       }
     }
 
@@ -237,7 +238,7 @@ export function usePDF() {
             bookmarks: bookmarks
           })
         } catch (bookmarkError) {
-          console.error('书签注入失败:', bookmarkError)
+          handleWarning(bookmarkError, '书签注入')
         }
       }
 
@@ -251,13 +252,12 @@ export function usePDF() {
 
         await message(`PDF 已保存：${printResult.path}`, { title: '成功', kind: 'info' })
       } catch (pageNumberError) {
-        console.error('添加页码失败:', pageNumberError)
+        handleWarning(pageNumberError, '添加页码')
         await message(`PDF 已生成：${printResult.path}`, { title: '成功', kind: 'info' })
       }
 
     } catch (printError) {
-      console.error('PDF 导出失败:', printError)
-      await message('导出失败：' + String(printError), { title: '错误', kind: 'error' })
+      await handleError(printError, 'PDF 导出')
     }
   }
 

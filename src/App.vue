@@ -62,6 +62,7 @@ import type { Metadata } from './composables/useMarkdown'
 import { usePDF } from './composables/usePDF'
 import { useTheme } from './composables/useTheme'
 import { useScrollSync } from './composables/useScrollSync'
+import { useErrorHandling } from './composables/useErrorHandling'
 import { save, open, message, ask } from '@tauri-apps/plugin-dialog'
 import { writeTextFile, readDir, readTextFile } from '@tauri-apps/plugin-fs'
 import { invoke } from '@tauri-apps/api/core'
@@ -104,6 +105,7 @@ const currentMetadata = ref<Metadata>({})
 const { render } = useMarkdown()
 const { exportToPDF } = usePDF()
 const { theme } = useTheme()
+const { handleError } = useErrorHandling()
 const editorRef = ref<InstanceType<typeof Editor>>()
 const previewRef = ref<InstanceType<typeof Preview>>()
 
@@ -335,8 +337,7 @@ async function exportHTML() {
       await message('HTML 导出成功！', { title: '成功', kind: 'info' })
     }
   } catch (error) {
-    console.error('导出 HTML 失败:', error)
-    await message('导出失败：' + String(error), { title: '错误', kind: 'error' })
+    await handleError(error, '导出 HTML')
   }
 }
 
@@ -418,8 +419,7 @@ async function openFile() {
       console.log('File directory:', currentFileDir.value)
     }
   } catch (error) {
-    console.error('打开文件失败:', error)
-    await message('打开文件失败：' + String(error), { title: '错误', kind: 'error' })
+    await handleError(error, '打开文件')
   }
 }
 
@@ -457,8 +457,7 @@ async function saveFile(): Promise<boolean> {
 
     return false
   } catch (error) {
-    console.error('保存文件失败:', error)
-    await message('保存失败：' + String(error), { title: '错误', kind: 'error' })
+    await handleError(error, '保存文件')
     return false
   }
 }
@@ -481,8 +480,7 @@ async function importFolder() {
       console.log('导入文件夹:', selected, '文件数:', countMdFiles(mdFiles.value))
     }
   } catch (error) {
-    console.error('导入文件夹失败:', error)
-    await message('导入文件夹失败：' + String(error), { title: '错误', kind: 'error' })
+    await handleError(error, '导入文件夹')
   }
 }
 
@@ -578,8 +576,7 @@ async function importMkdocs() {
       console.log('导入 Mkdocs:', selected, 'docs_dir:', docsPath, '文件数:', mdFiles.value.length)
     }
   } catch (error) {
-    console.error('导入 Mkdocs 失败:', error)
-    await message('导入 Mkdocs 失败：' + String(error), { title: '错误', kind: 'error' })
+    await handleError(error, '导入 Mkdocs')
   }
 }
 
@@ -633,8 +630,7 @@ async function openFileFromTree(path: string) {
     currentFilePath.value = path
     console.log('从文件树打开:', path, '编码:', encoding)
   } catch (error) {
-    console.error('打开文件失败:', error)
-    await message('打开文件失败：' + String(error), { title: '错误', kind: 'error' })
+    await handleError(error, '打开文件')
   }
 }
 
