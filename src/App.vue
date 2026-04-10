@@ -123,6 +123,10 @@ const fileTreeWidth = ref(200) // 文件树宽度（像素）
 const MIN_FILE_TREE_WIDTH = 150
 const MAX_FILE_TREE_WIDTH = 400
 
+// 工作状态：'file' = 通过按钮打开文件, 'folder' = 导入文件夹, 'mkdocs' = 导入 Mkdocs
+type WorkState = 'file' | 'folder' | 'mkdocs'
+const workState = ref<WorkState>('file')
+
 // 检测是否有未保存的改动
 const hasUnsavedChanges = computed(() => content.value !== savedContent.value)
 
@@ -386,6 +390,7 @@ async function newFile() {
   savedContent.value = ''
   currentFileDir.value = null
   currentFilePath.value = null
+  workState.value = 'file'
 }
 
 // 打开文件
@@ -404,6 +409,12 @@ async function openFile() {
     })
 
     if (selected && typeof selected === 'string') {
+      // 如果从文件夹或 Mkdocs 状态切换到文件状态，关闭文件树
+      if (workState.value === 'folder' || workState.value === 'mkdocs') {
+        showFileTree.value = false
+      }
+      workState.value = 'file'
+
       // 使用支持 GB18030 编码的读取命令
       const [text, encoding] = await invoke<[string, string]>('read_file_with_encoding', { path: selected })
       // 规范化换行符，与编辑器内部处理保持一致
@@ -477,6 +488,7 @@ async function importFolder() {
       mdFiles.value = await readFolderRecursive(selected)
 
       showFileTree.value = true
+      workState.value = 'folder'
       console.log('导入文件夹:', selected, '文件数:', countMdFiles(mdFiles.value))
 
       // 自动打开第一个 md 文件
@@ -592,6 +604,7 @@ async function importMkdocs() {
       }
 
       showFileTree.value = true
+      workState.value = 'mkdocs'
       console.log('导入 Mkdocs:', selected, 'docs_dir:', docsPath, '文件数:', mdFiles.value.length)
 
       // 自动打开第一个 md 文件
