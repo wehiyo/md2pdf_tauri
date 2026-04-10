@@ -92,6 +92,55 @@ md.use(anchor, {
 //   containerClass: 'table-of-contents'
 // })
 
+// 添加 inline 规则处理 \(...\) 格式的行内公式（在 escape 规则之前）
+md.inline.ruler.before('escape', 'math_inline_bracket', function math_inline_bracket(state, silent) {
+  const pos = state.pos
+  const max = state.posMax
+
+  // 检查是否以 \( 开头
+  if (pos + 2 > max || state.src.substring(pos, pos + 2) !== '\\(') {
+    return false
+  }
+
+  // 查找结束标记 \)
+  let endPos = -1
+  for (let i = pos + 2; i < max - 1; i++) {
+    if (state.src.substring(i, i + 2) === '\\)') {
+      endPos = i
+      break
+    }
+  }
+
+  if (endPos < 0) {
+    return false
+  }
+
+  if (!silent) {
+    const content = state.src.substring(pos + 2, endPos)
+    const token = state.push('math_inline_bracket', 'span', 0)
+    token.content = content
+    state.pos = endPos + 2
+    return true
+  }
+
+  state.pos = endPos + 2
+  return true
+})
+
+// 渲染 math_inline_bracket
+md.renderer.rules.math_inline_bracket = (tokens, idx) => {
+  const content = tokens[idx].content
+  try {
+    return katex.renderToString(content, {
+      displayMode: false,
+      throwOnError: false,
+      macros: KATEX_MACROS
+    })
+  } catch (error) {
+    return `(${content})`
+  }
+}
+
 // 自定义 Admonition 解析器（支持缩进语法和结束标记语法）
 md.block.ruler.before('fence', 'admonition_block', function admonition_block(state, startLine, endLine, silent) {
   const pos = state.bMarks[startLine] + state.tShift[startLine]
@@ -213,16 +262,27 @@ md.renderer.rules.admonition_content = (tokens, idx) => {
 
 // 添加 $$ 块级公式解析规则
 md.block.ruler.before('fence', 'math_block', function math_block(state, startLine, endLine, silent) {
-  const marker = '$$'
   const pos = state.bMarks[startLine] + state.tShift[startLine]
   const max = state.eMarks[startLine]
 
-  // 检查当前行是否以 $$ 开头
-  if (pos + marker.length > max || state.src.substring(pos, pos + marker.length) !== marker) {
+  // 检查当前行是否以 $$ 或 \[ 开头
+  const dollarMarker = '$$'
+  const bracketMarker = '\\['
+
+  let marker = ''
+  let endMarker = ''
+
+  if (pos + dollarMarker.length <= max && state.src.substring(pos, pos + dollarMarker.length) === dollarMarker) {
+    marker = dollarMarker
+    endMarker = dollarMarker
+  } else if (pos + bracketMarker.length <= max && state.src.substring(pos, pos + bracketMarker.length) === bracketMarker) {
+    marker = bracketMarker
+    endMarker = '\\]'
+  } else {
     return false
   }
 
-  // 查找结束标记 $$
+  // 查找结束标记
   let nextLine = startLine + 1
   let contentEnd = -1
 
@@ -230,7 +290,7 @@ md.block.ruler.before('fence', 'math_block', function math_block(state, startLin
     const linePos = state.bMarks[nextLine] + state.tShift[nextLine]
     const lineMax = state.eMarks[nextLine]
 
-    if (linePos < lineMax && state.src.substring(linePos, linePos + marker.length) === marker) {
+    if (linePos < lineMax && state.src.substring(linePos, linePos + endMarker.length) === endMarker) {
       contentEnd = nextLine
       break
     }
@@ -350,7 +410,7 @@ md.renderer.rules.fence = (tokens, idx, _options, _env, _self) => {
   return `<pre${langClass}><code${langClass}><div class="code-lines-container ${widthClass}">${linesHtml}</div></code></pre>`
 }
 
-// 处理行内数学公式
+// 处理行内数学公式（支持 $...$ 格式）
 md.renderer.rules.text = (tokens, idx, _options, _env, _self) => {
   let content = tokens[idx].content
 

@@ -109,13 +109,23 @@ security level: 内部
   })
 
   describe('数学公式渲染', () => {
-    it('应正确渲染行内公式', () => {
+    it('应正确渲染行内公式 ($...$)', () => {
       const html = renderBody('公式 $E = mc^2$ 测试')
+      expect(html).toContain('katex')
+    })
+
+    it('应正确渲染行内公式 \\(...\\)', () => {
+      const html = renderBody('公式 \\(E = mc^2\\) 测试')
       expect(html).toContain('katex')
     })
 
     it('应正确渲染块级公式 ($$...$$)', () => {
       const html = renderBody('$$\n\\int_0^1 x^2 dx\n$$')
+      expect(html).toContain('katex-display')
+    })
+
+    it('应正确渲染块级公式 \\[...\\]', () => {
+      const html = renderBody('\\[\n\\int_0^1 x^2 dx\n\\]')
       expect(html).toContain('katex-display')
     })
 
