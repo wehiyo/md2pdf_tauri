@@ -502,6 +502,94 @@ function escapeHtml(html: string): string {
     .replace(/'/g, '&#039;')
 }
 
+/**
+ * 解析图片属性标注 {width=... align=...}
+ * 支持格式：
+ * - {width=300}
+ * - {width="300"}
+ * - {align=center/left/right}
+ * - {width=300 align=center}
+ * - {align=center width=300}
+ */
+interface ImageAttributes {
+  width?: string
+  align?: 'left' | 'center' | 'right'
+}
+
+function parseImageAttributes(attrString: string): ImageAttributes {
+  const attrs: ImageAttributes = {}
+
+  // 匹配 width=值（支持多种引号格式）
+  // ASCII 双引号: " (\x22)
+  // Unicode 左双引号: " (\u201C)
+  // Unicode 右双引号: " (\u201D)
+  // 先匹配带引号的格式 width="300" 或 width="300"
+  // 注意：必须使用 Unicode 转义序列，不能直接使用 Unicode 字符
+  const widthMatchQuoted = attrString.match(/width\s*=\s*["\u201C\u201D]([^"\u201C\u201D]*)["\u201C\u201D]/i)
+  if (widthMatchQuoted) {
+    attrs.width = widthMatchQuoted[1]
+  } else {
+    // 再匹配不带引号的格式 width=300 或 width=50%
+    const widthMatchUnquoted = attrString.match(/width\s*=\s*(\d+[a-z%]*)/i)
+    if (widthMatchUnquoted) {
+      attrs.width = widthMatchUnquoted[1]
+    }
+  }
+
+  // 匹配 align=值（支持多种引号格式）
+  const alignMatchQuoted = attrString.match(/align\s*=\s*["\u201C\u201D]([^"\u201C\u201D]*)["\u201C\u201D]/i)
+  if (alignMatchQuoted) {
+    const alignValue = alignMatchQuoted[1].toLowerCase()
+    if (alignValue === 'left' || alignValue === 'center' || alignValue === 'right') {
+      attrs.align = alignValue
+    }
+  } else {
+    const alignMatchUnquoted = attrString.match(/align\s*=\s*(\w+)/i)
+    if (alignMatchUnquoted) {
+      const alignValue = alignMatchUnquoted[1].toLowerCase()
+      if (alignValue === 'left' || alignValue === 'center' || alignValue === 'right') {
+        attrs.align = alignValue
+      }
+    }
+  }
+
+  return attrs
+}
+
+/**
+ * 根据属性生成 img 标签的 style
+ */
+function buildImageStyle(attrs: ImageAttributes): string {
+  const styles: string[] = []
+
+  if (attrs.width) {
+    // 如果 width 是纯数字，自动添加 px 单位
+    const widthValue = /^\d+$/.test(attrs.width) ? `${attrs.width}px` : attrs.width
+    styles.push(`width: ${widthValue};`)
+  }
+
+  return styles.join(' ')
+}
+
+/**
+ * 根据 align 属性生成包裹标签
+ * 使用 margin 实现对齐，确保在各种容器中都能正确生效
+ */
+function wrapImageByAlign(imgTag: string, align?: 'left' | 'center' | 'right'): string {
+  if (!align) return imgTag
+
+  // 使用 div 包裹，但通过 margin 控制对齐（比 text-align 更可靠）
+  if (align === 'center') {
+    return `<div style="display: flex; justify-content: center;">${imgTag}</div>`
+  } else if (align === 'left') {
+    return `<div style="display: flex; justify-content: flex-start;">${imgTag}</div>`
+  } else if (align === 'right') {
+    return `<div style="display: flex; justify-content: flex-end;">${imgTag}</div>`
+  }
+
+  return imgTag
+}
+
 // 标题编号计数器（模块级别）
 const headingCounters = { h2: 0, h3: 0, h4: 0 }
 
@@ -615,11 +703,13 @@ export function useMarkdown() {
         // 移除每行前导空白，避免被解析为代码块
         imgMarkdown = imgMarkdown.split('\n').map((line: string) => line.trim()).join('\n').trim()
 
-        // 先处理图片属性语法 { width="300" }，在 Markdown 源码层面替换
-        // 将 ![alt](src){ width="300" } 转换为带 style 的 img 标签
-        imgMarkdown = imgMarkdown.replace(/!\[([^\]]*)\]\(([^)]+)\)\s*\{\s*width\s*=\s*"([^"]*)"\s*\}/g,
-          (_m: string, alt: string, src: string, width: string) => {
-            return `<img src="${src}" alt="${alt}" style="width: ${width};">`
+        // 先处理图片属性语法 {width=... align=...}，在 Markdown 源码层面替换
+        imgMarkdown = imgMarkdown.replace(/!\[([^\]]*)\]\(([^)]+)\)\s*\{([^}]*)\}/g,
+          (_m: string, alt: string, src: string, attrStr: string) => {
+            const attrs = parseImageAttributes(attrStr)
+            const style = buildImageStyle(attrs)
+            const imgTag = `<img src="${src}" alt="${alt}"${style ? ` style="${style}"` : ''}>`
+            return wrapImageByAlign(imgTag, attrs.align)
           }
         )
 
@@ -628,20 +718,29 @@ export function useMarkdown() {
 
         // 移除图片周围的 <p> 标签
         imgContent = imgContent.replace(/<p>(<img[^>]*>)<\/p>/g, '$1')
+        imgContent = imgContent.replace(/<p>(<div[^>]*><img[^>]*><\/div>)<\/p>/g, '$1')
 
         return `<figure class="figure-span">${imgContent}${figcaption ? `<figcaption>${figcaption}</figcaption>` : ''}</figure>`
       })
 
-      // 后处理：处理普通图片属性语法 ![alt](src){ width="300" }
+      // 后处理：处理普通图片属性语法 ![alt](src){width=... align=...}
       // 在 Markdown 源码渲染后的 HTML 中处理
-      html = html.replace(/<p><img([^>]*)>\s*\{\s*width\s*=\s*"([^"]*)"\s*\}<\/p>/g,
-        (_match, imgAttrs, width) => {
-          return `<img${imgAttrs} style="width: ${width};">`
+      // 处理被 <p> 包裹的情况
+      html = html.replace(/<p><img([^>]*)>\s*\{([^}]*)\}<\/p>/g,
+        (_match, imgAttrs, attrStr: string) => {
+          const attrs = parseImageAttributes(attrStr)
+          const style = buildImageStyle(attrs)
+          const imgTag = `<img${imgAttrs}${style ? ` style="${style}"` : ''}>`
+          return wrapImageByAlign(imgTag, attrs.align)
         }
       )
-      html = html.replace(/<img([^>]*)>\s*\{\s*width\s*=\s*"([^"]*)"\s*\}/g,
-        (_match, imgAttrs, width) => {
-          return `<img${imgAttrs} style="width: ${width};">`
+      // 处理未被 <p> 包裹的情况
+      html = html.replace(/<img([^>]*)>\s*\{([^}]*)\}/g,
+        (_match, imgAttrs, attrStr: string) => {
+          const attrs = parseImageAttributes(attrStr)
+          const style = buildImageStyle(attrs)
+          const imgTag = `<img${imgAttrs}${style ? ` style="${style}"` : ''}>`
+          return wrapImageByAlign(imgTag, attrs.align)
         }
       )
 

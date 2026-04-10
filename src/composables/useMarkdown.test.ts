@@ -108,6 +108,60 @@ security level: 内部
     })
   })
 
+  describe('图片属性标注', () => {
+    it('应正确处理 width 属性（带引号）', () => {
+      const html = renderBody('![图片](test.png){width="300"}')
+      expect(html).toContain('width: 300px')
+    })
+
+    it('应正确处理 width 属性（不带引号）', () => {
+      const html = renderBody('![图片](test.png){width=300}')
+      expect(html).toContain('width: 300px')
+    })
+
+    it('应正确处理 width 属性带单位', () => {
+      const html = renderBody('![图片](test.png){width=50%}')
+      expect(html).toContain('width: 50%')
+    })
+
+    it('应正确处理图片后有空格的属性标注', () => {
+      const html = renderBody('![Vite Logo](https://vitejs.dev/logo.svg) {width=300}')
+      expect(html).toContain('width: 300px')
+    })
+
+    it('应正确处理图片后有空格且带引号的属性标注', () => {
+      const html = renderBody('![Vite Logo](https://vitejs.dev/logo.svg) {width="300"}')
+      expect(html).toContain('width: 300px')
+    })
+
+    it('应正确处理 align=center', () => {
+      const html = renderBody('![图片](test.png){align=center}')
+      expect(html).toContain('justify-content: center')
+    })
+
+    it('应正确处理 align=left', () => {
+      const html = renderBody('![图片](test.png){align=left}')
+      expect(html).toContain('justify-content: flex-start')
+    })
+
+    it('应正确处理 align=right', () => {
+      const html = renderBody('![图片](test.png){align=right}')
+      expect(html).toContain('justify-content: flex-end')
+    })
+
+    it('应正确处理 width 和 align 组合', () => {
+      const html = renderBody('![图片](test.png){width=300 align=center}')
+      expect(html).toContain('width: 300px')
+      expect(html).toContain('justify-content: center')
+    })
+
+    it('应正确处理 align 和 width 组合（顺序交换）', () => {
+      const html = renderBody('![图片](test.png){align=center width=300}')
+      expect(html).toContain('width: 300px')
+      expect(html).toContain('justify-content: center')
+    })
+  })
+
   describe('数学公式渲染', () => {
     it('应正确渲染行内公式 ($...$)', () => {
       const html = renderBody('公式 $E = mc^2$ 测试')
