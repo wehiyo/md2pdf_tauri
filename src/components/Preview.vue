@@ -219,46 +219,56 @@ function renderWavedrom() {
 
 // 规范化路径，解析 . 和 ..
 function normalizePath(path: string): string {
-  const parts = path.split('/')
+  // 先统一使用正斜杠
+  const normalized = path.replace(/\\/g, '/')
+  const parts = normalized.split('/')
   const result: string[] = []
 
-  for (const part of parts) {
+  // 检测是否为 Windows 路径（以盘符开头）
+  const isWindowsPath = normalized.match(/^[A-Za-z]:/)
+  // 检测是否为 Unix 绝对路径（以 / 开头）
+  const isUnixAbsolutePath = normalized.startsWith('/')
+
+  for (let i = 0; i < parts.length; i++) {
+    const part = parts[i]
+
     if (part === '..') {
-      result.pop()
+      // Windows 路径中，保留盘符部分不被移除
+      if (result.length > 1 || (result.length === 1 && !isWindowsPath)) {
+        result.pop()
+      }
     } else if (part !== '.' && part !== '') {
       result.push(part)
     }
   }
 
-  return result.join('/')
+  const joinedPath = result.join('/')
+
+  // Unix 绝对路径需要添加前导 /
+  if (isUnixAbsolutePath && !isWindowsPath) {
+    return '/' + joinedPath
+  }
+
+  return joinedPath
 }
 
 // 修复本地图片路径
 function fixImagePaths() {
-  console.log('fixImagePaths called, fileDir:', props.fileDir)
-  if (!previewRef.value) {
-    console.log('previewRef is null')
-    return
-  }
-  if (!props.fileDir) {
-    console.log('fileDir is null, skipping image fix')
-    return
-  }
+  if (!previewRef.value) return
+  if (!props.fileDir) return
 
   const images = previewRef.value.querySelectorAll('img')
-  console.log('Found images:', images.length)
 
   for (const img of images) {
     const src = img.getAttribute('src')
-    console.log('Image src:', src)
     if (src && !src.match(/^https?:\/\//) && !src.startsWith('data:') && !src.startsWith('asset:') && !src.includes('asset.localhost')) {
-      // 相对路径，转换为绝对路径并规范化
-      const absolutePath = props.fileDir + '/' + src
-      const normalizedPath = normalizePath(absolutePath).replace(/\\/g, '/')
+      // 相对路径，统一使用正斜杠后拼接
+      const fileDirNormalized = props.fileDir.replace(/\\/g, '/')
+      const absolutePath = fileDirNormalized + '/' + src
+      const normalizedPath = normalizePath(absolutePath)
 
       // 使用 convertFileSrc 转换为 asset 协议 URL
       const assetUrl = convertFileSrc(normalizedPath)
-      console.log('Converting image path (preview):', src, '->', assetUrl)
       // 保存原始路径用于导出
       img.setAttribute('data-original-src', normalizedPath)
       img.setAttribute('src', assetUrl)
