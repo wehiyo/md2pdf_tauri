@@ -47,6 +47,7 @@
 import { ref, onMounted, onUpdated, watch, nextTick } from 'vue'
 import mermaid from 'mermaid'
 import wavedrom from 'wavedrom'
+import JSON5 from 'json5'
 import { convertFileSrc, invoke } from '@tauri-apps/api/core'
 import PreviewToolbar from './PreviewToolbar.vue'
 
@@ -203,9 +204,8 @@ function renderWavedrom() {
 
     try {
       const jsonText = element.textContent || ''
-      // WaveDrom 使用 JavaScript 对象字面量语法，不是标准 JSON
-      // 使用 Function 构造函数安全地解析
-      const data = new Function('return ' + jsonText)()
+      // WaveDrom 使用 JavaScript 对象字面量语法，使用 JSON5 安全解析
+      const data = JSON5.parse(jsonText)
       // wavedrom.renderWaveElement 直接渲染 SVG 到 DOM 元素
       wavedrom.renderWaveElement(0, data, element as HTMLElement, wavedrom.waveSkin)
       element.setAttribute('data-processed', 'true')

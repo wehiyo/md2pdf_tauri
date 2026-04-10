@@ -5,6 +5,7 @@ import { invoke } from '@tauri-apps/api/core'
 import fontkit from '@pdf-lib/fontkit'
 import mermaid from 'mermaid'
 import wavedrom from 'wavedrom'
+import JSON5 from 'json5'
 import type { Metadata } from './useMarkdown'
 import { useExportProgress } from './useExportProgress'
 
@@ -15,9 +16,7 @@ let cachedChineseFont: Uint8Array | null = null
 let mermaidInitialized = false
 
 // 导入本地样式文件（Vite ?raw 导入）
-// @ts-ignore
 import katexStyles from '../assets/katex/katex-inline.css?raw'
-// @ts-ignore
 import highlightStyles from '../assets/github.min.css?raw'
 
 // 防止重复调用（模块级别）
@@ -131,8 +130,8 @@ export function usePDF() {
     for (let i = 0; i < wavedromMatches.length; i++) {
       const { full, code } = wavedromMatches[i]
       try {
-        // WaveDrom 使用 JavaScript 对象字面量语法，不是标准 JSON
-        const data = new Function('return ' + code)()
+        // WaveDrom 使用 JavaScript 对象字面量语法，使用 JSON5 安全解析
+        const data = JSON5.parse(code)
         // 使用 wavedrom 的内部渲染函数生成 SVG
         const svgContent = wavedrom.renderAny(0, data, wavedrom.waveSkin)
         result = result.replace(full, `<div class="wavedrom" data-processed="true">${svgContent}</div>`)

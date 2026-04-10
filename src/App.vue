@@ -66,9 +66,7 @@ import { save, open, message, ask } from '@tauri-apps/plugin-dialog'
 import { writeTextFile, readDir, readTextFile } from '@tauri-apps/plugin-fs'
 import { invoke } from '@tauri-apps/api/core'
 import { parse as parseYaml } from 'yaml'
-// @ts-ignore
 import katexStyles from './assets/katex/katex-inline.css?raw'
-// @ts-ignore
 import highlightStyles from './assets/github.min.css?raw'
 
 // 默认提示内容

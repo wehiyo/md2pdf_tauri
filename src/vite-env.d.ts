@@ -4,6 +4,12 @@ declare module '*?raw' {
   export default content
 }
 
+// CSS raw imports
+declare module '*.css?raw' {
+  const content: string
+  export default content
+}
+
 // Markdown-it plugins
 declare module 'markdown-it-footnote' {
   import MarkdownIt from 'markdown-it'
