@@ -217,6 +217,9 @@ export function renumberHeadings(chapters: NavChapter[]): BookmarkTreeNode[] {
   // 重置全局标题索引计数器
   resetGlobalHeadingIndex()
 
+  // 章节索引计数器（用于无编号章节的ID）
+  let chapterIndex = 0
+
   // 当前章节计数器（用于跨章节编号）
   const counters = { h2: 0, h3: 0, h4: 0, h5: 0, h6: 0 }
 
@@ -352,8 +355,9 @@ export function renumberHeadings(chapters: NavChapter[]): BookmarkTreeNode[] {
     // level 0 不显示编号
     const displayTitle = chapter.chapterNumber ? `${chapter.chapterNumber}. ${chapter.title}` : chapter.title
     // 章节ID使用与combineChaptersToHtml相同的逻辑
-    const chapterId = chapter.chapterNumber ? `chapter-${chapter.chapterNumber}` : `chapter-${getGlobalHeadingIndex()}`
+    const chapterId = chapter.chapterNumber ? `chapter-${chapter.chapterNumber}` : `chapter-${chapterIndex}`
     chapter.htmlId = chapterId  // 预先设置，供后续使用
+    chapterIndex++  // 使用局部计数器，不影响 globalHeadingIndex
     const bookmarkNode: BookmarkTreeNode = {
       id: chapterId,
       title: displayTitle,
@@ -362,7 +366,7 @@ export function renumberHeadings(chapters: NavChapter[]): BookmarkTreeNode[] {
       filePath: chapter.filePath,
       children: chapterBookmarkChildren
     }
-    incrementGlobalHeadingIndex()
+    // 注意：章节本身不增加 globalHeadingIndex，因为 combineChaptersToHtml 中章节标题不经过 md.render
 
     // 根据 navLevel 确定添加到哪个层级
     // 找到合适的父节点栈层级
