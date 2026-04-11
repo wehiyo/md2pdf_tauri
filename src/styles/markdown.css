@@ -342,8 +342,9 @@
   text-align: center;
 }
 
-/* 标题编号 */
+/* 标题编号（预览区隐藏，PDF 导出时显示） */
 .markdown-body .heading-number {
+  display: none;
   font-weight: 600;
   color: #3b82f6;
   margin-right: 0.25em;

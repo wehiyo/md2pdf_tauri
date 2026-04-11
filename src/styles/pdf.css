@@ -71,6 +71,12 @@
     display: none !important;
   }
 
+  /* 标题编号在 PDF 中显示 */
+  .heading-number {
+    display: inline !important;
+    font-weight: 600;
+  }
+
   /* 数学公式打印优化 */
   .katex {
     font-size: 1em;
