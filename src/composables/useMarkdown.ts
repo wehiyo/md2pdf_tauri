@@ -399,8 +399,24 @@ md.block.ruler.before('fence', 'tabbed_block', function tabbed_block(state, star
 
     // 检查缩进
     if (lineIndent >= minIndent) {
-      // 提取缩进后的内容
-      const lineContent = state.src.substring(linePos, lineMax)
+      // 从原始行开始位置提取内容，保留相对缩进
+      // 找到实际内容开始位置（跳过 minIndent 个空格）
+      const rawLineStart = state.bMarks[nextLine]
+      let contentStart = rawLineStart
+      let spacesToSkip = minIndent
+      while (spacesToSkip > 0 && contentStart < lineMax) {
+        if (state.src[contentStart] === ' ') {
+          contentStart++
+          spacesToSkip--
+        } else if (state.src[contentStart] === '\t') {
+          contentStart++
+          spacesToSkip -= 4  // 制表符算作4个空格
+        } else {
+          break
+        }
+      }
+      // 提取内容，保留代码块等的内部缩进
+      const lineContent = state.src.substring(contentStart, lineMax)
       currentTab.content.push(lineContent)
       nextLine++
     } else {
