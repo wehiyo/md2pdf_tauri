@@ -9,6 +9,7 @@ export interface NavChapter {
   content?: string       // 读取后的内容
   headings?: Heading[]   // 提取的标题列表
   numberPrefix: string   // 编号前缀（如 "1.2."）
+  chapterNumber: string  // 章节编号（如 "1"、"1.1"、"1.1.1"）
 }
 
 export interface Heading {
@@ -42,6 +43,7 @@ interface MdFile {
 let chapterCounter = 0
 let subChapterCounter = 0
 let subSubChapterCounter = 0
+let subSubSubCounter = 0
 
 /**
  * 重置编号计数器
@@ -50,6 +52,7 @@ export function resetChapterCounters() {
   chapterCounter = 0
   subChapterCounter = 0
   subSubChapterCounter = 0
+  subSubSubCounter = 0
 }
 
 /**
@@ -72,32 +75,33 @@ export function collectNavChapters(
       // 嵌套导航：递归处理子节点
       const chapterTitle = item.name
 
-      // 计算编号前缀
+      // 计算章节编号和编号前缀
+      let chapterNumber = ''
       let currentPrefix = ''
-      let currentNumber = ''
 
       if (level === 0) {
         // nav 第 1 层
         chapterCounter++
-        currentNumber = `${chapterCounter}.`
-        currentPrefix = currentNumber
+        chapterNumber = `${chapterCounter}`
+        currentPrefix = `${chapterCounter}.`
         subChapterCounter = 0
         subSubChapterCounter = 0
       } else if (level === 1) {
         // nav 第 2 层
         subChapterCounter++
-        currentNumber = `${parentPrefix}${subChapterCounter}.`
-        currentPrefix = currentNumber
+        chapterNumber = `${parentPrefix}${subChapterCounter}`
+        currentPrefix = `${chapterNumber}.`
         subSubChapterCounter = 0
       } else if (level === 2) {
         // nav 第 3 层
         subSubChapterCounter++
-        currentNumber = `${parentPrefix}${subSubChapterCounter}.`
-        currentPrefix = currentNumber
+        chapterNumber = `${parentPrefix}.${subSubChapterCounter}`
+        currentPrefix = `${chapterNumber}.`
       } else {
-        // nav 第 4 层及以上：不增加编号，使用父前缀
-        currentPrefix = parentPrefix
-        currentNumber = ''
+        // nav 第 4 层及以上
+        subSubSubCounter++
+        chapterNumber = `${parentPrefix}.${subSubSubCounter}`
+        currentPrefix = `${chapterNumber}.`
       }
 
       chapters.push({
@@ -105,39 +109,41 @@ export function collectNavChapters(
         navLevel: level,
         filePath: '', // 嵌套导航本身不是文件
         numberPrefix: currentPrefix,
+        chapterNumber,
         headings: []
       })
 
       // 递归处理子节点
-      const childChapters = collectNavChapters(item.children, basePath, level + 1, currentPrefix)
+      const childChapters = collectNavChapters(item.children, basePath, level + 1, chapterNumber)
       chapters.push(...childChapters)
 
     } else if (item.path) {
       // 文件条目
       const chapterTitle = item.name
 
-      // 计算编号前缀（与文件夹逻辑相同）
+      // 计算章节编号和编号前缀（与文件夹逻辑相同）
+      let chapterNumber = ''
       let currentPrefix = ''
-      let currentNumber = ''
 
       if (level === 0) {
         chapterCounter++
-        currentNumber = `${chapterCounter}.`
-        currentPrefix = currentNumber
+        chapterNumber = `${chapterCounter}`
+        currentPrefix = `${chapterNumber}.`
         subChapterCounter = 0
         subSubChapterCounter = 0
       } else if (level === 1) {
         subChapterCounter++
-        currentNumber = `${parentPrefix}${subChapterCounter}.`
-        currentPrefix = currentNumber
+        chapterNumber = `${parentPrefix}${subChapterCounter}`
+        currentPrefix = `${chapterNumber}.`
         subSubChapterCounter = 0
       } else if (level === 2) {
         subSubChapterCounter++
-        currentNumber = `${parentPrefix}${subSubChapterCounter}.`
-        currentPrefix = currentNumber
+        chapterNumber = `${parentPrefix}.${subSubChapterCounter}`
+        currentPrefix = `${chapterNumber}.`
       } else {
-        currentPrefix = parentPrefix
-        currentNumber = ''
+        subSubSubCounter++
+        chapterNumber = `${parentPrefix}.${subSubSubCounter}`
+        currentPrefix = `${chapterNumber}.`
       }
 
       chapters.push({
@@ -145,6 +151,7 @@ export function collectNavChapters(
         navLevel: level,
         filePath: item.path,
         numberPrefix: currentPrefix,
+        chapterNumber,
         headings: []
       })
     }
@@ -230,10 +237,10 @@ export function renumberHeadings(chapters: NavChapter[]): BookmarkTreeNode[] {
 
   for (const chapter of chapters) {
     if (!chapter.filePath || !chapter.content) {
-      // 嵌套导航本身（无文件）：仅添加书签节点
+      // 嵌套导航本身（无文件）：仅添加书签节点，显示编号
       bookmarkTree.push({
         id: `nav-${chapter.navLevel}-${globalHeadingIndex}`,
-        title: chapter.title,
+        title: `${chapter.chapterNumber}. ${chapter.title}`,
         level: chapter.navLevel,
         navLevel: chapter.navLevel,
         children: []
@@ -352,10 +359,10 @@ export function renumberHeadings(chapters: NavChapter[]): BookmarkTreeNode[] {
 
     chapter.headings = adjustedHeadings
 
-    // 添加章节书签节点
+    // 添加章节书签节点，显示编号
     bookmarkTree.push({
-      id: `chapter-${chapter.navLevel}-${globalHeadingIndex}`,
-      title: chapter.title,
+      id: `chapter-${chapter.chapterNumber}`,
+      title: `${chapter.chapterNumber}. ${chapter.title}`,
       level: chapter.navLevel,
       navLevel: chapter.navLevel,
       filePath: chapter.filePath,
@@ -379,7 +386,7 @@ export function renderChapterContent(
 }
 
 /**
- * 合并所有章节为单一 HTML，添加分页标记
+ * 合并所有章节为单一 HTML，添加分页标记和章节标题
  */
 export function combineChaptersToHtml(chapters: NavChapter[]): string {
   console.log('[combineChaptersToHtml] 开始合并，章节数:', chapters.length)
@@ -389,12 +396,23 @@ export function combineChaptersToHtml(chapters: NavChapter[]): string {
 
   for (let i = 0; i < chapters.length; i++) {
     const chapter = chapters[i]
-    console.log(`[combineChaptersToHtml] 处理章节 ${i}:`, chapter.title, 'filePath:', chapter.filePath, 'content存在:', !!chapter.content)
+    console.log(`[combineChaptersToHtml] 处理章节 ${i}:`, chapter.title, 'filePath:', chapter.filePath, 'chapterNumber:', chapter.chapterNumber)
 
     if (!chapter.filePath || !chapter.content) {
       console.log(`[combineChaptersToHtml] 跳过章节 ${i}: 无文件路径或内容`)
       continue
     }
+
+    // nav 第 1 层章节（从第二个开始）添加分页
+    if (chapter.navLevel === 0 && i > 0) {
+      htmlParts.push('<div style="page-break-before: always;"></div>')
+    }
+
+    // 添加章节标题（带编号）
+    // nav level 决定标题层级：level 0 → h1, level 1 → h2, level 2 → h3, level 3+ → h4
+    const headingLevel = Math.min(chapter.navLevel + 1, 4)
+    const chapterTitleHtml = `<h${headingLevel} id="chapter-${chapter.chapterNumber}"><span class="heading-number">${chapter.chapterNumber}. </span>${chapter.title}</h${headingLevel}>`
+    htmlParts.push(chapterTitleHtml)
 
     // 解析 frontmatter 提取 body
     const { body } = parse(chapter.content)
@@ -403,11 +421,6 @@ export function combineChaptersToHtml(chapters: NavChapter[]): string {
     // 渲染内容（使用调整后的编号）
     const renderedHtml = renderWithNumberPrefix(body, chapter.numberPrefix, chapter.navLevel)
     console.log(`[combineChaptersToHtml] 章节 ${i} renderedHtml 长度:`, renderedHtml.length)
-
-    // nav 第 1 层章节（从第二个开始）添加分页
-    if (chapter.navLevel === 0 && i > 0) {
-      htmlParts.push('<div style="page-break-before: always;"></div>')
-    }
 
     htmlParts.push(renderedHtml)
   }
