@@ -595,6 +595,14 @@ function getMarkdownStyles(): string {
 .markdown-body figure.figure-span { display: flex; flex-direction: column; align-items: center; margin: 1.5em 0; text-align: center; page-break-inside: avoid; }
 .markdown-body figure.figure-span img { max-width: 100%; height: auto; }
 .markdown-body figure.figure-span figcaption { margin-top: 0.5em; font-size: 0.9em; color: #6b7280; text-align: center; }
+
+/* Tabbed 标签页 */
+.markdown-body .tabbed-set { margin: 1em 0; page-break-inside: avoid; }
+.markdown-body .tabbed-labels { display: none; }
+.markdown-body .tabbed-content { background-color: transparent; }
+.markdown-body .tabbed-block { display: block; margin-bottom: 1em; padding: 0.5em 0; border-bottom: 1px solid #ccc; page-break-inside: avoid; }
+.markdown-body .tabbed-block:last-child { border-bottom: none; margin-bottom: 0; }
+.markdown-body .tabbed-block-title { display: block; font-weight: bold; font-size: 0.95em; color: #333; margin-bottom: 0.5em; padding-bottom: 0.3em; border-bottom: 1px dashed #999; }
 `
 }
 
