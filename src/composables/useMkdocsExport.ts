@@ -200,7 +200,7 @@ function slugify(text: string): string {
 
 /**
  * 根据章节层级重新计算标题编号和层级
- * 同时生成书签树节点
+ * 同时生成书签树节点（按 nav 层级嵌套）
  */
 export function renumberHeadings(chapters: NavChapter[]): BookmarkTreeNode[] {
   const bookmarkTree: BookmarkTreeNode[] = []
@@ -216,32 +216,20 @@ export function renumberHeadings(chapters: NavChapter[]): BookmarkTreeNode[] {
   let currentH2Index = 0
   let currentH3Index = 0
 
+  // 层级栈：用于构建嵌套的书签树
+  // 栈顶是当前层级的父节点数组（用于添加子节点）
+  const levelStack: { level: number; children: BookmarkTreeNode[] }[] = [
+    { level: -1, children: bookmarkTree }  // 根节点，level -1 表示最顶层
+  ]
+
   for (const chapter of chapters) {
-    if (!chapter.filePath || !chapter.content) {
-      // 嵌套导航本身（无文件）：仅添加书签节点
-      // level 0 不显示编号
-      const displayTitle = chapter.chapterNumber ? `${chapter.chapterNumber}. ${chapter.title}` : chapter.title
-      bookmarkTree.push({
-        id: chapter.htmlId || `nav-${chapter.navLevel}-${globalHeadingIndex}`,  // 使用 htmlId 确保与 HTML 标题 id 一致
-        title: displayTitle,
-        level: chapter.navLevel,
-        navLevel: chapter.navLevel,
-        children: []
-      })
-      globalHeadingIndex++
-      continue
+    // 解析 frontmatter 提取 body（如果有文件）
+    let rawHeadings: { text: string; level: number }[] = []
+    if (chapter.filePath && chapter.content) {
+      const { parse } = useMarkdown()
+      const { body } = parse(chapter.content)
+      rawHeadings = extractHeadingsFromMd(body)
     }
-
-    // 解析 frontmatter 提取 body
-    const { parse } = useMarkdown()
-    const { body } = parse(chapter.content)
-
-    // 提取 md 内标题
-    const rawHeadings = extractHeadingsFromMd(body)
-
-    // 根据章节层级调整标题
-    const adjustedHeadings: Heading[] = []
-    const chapterBookmarkChildren: BookmarkTreeNode[] = []
 
     // 更新 nav 层级计数器
     if (chapter.navLevel === 0) {
@@ -269,6 +257,10 @@ export function renumberHeadings(chapters: NavChapter[]): BookmarkTreeNode[] {
 
     // 重置章节内计数器（h2-h6）
     const chapterCounters = { h2: 0, h3: 0, h4: 0, h5: 0, h6: 0 }
+
+    // 处理 md 内标题，生成子书签节点
+    const chapterBookmarkChildren: BookmarkTreeNode[] = []
+    const adjustedHeadings: Heading[] = []
 
     for (const rawHeading of rawHeadings) {
       // 跳过 h1 标题（章节标题已由 nav 条目提供）
@@ -347,16 +339,33 @@ export function renumberHeadings(chapters: NavChapter[]): BookmarkTreeNode[] {
 
     chapter.headings = adjustedHeadings
 
-    // 添加章节书签节点
+    // 创建章节书签节点
     // level 0 不显示编号
     const displayTitle = chapter.chapterNumber ? `${chapter.chapterNumber}. ${chapter.title}` : chapter.title
-    bookmarkTree.push({
-      id: chapter.htmlId || `chapter-${globalHeadingIndex}`,  // 使用 htmlId 确保与 HTML 标题 id 一致
+    const bookmarkNode: BookmarkTreeNode = {
+      id: chapter.htmlId || `chapter-${globalHeadingIndex}`,
       title: displayTitle,
       level: chapter.navLevel,
       navLevel: chapter.navLevel,
       filePath: chapter.filePath,
       children: chapterBookmarkChildren
+    }
+    globalHeadingIndex++
+
+    // 根据 navLevel 确定添加到哪个层级
+    // 找到合适的父节点栈层级
+    while (levelStack.length > 1 && levelStack[levelStack.length - 1].level >= chapter.navLevel) {
+      levelStack.pop()  // 回溯到正确的层级
+    }
+
+    // 将当前节点添加到当前层级的父节点
+    levelStack[levelStack.length - 1].children.push(bookmarkNode)
+
+    // 如果当前节点可能成为后续子节点的父节点，入栈
+    // 后续章节 navLevel 更大时，会添加到此节点的 children
+    levelStack.push({
+      level: chapter.navLevel,
+      children: bookmarkNode.children || []
     })
   }
 
