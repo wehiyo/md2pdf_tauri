@@ -9,7 +9,7 @@ security level: 外部公开
 
 本文档展示 MarkRefine 支持的所有 Markdown 特性和扩展功能。
 
-**快速导航：** [基础语法](#基础语法) | [扩展功能](#扩展功能) | [文档元素](#文档元素) | [高级功能](#高级功能)
+**快速导航：** [基础语法](#基础语法) | [扩展功能](#扩展功能) | [文档元素](#文档元素) | [高级功能](#高级功能) | [跨文件](./test-wavedrom.md#wavedrom-时序图测试)
 
 ---
 
@@ -248,6 +248,8 @@ class Cat extends Animal {
 
 ![MarkRefine Logo](example.png)
 
+![MarkRefine Logo](../example.png)
+
 这是一张本地图片，使用相对路径引用。
 
 #### 网络图片
@@ -411,6 +413,47 @@ CSS
 #### 其他常用
 
 :rocket: :fire: :star: :sparkles: :bug: :memo: :warning: :heavy_check_mark:
+
+### Tabbed 标签页
+
+Material for MkDocs 风格的标签页语法，支持多个内容块切换显示：
+
+=== "Python"
+
+    ``` python
+    def hello():
+        print("Hello, World!")
+    
+    if __name__ == "__main__":
+        hello()
+    ```
+
+=== "JavaScript"
+
+    ``` javascript
+    function hello() {
+        console.log("Hello, World!");
+    }
+    
+    hello();
+    ```
+
+=== "Go"
+
+    ``` go
+    package main
+    
+    import "fmt"
+    
+    func main() {
+        fmt.Println("Hello, World!")
+    }
+    ```
+
+**说明：**
+- 使用 `=== "标签名"` 开头，内容需缩进 4 个空格
+- 至少需要两个标签才能生效
+- PDF 导出时所有标签内容按顺序显示
 
 ### 链接
 
