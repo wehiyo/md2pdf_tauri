@@ -59,8 +59,8 @@ function handleClick() {
   if (hasChildren.value) {
     isExpanded.value = !isExpanded.value
   }
-  // 触发跳转（如果有 ID 且有 filePath 表示是可跳转的章节）
-  if (props.chapter.id && props.chapter.filePath) {
+  // 触发跳转（如果有 ID）
+  if (props.chapter.id) {
     emit('click', props.chapter.id)
   }
 }

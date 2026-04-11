@@ -222,7 +222,7 @@ export function renumberHeadings(chapters: NavChapter[]): BookmarkTreeNode[] {
       // level 0 不显示编号
       const displayTitle = chapter.chapterNumber ? `${chapter.chapterNumber}. ${chapter.title}` : chapter.title
       bookmarkTree.push({
-        id: `nav-${chapter.navLevel}-${globalHeadingIndex}`,
+        id: chapter.htmlId || `nav-${chapter.navLevel}-${globalHeadingIndex}`,  // 使用 htmlId 确保与 HTML 标题 id 一致
         title: displayTitle,
         level: chapter.navLevel,
         navLevel: chapter.navLevel,
@@ -462,11 +462,6 @@ export function combineChaptersToHtml(chapters: NavChapter[]): string {
     const chapter = chapters[i]
     console.log(`[combineChaptersToHtml] 处理章节 ${i}:`, chapter.title, 'filePath:', chapter.filePath, 'chapterNumber:', chapter.chapterNumber)
 
-    if (!chapter.filePath || !chapter.content) {
-      console.log(`[combineChaptersToHtml] 跳过章节 ${i}: 无文件路径或内容`)
-      continue
-    }
-
     // nav 第 1 层章节（从第二个开始）添加分页
     if (chapter.navLevel === 0 && i > 0) {
       htmlParts.push('<div style="page-break-before: always;"></div>')
@@ -484,6 +479,12 @@ export function combineChaptersToHtml(chapters: NavChapter[]): string {
     const numberSpan = chapter.chapterNumber ? `<span class="heading-number">${chapter.chapterNumber}. </span>` : ''
     const chapterTitleHtml = `<h${headingLevel} id="${chapterId}">${numberSpan}${chapter.title}</h${headingLevel}>`
     htmlParts.push(chapterTitleHtml)
+
+    // 如果有文件路径和内容，渲染内容
+    if (!chapter.filePath || !chapter.content) {
+      console.log(`[combineChaptersToHtml] 章节 ${i}: 无文件路径或内容，仅显示标题`)
+      continue
+    }
 
     // 解析 frontmatter 提取 body
     const { body } = parse(chapter.content)
