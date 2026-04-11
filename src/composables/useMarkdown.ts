@@ -449,14 +449,15 @@ md.block.ruler.before('fence', 'tabbed_block', function tabbed_block(state, star
 md.renderer.rules.tabbed_content = (tokens, idx) => {
   const token = tokens[idx] as any
   const content = token.content
+  const tabTitle = token.tabTitle || ''
   const tabIndex = token.tabIndex
 
   // 递归渲染内容为 Markdown
   const renderedContent = md.render(content)
 
-  // 包装为 tabbed-block
+  // 包装为 tabbed-block，添加 data-tab-title 用于 PDF 导出
   const isActive = tabIndex === 0 ? ' active' : ''
-  return `<div class="tabbed-block${isActive}" data-tab-index="${tabIndex}">${renderedContent}</div>`
+  return `<div class="tabbed-block${isActive}" data-tab-index="${tabIndex}" data-tab-title="${tabTitle}">${renderedContent}</div>`
 }
 
 // 自定义 tabbed_set_open 渲染（生成标签头部）

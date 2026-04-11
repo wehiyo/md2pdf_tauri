@@ -93,4 +93,41 @@
     max-width: 100%;
     height: auto;
   }
+
+  /* Tabbed 标签页打印：显示所有内容 */
+  .tabbed-set {
+    margin: 1em 0;
+    border: 1px solid #ccc;
+    page-break-inside: avoid;
+  }
+
+  .tabbed-labels {
+    display: none !important;
+  }
+
+  .tabbed-content {
+    background-color: transparent;
+  }
+
+  .tabbed-block {
+    display: block !important;
+    padding: 0.5em 1em;
+    border-bottom: 1px solid #ccc;
+  }
+
+  .tabbed-block:last-child {
+    border-bottom: none;
+  }
+
+  /* 在标签内容前显示标题 */
+  .tabbed-block::before {
+    content: attr(data-tab-title);
+    display: block;
+    font-weight: bold;
+    font-size: 0.9em;
+    color: #666;
+    margin-bottom: 0.5em;
+    padding-bottom: 0.3em;
+    border-bottom: 1px dashed #ccc;
+  }
 }
