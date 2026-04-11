@@ -1,11 +1,14 @@
 <template>
   <Teleport to="body">
     <div v-if="visible" class="preview-dialog-overlay">
-      <div class="preview-dialog">
+      <div
+        class="preview-dialog"
+        :style="{ width: dialogWidth, height: dialogHeight }"
+      >
         <!-- 主内容区域（水平布局） -->
         <div class="dialog-main">
           <!-- 左侧书签树 -->
-          <div class="bookmark-tree">
+          <div class="bookmark-tree" :style="{ width: treeWidth + 'px' }">
             <div class="bookmark-tree-header">
               <span class="header-title">文档结构</span>
             </div>
@@ -20,8 +23,11 @@
             </div>
           </div>
 
-          <!-- 分割线 -->
-          <div class="dialog-divider"></div>
+          <!-- 分割线（可拖动调整书签树宽度） -->
+          <div
+            class="dialog-divider"
+            @mousedown="startTreeResize"
+          ></div>
 
           <!-- 右侧预览区 -->
           <div class="preview-container">
@@ -43,13 +49,19 @@
             取消
           </button>
         </div>
+
+        <!-- 对话框大小调整手柄 -->
+        <div
+          class="resize-handle-corner"
+          @mousedown="startDialogResize"
+        ></div>
       </div>
     </div>
   </Teleport>
 </template>
 
 <script setup lang="ts">
-import { ref, watch, nextTick } from 'vue'
+import { ref, watch, nextTick, onUnmounted } from 'vue'
 import BookmarkTreeItem from './BookmarkTreeItem.vue'
 import type { BookmarkTreeNode } from '../composables/useMkdocsExport'
 
@@ -65,6 +77,92 @@ const emit = defineEmits<{
 }>()
 
 const previewRef = ref<HTMLElement | null>(null)
+
+// 对话框尺寸（响应式）
+const dialogWidth = ref('90vw')
+const dialogHeight = ref('85vh')
+
+// 书签树宽度
+const treeWidth = ref(250)
+
+// 拖动状态
+let isResizingDialog = false
+let isResizingTree = false
+let startX = 0
+let startY = 0
+let startWidth = 0
+let startHeight = 0
+let startTreeWidth = 0
+
+// 开始拖动调整对话框大小
+function startDialogResize(e: MouseEvent) {
+  isResizingDialog = true
+  startX = e.clientX
+  startY = e.clientY
+
+  // 获取当前尺寸（像素值）
+  const target = e.target as HTMLElement
+  const dialog = target.closest('.preview-dialog') as HTMLElement
+  const rect = dialog.getBoundingClientRect()
+  startWidth = rect.width
+  startHeight = rect.height
+
+  // 阻止文本选择
+  e.preventDefault()
+  document.addEventListener('mousemove', onDialogResize)
+  document.addEventListener('mouseup', stopDialogResize)
+}
+
+function onDialogResize(e: MouseEvent) {
+  if (!isResizingDialog) return
+
+  const deltaX = startX - e.clientX  // 向左拖动增大
+  const deltaY = startY - e.clientY  // 向上拖动增大
+
+  const newWidth = Math.max(600, Math.min(window.innerWidth * 0.95, startWidth + deltaX))
+  const newHeight = Math.max(400, Math.min(window.innerHeight * 0.9, startHeight + deltaY))
+
+  dialogWidth.value = newWidth + 'px'
+  dialogHeight.value = newHeight + 'px'
+}
+
+function stopDialogResize() {
+  isResizingDialog = false
+  document.removeEventListener('mousemove', onDialogResize)
+  document.removeEventListener('mouseup', stopDialogResize)
+}
+
+// 开始拖动调整书签树宽度
+function startTreeResize(e: MouseEvent) {
+  isResizingTree = true
+  startX = e.clientX
+  startTreeWidth = treeWidth.value
+
+  e.preventDefault()
+  document.addEventListener('mousemove', onTreeResize)
+  document.addEventListener('mouseup', stopTreeResize)
+}
+
+function onTreeResize(e: MouseEvent) {
+  if (!isResizingTree) return
+
+  const deltaX = e.clientX - startX  // 向右拖动增大
+  const newWidth = Math.max(150, Math.min(400, startTreeWidth + deltaX))
+
+  treeWidth.value = newWidth
+}
+
+function stopTreeResize() {
+  isResizingTree = false
+  document.removeEventListener('mousemove', onTreeResize)
+  document.removeEventListener('mouseup', stopTreeResize)
+}
+
+// 组件卸载时清理事件监听
+onUnmounted(() => {
+  stopDialogResize()
+  stopTreeResize()
+})
 
 // 滚动到指定标题
 function scrollToHeading(id: string) {
@@ -120,13 +218,13 @@ watch(() => props.visible, async (newVal) => {
 .preview-dialog {
   display: flex;
   flex-direction: column;
-  width: 90vw;
-  max-width: 1200px;
-  height: 85vh;
   background-color: #ffffff;
   border-radius: 8px;
   box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.25);
   overflow: hidden;
+  position: relative;
+  min-width: 600px;
+  min-height: 400px;
 }
 
 .dark .preview-dialog {
@@ -145,10 +243,10 @@ watch(() => props.visible, async (newVal) => {
 .bookmark-tree {
   display: flex;
   flex-direction: column;
-  width: 250px;
   flex-shrink: 0;
   background-color: #f8fafc;
   border-right: 1px solid #e2e8f0;
+  min-width: 150px;
 }
 
 .dark .bookmark-tree {
@@ -177,13 +275,39 @@ watch(() => props.visible, async (newVal) => {
 
 /* 分割线 */
 .dialog-divider {
-  width: 1px;
+  width: 4px;
   background-color: #e2e8f0;
   flex-shrink: 0;
+  cursor: col-resize;
+  transition: background-color 0.2s;
+}
+
+.dialog-divider:hover {
+  background-color: #3b82f6;
 }
 
 .dark .dialog-divider {
   background-color: #334155;
+}
+
+.dark .dialog-divider:hover {
+  background-color: #3b82f6;
+}
+
+/* 对话框角落拖动手柄 */
+.resize-handle-corner {
+  position: absolute;
+  bottom: 0;
+  right: 0;
+  width: 16px;
+  height: 16px;
+  cursor: nwse-resize;
+  background: linear-gradient(135deg, transparent 50%, #9ca3af 50%);
+  border-radius: 0 0 8px 0;
+}
+
+.resize-handle-corner:hover {
+  background: linear-gradient(135deg, transparent 50%, #3b82f6 50%);
 }
 
 /* 右侧预览区 */
