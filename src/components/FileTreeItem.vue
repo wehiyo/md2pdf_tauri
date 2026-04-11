@@ -10,8 +10,14 @@
       <svg class="folder-arrow" :class="{ expanded: isExpanded }" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
         <polyline points="9 18 15 12 9 6"/>
       </svg>
-      <svg class="folder-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+      <!-- 关闭的文件夹图标 -->
+      <svg v-if="!isExpanded" class="folder-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
         <path d="M22 19a2 2 0 0 0-2 2H4a2 2 0 0 0-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/>
+      </svg>
+      <!-- 打开的文件夹图标 -->
+      <svg v-else class="folder-icon folder-open" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <path d="M5 19a2 2 0 0 1-2-2V7a2 2 0 0 1 2-2h4l2 3h4a2 2 0 0 1 2 2v1"/>
+        <path d="M5 19h14a2 2 0 0 0 2-2v-5a2 2 0 0 0-2-2H9l-2 3H5a2 2 0 0 0-2 2v3a2 2 0 0 0 2 2z"/>
       </svg>
       <span class="item-name">{{ item.name }}</span>
     </div>
@@ -129,8 +135,16 @@ function selectFile() {
   color: #f59e0b;
 }
 
+.folder-icon.folder-open {
+  color: #fbbf24;
+}
+
 .dark .folder-icon {
   color: #fbbf24;
+}
+
+.dark .folder-icon.folder-open {
+  color: #fcd34d;
 }
 
 .file-item {
