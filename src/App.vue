@@ -54,6 +54,13 @@
       />
     </div>
     <ExportProgress />
+    <MkdocsPreviewDialog
+      :visible="showMkdocsPreview"
+      :bookmark-tree="mkdocsBookmarkTree"
+      :combined-html="mkdocsCombinedHtml"
+      @confirm="confirmMkdocsExport"
+      @cancel="cancelMkdocsExport"
+    />
   </div>
 </template>
 
@@ -63,12 +70,17 @@ import Editor from './components/Editor.vue'
 import Preview from './components/Preview.vue'
 import FileTree from './components/FileTree.vue'
 import ExportProgress from './components/ExportProgress.vue'
+import MkdocsPreviewDialog from './components/MkdocsPreviewDialog.vue'
 import { useMarkdown } from './composables/useMarkdown'
 import type { Metadata } from './composables/useMarkdown'
 import { usePDF } from './composables/usePDF'
 import { useTheme } from './composables/useTheme'
 import { useScrollSync } from './composables/useScrollSync'
 import { useErrorHandling } from './composables/useErrorHandling'
+import {
+  prepareMkdocsExport,
+  type BookmarkTreeNode
+} from './composables/useMkdocsExport'
 import { save, open, message, ask } from '@tauri-apps/plugin-dialog'
 import { writeTextFile, readDir, readTextFile } from '@tauri-apps/plugin-fs'
 import { invoke } from '@tauri-apps/api/core'
@@ -132,6 +144,12 @@ const MAX_FILE_TREE_WIDTH = 400
 // 工作状态：'file' = 通过按钮打开文件, 'folder' = 导入文件夹, 'mkdocs' = 导入 Mkdocs
 type WorkState = 'file' | 'folder' | 'mkdocs'
 const workState = ref<WorkState>('file')
+
+// MkDocs 组合导出预览对话框状态
+const showMkdocsPreview = ref(false)
+const mkdocsBookmarkTree = ref<BookmarkTreeNode[]>([])
+const mkdocsCombinedHtml = ref('')
+const mkdocsChapters = ref<any[]>([])
 
 // 检测是否有未保存的改动
 const hasUnsavedChanges = computed(() => content.value !== savedContent.value)
@@ -380,11 +398,50 @@ ${tabbedClickScript}
 
 // 导出 PDF
 async function exportPDF() {
-  // 从预览区域获取已渲染的 HTML（包含 Mermaid SVG）
-  const previewElement = document.querySelector('.preview-content')
-  const previewContent = previewElement?.innerHTML || renderedHtml.value
+  if (workState.value === 'mkdocs') {
+    // MkDocs 模式：组合导出所有 nav 条目
+    try {
+      // 准备组合导出
+      const { chapters, bookmarkTree, combinedHtml } = await prepareMkdocsExport(
+        mdFiles.value,
+        importedFolderPath.value || ''
+      )
 
-  await exportToPDF(previewContent, currentMetadata.value)
+      // 存储结果用于预览对话框
+      mkdocsChapters.value = chapters
+      mkdocsBookmarkTree.value = bookmarkTree
+      mkdocsCombinedHtml.value = combinedHtml
+
+      // 显示预览对话框
+      showMkdocsPreview.value = true
+    } catch (error) {
+      await handleError(error, '准备 MkDocs 导出')
+    }
+  } else {
+    // 单文件模式：导出当前打开的文件
+    // 从预览区域获取已渲染的 HTML（包含 Mermaid SVG）
+    const previewElement = document.querySelector('.preview-content')
+    const previewContent = previewElement?.innerHTML || renderedHtml.value
+
+    await exportToPDF(previewContent, currentMetadata.value)
+  }
+}
+
+// MkDocs 预览对话框确认导出
+async function confirmMkdocsExport() {
+  showMkdocsPreview.value = false
+
+  try {
+    // 使用组合后的 HTML 导出 PDF
+    await exportToPDF(mkdocsCombinedHtml.value, currentMetadata.value)
+  } catch (error) {
+    await handleError(error, 'MkDocs 组合导出')
+  }
+}
+
+// MkDocs 预览对话框取消
+function cancelMkdocsExport() {
+  showMkdocsPreview.value = false
 }
 
 // 从 Markdown 内容提取第一个 h1 标题

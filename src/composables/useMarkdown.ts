@@ -783,6 +783,13 @@ const headingCounters = { h2: 0, h3: 0, h4: 0 }
 // 标题 ID 映射：原始 slug -> 带编号的 ID（用于链接跳转）
 const headingIdMap = new Map<string, string>()
 
+// MkDocs 组合导出时的外部编号上下文（模块级别）
+let externalNumberPrefix = ''
+let externalNavLevel = 0
+let globalHeadingIndex = 0
+const chapterCounters = { h2: 0, h3: 0, h4: 0 }
+let lastAdjustedLevel = 0  // 存储最近的调整后层级（用于 heading_close）
+
 // 将标题文本转为 slug（与 markdown-it-anchor 一致的逻辑）
 function slugify(text: string): string {
   return text
@@ -792,9 +799,10 @@ function slugify(text: string): string {
 }
 
 // 重写 heading_open 渲染规则，为 h2-h4 添加编号，并将编号加入ID
+// 支持外部编号上下文（用于 MkDocs 组合导出）
 md.renderer.rules.heading_open = (tokens, idx) => {
   const token = tokens[idx]
-  const level = token.tag as 'h1' | 'h2' | 'h3' | 'h4'
+  const originalLevel = parseInt(token.tag.substring(1)) // 1-6
 
   // 获取标题文本（下一个 inline token 的内容）
   let titleText = ''
@@ -802,48 +810,105 @@ md.renderer.rules.heading_open = (tokens, idx) => {
     titleText = tokens[idx + 1].content || ''
   }
 
-  // 更新计数器
-  if (level === 'h2') {
-    headingCounters.h2++
-    headingCounters.h3 = 0
-    headingCounters.h4 = 0
-  } else if (level === 'h3') {
-    headingCounters.h3++
-    headingCounters.h4 = 0
-  } else if (level === 'h4') {
-    headingCounters.h4++
+  // 判断是否使用外部编号上下文
+  if (externalNumberPrefix !== '') {
+    // MkDocs 组合导出模式：使用外部编号上下文
+
+    // 调整层级：h1 保持不变，h2+ 下降 navLevel 层
+    let adjustedLevel = originalLevel
+    if (originalLevel >= 2) {
+      adjustedLevel = Math.min(originalLevel + externalNavLevel, 6)
+    }
+
+    // 更新章节内计数器
+    if (adjustedLevel === 2) {
+      chapterCounters.h2++
+      chapterCounters.h3 = 0
+      chapterCounters.h4 = 0
+    } else if (adjustedLevel === 3) {
+      chapterCounters.h3++
+      chapterCounters.h4 = 0
+    } else if (adjustedLevel === 4) {
+      chapterCounters.h4++
+    }
+
+    // 生成编号（仅 h2-h4 显示编号，总深度不超过 4）
+    let number = ''
+    const prefixDepth = externalNumberPrefix.split('.').filter(s => s).length
+
+    if (adjustedLevel >= 2 && adjustedLevel <= 4 && prefixDepth + (adjustedLevel - 1) <= 4) {
+      if (adjustedLevel === 2) {
+        number = `${externalNumberPrefix}${chapterCounters.h2}. `
+      } else if (adjustedLevel === 3) {
+        number = `${externalNumberPrefix}${chapterCounters.h2}.${chapterCounters.h3}. `
+      } else if (adjustedLevel === 4) {
+        number = `${externalNumberPrefix}${chapterCounters.h2}.${chapterCounters.h3}.${chapterCounters.h4}. `
+      }
+    }
+
+    // 生成 ID
+    const baseSlug = slugify(titleText)
+    const adjustedId = `heading-${globalHeadingIndex}-${baseSlug}`
+    globalHeadingIndex++
+
+    // 渲染调整后的层级标签
+    const adjustedTag = `h${adjustedLevel}`
+    lastAdjustedLevel = adjustedLevel  // 存储供 heading_close 使用
+    const numberSpan = number ? `<span class="heading-number">${number}</span>` : ''
+    return `<${adjustedTag} id="${adjustedId}">${numberSpan}`
+
+  } else {
+    // 普通模式：使用标准编号逻辑
+    const level = token.tag as 'h1' | 'h2' | 'h3' | 'h4'
+    lastAdjustedLevel = parseInt(level.substring(1))  // 存储供 heading_close 使用
+
+    // 更新计数器
+    if (level === 'h2') {
+      headingCounters.h2++
+      headingCounters.h3 = 0
+      headingCounters.h4 = 0
+    } else if (level === 'h3') {
+      headingCounters.h3++
+      headingCounters.h4 = 0
+    } else if (level === 'h4') {
+      headingCounters.h4++
+    }
+
+    // 生成编号（仅 h2-h4）
+    let number = ''
+    let numberPrefix = ''
+    if (level === 'h2') {
+      number = `${headingCounters.h2}. `
+      numberPrefix = `${headingCounters.h2}-`
+    } else if (level === 'h3') {
+      number = `${headingCounters.h2}.${headingCounters.h3}. `
+      numberPrefix = `${headingCounters.h2}-${headingCounters.h3}-`
+    } else if (level === 'h4') {
+      number = `${headingCounters.h2}.${headingCounters.h3}.${headingCounters.h4}. `
+      numberPrefix = `${headingCounters.h2}-${headingCounters.h3}-${headingCounters.h4}-`
+    }
+
+    // 生成带编号前缀的 ID
+    const baseSlug = slugify(titleText)
+    const numberedId = numberPrefix ? `${numberPrefix}${baseSlug}` : baseSlug
+
+    // 存储映射：原始 slug -> 带编号的 ID
+    if (baseSlug) {
+      headingIdMap.set(baseSlug, numberedId)
+    }
+
+    // 渲染开标签
+    const numberSpan = number ? `<span class="heading-number">${number}</span>` : ''
+    return `<${level} id="${numberedId}">${numberSpan}`
   }
-
-  // 生成编号（仅 h2-h4）
-  let number = ''
-  let numberPrefix = ''
-  if (level === 'h2') {
-    number = `${headingCounters.h2}. `
-    numberPrefix = `${headingCounters.h2}-`
-  } else if (level === 'h3') {
-    number = `${headingCounters.h2}.${headingCounters.h3}. `
-    numberPrefix = `${headingCounters.h2}-${headingCounters.h3}-`
-  } else if (level === 'h4') {
-    number = `${headingCounters.h2}.${headingCounters.h3}.${headingCounters.h4}. `
-    numberPrefix = `${headingCounters.h2}-${headingCounters.h3}-${headingCounters.h4}-`
-  }
-
-  // 生成带编号前缀的 ID
-  const baseSlug = slugify(titleText)
-  const numberedId = numberPrefix ? `${numberPrefix}${baseSlug}` : baseSlug
-
-  // 存储映射：原始 slug -> 带编号的 ID
-  if (baseSlug) {
-    headingIdMap.set(baseSlug, numberedId)
-  }
-
-  // 渲染开标签
-  const numberSpan = number ? `<span class="heading-number">${number}</span>` : ''
-  return `<${level} id="${numberedId}">${numberSpan}`
 }
 
 // 重写 heading_close 渲染规则
 md.renderer.rules.heading_close = (tokens, idx) => {
+  // 在组合导出模式下，使用调整后的层级
+  if (externalNumberPrefix !== '' && lastAdjustedLevel > 0) {
+    return `</h${lastAdjustedLevel}>`
+  }
   return `</${tokens[idx].tag}>`
 }
 
@@ -958,9 +1023,62 @@ export function useMarkdown() {
     return { html, metadata }
   }
 
+  /**
+   * MkDocs 组合导出专用：使用外部编号前缀渲染 Markdown
+   * @param body Markdown 内容（不含 frontmatter）
+   * @param numberPrefix 编号前缀（如 "1.2."）
+   * @param navLevel nav 层级深度（用于标题层级调整）
+   */
+  function renderWithNumberPrefix(body: string, numberPrefix: string, navLevel: number): string {
+    if (!body.trim()) {
+      return ''
+    }
+
+    // 设置外部编号上下文
+    externalNumberPrefix = numberPrefix
+    externalNavLevel = navLevel
+    chapterCounters.h2 = 0
+    chapterCounters.h3 = 0
+    chapterCounters.h4 = 0
+    lastAdjustedLevel = 0
+
+    try {
+      let html = md.render(body)
+
+      // 后处理：处理图片属性语法（与 renderBody 相同）
+      html = html.replace(/<p><img([^>]*)>\s*\{([^}]*)\}<\/p>/g,
+        (_match, imgAttrs, attrStr: string) => {
+          const attrs = parseImageAttributes(attrStr)
+          const style = buildImageStyle(attrs)
+          const imgTag = `<img${imgAttrs}${style ? ` style="${style}"` : ''}>`
+          return wrapImageByAlign(imgTag, attrs.align)
+        }
+      )
+      html = html.replace(/<img([^>]*)>\s*\{([^}]*)\}/g,
+        (_match, imgAttrs, attrStr: string) => {
+          const attrs = parseImageAttributes(attrStr)
+          const style = buildImageStyle(attrs)
+          const imgTag = `<img${imgAttrs}${style ? ` style="${style}"` : ''}>`
+          return wrapImageByAlign(imgTag, attrs.align)
+        }
+      )
+
+      return html
+    } catch (error) {
+      console.error('Markdown render error:', error)
+      return `<div class="render-error">渲染错误: ${String(error)}</div>`
+    } finally {
+      // 清除外部编号上下文
+      externalNumberPrefix = ''
+      externalNavLevel = 0
+      lastAdjustedLevel = 0
+    }
+  }
+
   return {
     parse,
     renderBody,
-    render
+    render,
+    renderWithNumberPrefix
   }
 }
