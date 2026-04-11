@@ -276,6 +276,32 @@ function togglePreviewOnly() {
   }
 }
 
+// Tabbed 标签页切换脚本（用于 HTML 导出）
+// 注意：使用字符串拼接避免 Vue SFC 解析 <script> 标签
+const tabbedClickScript = '<' + 'script>\n' +
+`  document.querySelectorAll('.tabbed-label').forEach(label => {
+    label.addEventListener('click', function() {
+      const tabSet = this.closest('.tabbed-set');
+      if (!tabSet) return;
+
+      const tabIndex = this.getAttribute('data-tab-index');
+
+      // 更新标签状态
+      tabSet.querySelectorAll('.tabbed-label').forEach(l => l.classList.remove('active'));
+      this.classList.add('active');
+
+      // 更新内容状态
+      tabSet.querySelectorAll('.tabbed-block').forEach(block => {
+        if (block.getAttribute('data-tab-index') === tabIndex) {
+          block.classList.add('active');
+        } else {
+          block.classList.remove('active');
+        }
+      });
+    });
+  });
+` + '<' + '/script>'
+
 // 计算渲染后的 HTML 和 metadata
 const renderedHtml = computed(() => {
   const result = render(content.value)
@@ -341,6 +367,7 @@ async function exportHTML() {
   <div class="markdown-body">
     ${previewContent}
   </div>
+${tabbedClickScript}
 </body>
 </html>`
       await writeTextFile(filePath, fullHtml)
