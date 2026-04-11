@@ -2,32 +2,35 @@
   <Teleport to="body">
     <div v-if="visible" class="preview-dialog-overlay">
       <div class="preview-dialog">
-        <!-- 左侧书签树 -->
-        <div class="bookmark-tree">
-          <div class="bookmark-tree-header">
-            <span class="header-title">文档结构</span>
+        <!-- 主内容区域（水平布局） -->
+        <div class="dialog-main">
+          <!-- 左侧书签树 -->
+          <div class="bookmark-tree">
+            <div class="bookmark-tree-header">
+              <span class="header-title">文档结构</span>
+            </div>
+            <div class="bookmark-tree-content">
+              <BookmarkTreeItem
+                v-for="(chapter, index) in bookmarkTree"
+                :key="index"
+                :chapter="chapter"
+                :level="0"
+                @click="scrollToHeading"
+              />
+            </div>
           </div>
-          <div class="bookmark-tree-content">
-            <BookmarkTreeItem
-              v-for="(chapter, index) in bookmarkTree"
-              :key="index"
-              :chapter="chapter"
-              :level="0"
-              @click="scrollToHeading"
-            />
-          </div>
-        </div>
 
-        <!-- 分割线 -->
-        <div class="dialog-divider"></div>
+          <!-- 分割线 -->
+          <div class="dialog-divider"></div>
 
-        <!-- 右侧预览区 -->
-        <div class="preview-container">
-          <div class="preview-header">
-            <span class="header-title">预览</span>
-          </div>
-          <div class="preview-content" ref="previewRef">
-            <div class="markdown-body" v-html="combinedHtml"></div>
+          <!-- 右侧预览区 -->
+          <div class="preview-container">
+            <div class="preview-header">
+              <span class="header-title">预览</span>
+            </div>
+            <div class="preview-content" ref="previewRef">
+              <div class="markdown-body" v-html="combinedHtml"></div>
+            </div>
           </div>
         </div>
 
@@ -124,6 +127,13 @@ watch(() => props.visible, async (newVal) => {
 .dark .preview-dialog {
   background-color: #1e293b;
   box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5);
+}
+
+/* 主内容区域（水平布局） */
+.dialog-main {
+  display: flex;
+  flex: 1;
+  min-height: 0;
 }
 
 /* 左侧书签树 */
