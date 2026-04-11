@@ -218,18 +218,6 @@ watch(() => props.visible, async (newVal) => {
   background-color: #0f172a;
 }
 
-/* 预览对话框中显示标题编号 */
-.preview-content .heading-number {
-  display: inline !important;
-  font-weight: 600;
-  color: #3b82f6;
-  margin-right: 0.25em;
-}
-
-.dark .preview-content .heading-number {
-  color: #60a5fa;
-}
-
 .header-title {
   font-size: 14px;
   font-weight: 600;
@@ -295,5 +283,19 @@ watch(() => props.visible, async (newVal) => {
 
 .dark .cancel-btn:hover {
   background-color: #475569;
+}
+</style>
+
+<style>
+/* 预览对话框中显示标题编号（非 scoped，因为 Teleport 到 body） */
+.preview-content .markdown-body .heading-number {
+  display: inline !important;
+  font-weight: 600;
+  color: #3b82f6;
+  margin-right: 0.25em;
+}
+
+.dark .preview-content .markdown-body .heading-number {
+  color: #60a5fa;
 }
 </style>
