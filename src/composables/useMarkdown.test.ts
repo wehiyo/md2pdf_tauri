@@ -303,6 +303,58 @@ security level: 内部
     })
   })
 
+  describe('Tabbed 标签页', () => {
+    it('应正确解析两个标签', () => {
+      const html = renderBody(`=== "C"
+
+    \`\`\`c
+    int main() { return 0; }
+    \`\`\`
+
+=== "C++"
+
+    \`\`\`cpp
+    int main() { return 0; }
+    \`\`\``)
+      expect(html).toContain('tabbed-set')
+      expect(html).toContain('tabbed-label')
+      expect(html).toContain('tabbed-label active')
+      expect(html).toContain('C')
+      expect(html).toContain('C++')
+    })
+
+    it('第一个标签应默认为 active', () => {
+      const html = renderBody(`=== "Tab 1"
+
+    内容1
+
+=== "Tab 2"
+
+    内容2`)
+      expect(html).toContain('tabbed-label active')
+      expect(html).toContain('tabbed-block active')
+    })
+
+    it('应支持单引号标题', () => {
+      const html = renderBody(`=== 'Python'
+
+    print("hello")
+
+=== 'JavaScript'
+
+    console.log("hello")`)
+      expect(html).toContain('Python')
+      expect(html).toContain('JavaScript')
+    })
+
+    it('少于两个标签不应渲染为 tabbed', () => {
+      const html = renderBody(`=== "Only One"
+
+    单个内容`)
+      expect(html).not.toContain('tabbed-set')
+    })
+  })
+
   describe('标题编号', () => {
     it('应为 h2 标题添加编号', () => {
       const html = renderBody('# 主标题\n## 第一节\n## 第二节')

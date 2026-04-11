@@ -341,6 +341,146 @@ md.renderer.rules.admonition_content = (tokens, idx) => {
   return md.render(content)
 }
 
+// 自定义 Tabbed 解析器（Material for MkDocs 风格）
+md.block.ruler.before('fence', 'tabbed_block', function tabbed_block(state, startLine, endLine, silent) {
+  const pos = state.bMarks[startLine] + state.tShift[startLine]
+  const max = state.eMarks[startLine]
+
+  // 检查是否以 === 开头
+  if (pos + 3 > max || state.src.substring(pos, pos + 3) !== '===') {
+    return false
+  }
+
+  // 解析标题：=== "Tab Title"
+  const params = state.src.substring(pos + 3, max).trim()
+
+  // 检查标题格式："Title" 或 'Title'
+  const titleMatch = params.match(/^"([^"]*)"|'([^']*)'/)
+  if (!titleMatch) {
+    return false
+  }
+
+  const tabTitle = titleMatch[1] || titleMatch[2]
+
+  // 收集所有标签页（一个 tabbed-set 可能包含多个 === 块）
+  const tabs: { title: string; content: string[] }[] = []
+  let currentTab = { title: tabTitle, content: [] as string[] }
+  let nextLine = startLine + 1
+  const minIndent = 4  // 内容最小缩进
+
+  // 收集当前标签的内容
+  while (nextLine < endLine) {
+    const linePos = state.bMarks[nextLine] + state.tShift[nextLine]
+    const lineMax = state.eMarks[nextLine]
+    const lineIndent = state.sCount[nextLine]
+    const lineText = state.src.substring(linePos, lineMax)
+
+    // 检查是否是新的标签 === "Title"
+    if (lineText.startsWith('===')) {
+      const newParams = lineText.substring(3).trim()
+      const newTitleMatch = newParams.match(/^"([^"]*)"|'([^']*)'/)
+      if (newTitleMatch) {
+        // 保存当前标签，开始新标签
+        tabs.push(currentTab)
+        currentTab = { title: newTitleMatch[1] || newTitleMatch[2], content: [] }
+        nextLine++
+        continue
+      }
+    }
+
+    // 空行处理
+    if (linePos >= lineMax) {
+      if (currentTab.content.length > 0) {
+        currentTab.content.push('')
+      }
+      nextLine++
+      continue
+    }
+
+    // 检查缩进
+    if (lineIndent >= minIndent) {
+      // 提取缩进后的内容
+      const lineContent = state.src.substring(linePos, lineMax)
+      currentTab.content.push(lineContent)
+      nextLine++
+    } else {
+      // 非缩进内容，结束当前 tabbed-set
+      break
+    }
+  }
+
+  // 添加最后一个标签
+  if (currentTab.content.length > 0 || tabs.length > 0) {
+    tabs.push(currentTab)
+  }
+
+  // 至少需要两个标签
+  if (tabs.length < 2) {
+    return false
+  }
+
+  if (!silent) {
+    // 创建 tabbed-set 容器
+    const openToken = state.push('tabbed_set_open', 'div', 1)
+    openToken.attrPush(['class', 'tabbed-set'])
+    // 存储 tabs 数据供渲染器使用
+    ;(openToken as any).tabsData = tabs.map((t, i) => ({ title: t.title, index: i }))
+    openToken.map = [startLine, nextLine]
+
+    // 创建标签内容
+    for (let i = 0; i < tabs.length; i++) {
+      const tab = tabs[i]
+      const contentToken = state.push('tabbed_content', 'div', 0)
+      contentToken.content = tab.content.join('\n')
+      ;(contentToken as any).tabTitle = tab.title
+      ;(contentToken as any).tabIndex = i
+    }
+
+    // 创建 tabbed-set 关闭
+    const closeToken = state.push('tabbed_set_close', 'div', -1)
+    closeToken.map = [startLine, nextLine]
+  }
+
+  state.line = nextLine
+  return true
+})
+
+// 渲染 tabbed 内容（生成完整的 HTML 结构）
+md.renderer.rules.tabbed_content = (tokens, idx) => {
+  const token = tokens[idx] as any
+  const content = token.content
+  const tabIndex = token.tabIndex
+
+  // 递归渲染内容为 Markdown
+  const renderedContent = md.render(content)
+
+  // 包装为 tabbed-block
+  const isActive = tabIndex === 0 ? ' active' : ''
+  return `<div class="tabbed-block${isActive}" data-tab-index="${tabIndex}">${renderedContent}</div>`
+}
+
+// 自定义 tabbed_set_open 渲染（生成标签头部）
+md.renderer.rules.tabbed_set_open = (tokens, idx) => {
+  // 收集后续的 tabbed_content tokens 来生成标签头部
+  const token = tokens[idx]
+  const tabsData = (token as any).tabsData || []
+
+  // 生成标签头部
+  let labelsHtml = '<div class="tabbed-labels">'
+  for (const tab of tabsData) {
+    const isActive = tab.index === 0 ? ' active' : ''
+    labelsHtml += `<button class="tabbed-label${isActive}" data-tab-index="${tab.index}">${tab.title}</button>`
+  }
+  labelsHtml += '</div>'
+
+  return `<div class="tabbed-set">${labelsHtml}<div class="tabbed-content">`
+}
+
+// 自定义 tabbed_set_close 渲染
+md.renderer.rules.tabbed_set_close = () => {
+  return '</div></div>'
+}
+
 // 添加 $$ 块级公式解析规则
 md.block.ruler.before('fence', 'math_block', function math_block(state, startLine, endLine, silent) {
   const pos = state.bMarks[startLine] + state.tShift[startLine]

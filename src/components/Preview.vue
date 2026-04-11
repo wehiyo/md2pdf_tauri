@@ -182,7 +182,42 @@ onMounted(() => {
     securityLevel: 'strict',
     fontFamily: 'inherit'
   })
+
+  // 初始化 tabbed 标签页点击事件
+  initTabbedClickHandler()
 })
+
+// 初始化 tabbed 标签页点击事件处理
+function initTabbedClickHandler() {
+  if (!previewRef.value) return
+
+  previewRef.value.addEventListener('click', (event) => {
+    const target = event.target as HTMLElement
+    const label = target.closest('.tabbed-label')
+    if (!label) return
+
+    const tabSet = label.closest('.tabbed-set')
+    if (!tabSet) return
+
+    const tabIndex = label.getAttribute('data-tab-index')
+    if (!tabIndex) return
+
+    // 更新标签状态
+    const labels = tabSet.querySelectorAll('.tabbed-label')
+    labels.forEach(l => l.classList.remove('active'))
+    label.classList.add('active')
+
+    // 更新内容状态
+    const blocks = tabSet.querySelectorAll('.tabbed-block')
+    blocks.forEach(b => {
+      if (b.getAttribute('data-tab-index') === tabIndex) {
+        b.classList.add('active')
+      } else {
+        b.classList.remove('active')
+      }
+    })
+  })
+}
 
 // 渲染 Mermaid 图表
 async function renderMermaid() {

@@ -646,3 +646,87 @@
   color: #6b7280;
   text-align: center;
 }
+
+/* Tabbed 标签页样式 (Material for MkDocs 风格) */
+.markdown-body .tabbed-set {
+  margin: 1em 0;
+  border: 1px solid #e2e8f0;
+  border-radius: 6px;
+  overflow: hidden;
+}
+
+.dark .markdown-body .tabbed-set {
+  border-color: #334155;
+}
+
+.markdown-body .tabbed-labels {
+  display: flex;
+  background-color: #f8fafc;
+  border-bottom: 1px solid #e2e8f0;
+  overflow-x: auto;
+}
+
+.dark .markdown-body .tabbed-labels {
+  background-color: #1e293b;
+  border-bottom-color: #334155;
+}
+
+.markdown-body .tabbed-label {
+  padding: 8px 16px;
+  font-size: 14px;
+  font-weight: 500;
+  color: #6b7280;
+  background: none;
+  border: none;
+  border-bottom: 2px solid transparent;
+  cursor: pointer;
+  transition: all 0.2s;
+  white-space: nowrap;
+}
+
+.markdown-body .tabbed-label:hover {
+  color: #374151;
+  background-color: #e8e8e8;
+}
+
+.dark .markdown-body .tabbed-label:hover {
+  color: #e2e8f0;
+  background-color: #334155;
+}
+
+.markdown-body .tabbed-label.active {
+  color: #2563eb;
+  border-bottom-color: #2563eb;
+  background-color: #ffffff;
+}
+
+.dark .markdown-body .tabbed-label.active {
+  color: #60a5fa;
+  border-bottom-color: #60a5fa;
+  background-color: #0f172a;
+}
+
+.markdown-body .tabbed-content {
+  background-color: #ffffff;
+}
+
+.dark .markdown-body .tabbed-content {
+  background-color: #0f172a;
+}
+
+.markdown-body .tabbed-block {
+  padding: 1em;
+}
+
+.markdown-body .tabbed-block:not(.active) {
+  display: none;
+}
+
+.markdown-body .tabbed-block.active {
+  display: block;
+}
+
+/* Tabbed 内容中的代码块样式调整 */
+.markdown-body .tabbed-block pre {
+  margin: 0;
+}
