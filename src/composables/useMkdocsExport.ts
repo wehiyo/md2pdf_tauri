@@ -59,7 +59,7 @@ export function resetChapterCounters() {
  * 递归遍历 nav 结构，生成章节列表
  * @param nav MdFile 数组（来自 extractMdFilesFromNav）
  * @param basePath docs 目录路径
- * @param level 当前 nav 层级深度（0 = 第 1 层）
+ * @param level 当前 nav 层级深度（0 = 第 1 层，不编号；1 = 第 2 层，开始编号）
  * @param parentNumber 父级编号（如 "1"、"1.1"，不含结尾点）
  */
 export function collectNavChapters(
@@ -72,27 +72,29 @@ export function collectNavChapters(
 
   for (const item of nav) {
     // 计算当前章节编号
+    // level 0 不编号，level 1 开始编号
     let chapterNumber = ''
     let numberPrefix = ''  // 用于 md 内标题编号（结尾带点）
 
     if (level === 0) {
-      // nav 第 1 层：编号 1, 2, 3...
+      // nav 第 1 层：不显示编号
+      chapterNumber = ''
+      numberPrefix = ''  // md 内标题也不带前缀
+      // 但仍然计数，为下一层准备
       chapterCounter++
-      chapterNumber = `${chapterCounter}`
-      numberPrefix = `${chapterNumber}.`
       // 重置子层计数器
       subChapterCounter = 0
       subSubChapterCounter = 0
       subSubSubCounter = 0
     } else if (level === 1) {
-      // nav 第 2 层：编号 1.1, 1.2, 2.1...
+      // nav 第 2 层：编号 1, 2, 3...（基于 level 0 的计数）
       subChapterCounter++
-      chapterNumber = `${parentNumber}.${subChapterCounter}`
+      chapterNumber = `${subChapterCounter}`
       numberPrefix = `${chapterNumber}.`
       subSubChapterCounter = 0
       subSubSubCounter = 0
     } else if (level === 2) {
-      // nav 第 3 层：编号 1.1.1, 1.1.2...
+      // nav 第 3 层：编号 1.1, 1.2...
       subSubChapterCounter++
       chapterNumber = `${parentNumber}.${subSubChapterCounter}`
       numberPrefix = `${chapterNumber}.`
@@ -115,8 +117,10 @@ export function collectNavChapters(
         headings: []
       })
 
-      // 递归处理子节点，传入当前编号作为父编号
-      const childChapters = collectNavChapters(item.children, basePath, level + 1, chapterNumber)
+      // 递归处理子节点
+      // 对于 level 0，父编号使用 chapterCounter（即使不显示编号）
+      const nextParentNumber = level === 0 ? `${chapterCounter}` : chapterNumber
+      const childChapters = collectNavChapters(item.children, basePath, level + 1, nextParentNumber)
       chapters.push(...childChapters)
 
     } else if (item.path) {
@@ -212,10 +216,12 @@ export function renumberHeadings(chapters: NavChapter[]): BookmarkTreeNode[] {
 
   for (const chapter of chapters) {
     if (!chapter.filePath || !chapter.content) {
-      // 嵌套导航本身（无文件）：仅添加书签节点，显示编号
+      // 嵌套导航本身（无文件）：仅添加书签节点
+      // level 0 不显示编号
+      const displayTitle = chapter.chapterNumber ? `${chapter.chapterNumber}. ${chapter.title}` : chapter.title
       bookmarkTree.push({
         id: `nav-${chapter.navLevel}-${globalHeadingIndex}`,
-        title: `${chapter.chapterNumber}. ${chapter.title}`,
+        title: displayTitle,
         level: chapter.navLevel,
         navLevel: chapter.navLevel,
         children: []
@@ -263,7 +269,12 @@ export function renumberHeadings(chapters: NavChapter[]): BookmarkTreeNode[] {
     const chapterCounters = { h2: 0, h3: 0, h4: 0, h5: 0, h6: 0 }
 
     for (const rawHeading of rawHeadings) {
-      // 调整层级
+      // 跳过 h1 标题（章节标题已由 nav 条目提供）
+      if (rawHeading.level === 1) {
+        continue
+      }
+
+      // 调整层级：h2+ 下降 navLevel 层
       const adjustedLevel = adjustHeadingLevel(rawHeading.level, chapter.navLevel)
 
       // 计算编号
@@ -334,10 +345,12 @@ export function renumberHeadings(chapters: NavChapter[]): BookmarkTreeNode[] {
 
     chapter.headings = adjustedHeadings
 
-    // 添加章节书签节点，显示编号
+    // 添加章节书签节点
+    // level 0 不显示编号
+    const displayTitle = chapter.chapterNumber ? `${chapter.chapterNumber}. ${chapter.title}` : chapter.title
     bookmarkTree.push({
-      id: `chapter-${chapter.chapterNumber}`,
-      title: `${chapter.chapterNumber}. ${chapter.title}`,
+      id: `chapter-${chapter.chapterNumber || globalHeadingIndex}`,
+      title: displayTitle,
       level: chapter.navLevel,
       navLevel: chapter.navLevel,
       filePath: chapter.filePath,
@@ -367,7 +380,7 @@ export function combineChaptersToHtml(chapters: NavChapter[]): string {
   console.log('[combineChaptersToHtml] 开始合并，章节数:', chapters.length)
   const htmlParts: string[] = []
 
-  const { parse, renderWithNumberPrefix } = useMarkdown()
+  const { parse, renderContentSkipH1 } = useMarkdown()
 
   for (let i = 0; i < chapters.length; i++) {
     const chapter = chapters[i]
@@ -383,18 +396,20 @@ export function combineChaptersToHtml(chapters: NavChapter[]): string {
       htmlParts.push('<div style="page-break-before: always;"></div>')
     }
 
-    // 添加章节标题（带编号）
+    // 添加章节标题
     // nav level 决定标题层级：level 0 → h1, level 1 → h2, level 2 → h3, level 3+ → h4
     const headingLevel = Math.min(chapter.navLevel + 1, 4)
-    const chapterTitleHtml = `<h${headingLevel} id="chapter-${chapter.chapterNumber}"><span class="heading-number">${chapter.chapterNumber}. </span>${chapter.title}</h${headingLevel}>`
+    // level 0 不显示编号
+    const numberSpan = chapter.chapterNumber ? `<span class="heading-number">${chapter.chapterNumber}. </span>` : ''
+    const chapterTitleHtml = `<h${headingLevel} id="chapter-${chapter.chapterNumber || i}">${numberSpan}${chapter.title}</h${headingLevel}>`
     htmlParts.push(chapterTitleHtml)
 
     // 解析 frontmatter 提取 body
     const { body } = parse(chapter.content)
     console.log(`[combineChaptersToHtml] 章节 ${i} body 长度:`, body.length)
 
-    // 渲染内容（使用调整后的编号）
-    const renderedHtml = renderWithNumberPrefix(body, chapter.numberPrefix, chapter.navLevel)
+    // 渲染内容（跳过 h1，使用调整后的编号）
+    const renderedHtml = renderContentSkipH1(body, chapter.numberPrefix, chapter.navLevel)
     console.log(`[combineChaptersToHtml] 章节 ${i} renderedHtml 长度:`, renderedHtml.length)
 
     htmlParts.push(renderedHtml)

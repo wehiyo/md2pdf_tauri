@@ -1075,10 +1075,29 @@ export function useMarkdown() {
     }
   }
 
+  /**
+   * MkDocs 组合导出专用：跳过 h1 标题，渲染 h2+ 标题（使用外部编号）
+   * @param body Markdown 内容（不含 frontmatter）
+   * @param numberPrefix 编号前缀（如 "1.2."）
+   * @param navLevel nav 层级深度（用于标题层级调整）
+   */
+  function renderContentSkipH1(body: string, numberPrefix: string, navLevel: number): string {
+    if (!body.trim()) {
+      return ''
+    }
+
+    // 移除 h1 标题行（章节标题已由 nav 条目提供）
+    const bodyWithoutH1 = body.replace(/^#\s+.+$\n?/gm, '').trim()
+
+    // 使用 renderWithNumberPrefix 渲染剩余内容
+    return renderWithNumberPrefix(bodyWithoutH1, numberPrefix, navLevel)
+  }
+
   return {
     parse,
     renderBody,
     render,
-    renderWithNumberPrefix
+    renderWithNumberPrefix,
+    renderContentSkipH1
   }
 }
