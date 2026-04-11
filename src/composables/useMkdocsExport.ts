@@ -60,97 +60,72 @@ export function resetChapterCounters() {
  * @param nav MdFile 数组（来自 extractMdFilesFromNav）
  * @param basePath docs 目录路径
  * @param level 当前 nav 层级深度（0 = 第 1 层）
- * @param parentPrefix 父级编号前缀
+ * @param parentNumber 父级编号（如 "1"、"1.1"，不含结尾点）
  */
 export function collectNavChapters(
   nav: MdFile[],
   basePath: string,
   level: number = 0,
-  parentPrefix: string = ''
+  parentNumber: string = ''
 ): NavChapter[] {
   const chapters: NavChapter[] = []
 
   for (const item of nav) {
+    // 计算当前章节编号
+    let chapterNumber = ''
+    let numberPrefix = ''  // 用于 md 内标题编号（结尾带点）
+
+    if (level === 0) {
+      // nav 第 1 层：编号 1, 2, 3...
+      chapterCounter++
+      chapterNumber = `${chapterCounter}`
+      numberPrefix = `${chapterNumber}.`
+      // 重置子层计数器
+      subChapterCounter = 0
+      subSubChapterCounter = 0
+      subSubSubCounter = 0
+    } else if (level === 1) {
+      // nav 第 2 层：编号 1.1, 1.2, 2.1...
+      subChapterCounter++
+      chapterNumber = `${parentNumber}.${subChapterCounter}`
+      numberPrefix = `${chapterNumber}.`
+      subSubChapterCounter = 0
+      subSubSubCounter = 0
+    } else if (level === 2) {
+      // nav 第 3 层：编号 1.1.1, 1.1.2...
+      subSubChapterCounter++
+      chapterNumber = `${parentNumber}.${subSubChapterCounter}`
+      numberPrefix = `${chapterNumber}.`
+      subSubSubCounter = 0
+    } else {
+      // nav 第 4 层及以上
+      subSubSubCounter++
+      chapterNumber = `${parentNumber}.${subSubSubCounter}`
+      numberPrefix = `${chapterNumber}.`
+    }
+
     if (item.isFolder && item.children) {
-      // 嵌套导航：递归处理子节点
-      const chapterTitle = item.name
-
-      // 计算章节编号和编号前缀
-      let chapterNumber = ''
-      let currentPrefix = ''
-
-      if (level === 0) {
-        // nav 第 1 层
-        chapterCounter++
-        chapterNumber = `${chapterCounter}`
-        currentPrefix = `${chapterCounter}.`
-        subChapterCounter = 0
-        subSubChapterCounter = 0
-      } else if (level === 1) {
-        // nav 第 2 层
-        subChapterCounter++
-        chapterNumber = `${parentPrefix}${subChapterCounter}`
-        currentPrefix = `${chapterNumber}.`
-        subSubChapterCounter = 0
-      } else if (level === 2) {
-        // nav 第 3 层
-        subSubChapterCounter++
-        chapterNumber = `${parentPrefix}.${subSubChapterCounter}`
-        currentPrefix = `${chapterNumber}.`
-      } else {
-        // nav 第 4 层及以上
-        subSubSubCounter++
-        chapterNumber = `${parentPrefix}.${subSubSubCounter}`
-        currentPrefix = `${chapterNumber}.`
-      }
-
+      // 嵌套导航：文件夹节点本身作为章节
       chapters.push({
-        title: chapterTitle,
+        title: item.name,
         navLevel: level,
-        filePath: '', // 嵌套导航本身不是文件
-        numberPrefix: currentPrefix,
+        filePath: '',
+        numberPrefix,
         chapterNumber,
         headings: []
       })
 
-      // 递归处理子节点
+      // 递归处理子节点，传入当前编号作为父编号
       const childChapters = collectNavChapters(item.children, basePath, level + 1, chapterNumber)
       chapters.push(...childChapters)
 
     } else if (item.path) {
       // 文件条目
-      const chapterTitle = item.name
-
-      // 计算章节编号和编号前缀（与文件夹逻辑相同）
-      let chapterNumber = ''
-      let currentPrefix = ''
-
-      if (level === 0) {
-        chapterCounter++
-        chapterNumber = `${chapterCounter}`
-        currentPrefix = `${chapterNumber}.`
-        subChapterCounter = 0
-        subSubChapterCounter = 0
-      } else if (level === 1) {
-        subChapterCounter++
-        chapterNumber = `${parentPrefix}${subChapterCounter}`
-        currentPrefix = `${chapterNumber}.`
-        subSubChapterCounter = 0
-      } else if (level === 2) {
-        subSubChapterCounter++
-        chapterNumber = `${parentPrefix}.${subSubChapterCounter}`
-        currentPrefix = `${chapterNumber}.`
-      } else {
-        subSubSubCounter++
-        chapterNumber = `${parentPrefix}.${subSubSubCounter}`
-        currentPrefix = `${chapterNumber}.`
-      }
-
       chapters.push({
-        title: chapterTitle,
+        title: item.name,
         navLevel: level,
         filePath: item.path,
-        numberPrefix: currentPrefix,
+        numberPrefix,
         chapterNumber,
         headings: []
       })
