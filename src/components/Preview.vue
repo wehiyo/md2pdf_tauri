@@ -76,6 +76,7 @@ const emit = defineEmits<{
   'export-html': []
   'export-pdf': []
   'navigate-to-file': [filePath: string, anchor?: string]
+  'navigate-to-anchor': [anchor: string]
   'navigate-back': []
   'navigate-forward': []
 }>()
@@ -144,6 +145,8 @@ function handleLinkClick(event: MouseEvent) {
     if (targetElement) {
       targetElement.scrollIntoView({ behavior: 'smooth', block: 'start' })
     }
+    // 触发同文件锚点导航事件（用于记录历史）
+    emit('navigate-to-anchor', targetId)
     return
   }
 

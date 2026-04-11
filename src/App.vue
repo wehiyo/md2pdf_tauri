@@ -48,6 +48,7 @@
         @export-html="exportHTML"
         @export-pdf="exportPDF"
         @navigate-to-file="navigateToFile"
+        @navigate-to-anchor="navigateToAnchor"
         @navigate-back="navigateBack"
         @navigate-forward="navigateForward"
       />
@@ -768,6 +769,22 @@ async function navigateToFile(filePath: string, anchor?: string) {
 
   // 打开新文件（会检查未保存改动）
   await openFileFromTree(filePath)
+}
+
+// 处理同文件锚点跳转（记录历史）
+async function navigateToAnchor(anchor: string) {
+  if (!currentFilePath.value) return
+
+  // 记录当前状态（跳转前的位置）
+  if (navigationIndex.value >= 0) {
+    navigationHistory.value[navigationIndex.value].anchor = pendingAnchor.value || undefined
+  }
+
+  // 添加新的锚点状态到历史栈
+  pushNavigationState(currentFilePath.value, anchor)
+
+  // 保存当前锚点
+  pendingAnchor.value = anchor
 }
 
 // 返回上一位置
