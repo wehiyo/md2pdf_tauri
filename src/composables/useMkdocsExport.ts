@@ -1,4 +1,5 @@
 import { invoke } from '@tauri-apps/api/core'
+import { convertFileSrc } from '@tauri-apps/api/core'
 import { useMarkdown } from './useMarkdown'
 
 // 导出给其他模块使用
@@ -363,6 +364,76 @@ export function renumberHeadings(chapters: NavChapter[]): BookmarkTreeNode[] {
 }
 
 /**
+ * 从文件路径提取目录路径（使用字符串操作）
+ */
+function getFileDir(filePath: string): string {
+  // 统一使用正斜杠
+  const normalized = filePath.replace(/\\/g, '/')
+  // 提取最后一个斜杠之前的部分
+  const lastSlashIndex = normalized.lastIndexOf('/')
+  if (lastSlashIndex === -1) return ''
+  return normalized.substring(0, lastSlashIndex)
+}
+
+/**
+ * 规范化路径（移除多余的 ./ 和 ../）
+ */
+function normalizePath(path: string): string {
+  const parts = path.replace(/\\/g, '/').split('/')
+  const result: string[] = []
+
+  for (const part of parts) {
+    if (part === '..') {
+      if (result.length > 0 && result[result.length - 1] !== '..') {
+        result.pop()
+      } else {
+        result.push(part)
+      }
+    } else if (part !== '.' && part !== '') {
+      result.push(part)
+    }
+  }
+
+  // Windows 路径保留驱动器字母（如 D:）
+  let joinedPath = result.join('/')
+  if (path.match(/^[A-Za-z]:/)) {
+    // Windows 驱动器路径，确保有驱动器前缀
+    const driveMatch = path.match(/^([A-Za-z]:)/)
+    if (driveMatch && !joinedPath.startsWith(driveMatch[1])) {
+      joinedPath = driveMatch[1] + '/' + joinedPath
+    }
+  }
+
+  return joinedPath
+}
+
+/**
+ * 处理 HTML 中的图片路径，将相对路径转换为 asset URL
+ * @param html HTML 内容
+ * @param fileDir 文件所在目录
+ */
+function fixImagePathsInHtml(html: string, fileDir: string): string {
+  // 匹配 img 标签中的 src 属性（支持双引号和单引号）
+  return html.replace(/<img([^>]*)src=["']([^"']+)["']([^>]*)>/g, (match, before, src, after) => {
+    // 跳过已经是绝对路径、http/https、data URL 或 asset URL 的图片
+    if (src.match(/^https?:\/\//) || src.startsWith('data:') || src.startsWith('asset:') || src.includes('asset.localhost')) {
+      return match
+    }
+
+    // 将相对路径转换为绝对路径
+    const fileDirNormalized = fileDir.replace(/\\/g, '/')
+    const absolutePath = fileDirNormalized + '/' + src
+    const normalizedPath = normalizePath(absolutePath)
+
+    // 使用 convertFileSrc 转换为 asset 协议 URL
+    const assetUrl = convertFileSrc(normalizedPath)
+
+    // 保存原始路径用于导出
+    return `<img${before}src="${assetUrl}" data-original-src="${normalizedPath}"${after}>`
+  })
+}
+
+/**
  * 使用调整后的编号渲染单个章节内容
  */
 export function renderChapterContent(
@@ -422,7 +493,11 @@ export function combineChaptersToHtml(chapters: NavChapter[]): string {
     const renderedHtml = renderContentSkipH1(body, chapter.numberPrefix, chapter.navLevel)
     console.log(`[combineChaptersToHtml] 章节 ${i} renderedHtml 长度:`, renderedHtml.length)
 
-    htmlParts.push(renderedHtml)
+    // 处理图片路径（转换为 asset URL）
+    const fileDir = getFileDir(chapter.filePath)
+    const fixedHtml = fixImagePathsInHtml(renderedHtml, fileDir)
+
+    htmlParts.push(fixedHtml)
   }
 
   const result = htmlParts.join('\n')
