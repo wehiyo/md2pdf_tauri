@@ -38,6 +38,8 @@
         :html="renderedHtml"
         :file-dir="currentFileDir"
         :preview-only-mode="previewOnlyMode"
+        :can-navigate-back="canNavigateBack"
+        :can-navigate-forward="canNavigateForward"
         class="preview-pane"
         :style="previewPaneStyle"
         @preview-only="togglePreviewOnly"
@@ -46,6 +48,8 @@
         @export-html="exportHTML"
         @export-pdf="exportPDF"
         @navigate-to-file="navigateToFile"
+        @navigate-back="navigateBack"
+        @navigate-forward="navigateForward"
       />
     </div>
     <ExportProgress />
@@ -669,6 +673,9 @@ async function openFileFromTree(path: string) {
     currentFilePath.value = path
     console.log('从文件树打开:', path, '编码:', encoding)
 
+    // 记录导航历史
+    pushNavigationState(path, pendingAnchor.value)
+
     // 如果有待跳转的锚点，延迟跳转（等待渲染完成）
     if (pendingAnchor.value) {
       const anchor = pendingAnchor.value
@@ -684,25 +691,149 @@ async function openFileFromTree(path: string) {
 // 待跳转的锚点（跨文件链接跳转时使用）
 const pendingAnchor = ref<string | null>(null)
 
+// 导航历史栈
+interface NavigationState {
+  filePath: string
+  anchor?: string
+}
+const navigationHistory = ref<NavigationState[]>([])
+const navigationIndex = ref<number>(-1)
+const MAX_HISTORY_SIZE = 50
+
+// 导航状态
+const canNavigateBack = computed(() => navigationIndex.value > 0)
+const canNavigateForward = computed(() => navigationIndex.value < navigationHistory.value.length - 1)
+
+// 推送导航状态到历史栈
+function pushNavigationState(filePath: string, anchor?: string | null) {
+  // 如果当前有索引，截断后面的历史（用户已返回后重新导航）
+  if (navigationIndex.value >= 0 && navigationIndex.value < navigationHistory.value.length - 1) {
+    navigationHistory.value = navigationHistory.value.slice(0, navigationIndex.value + 1)
+  }
+
+  // 添加新状态
+  navigationHistory.value.push({ filePath, anchor: anchor || undefined })
+
+  // 限制历史栈大小
+  if (navigationHistory.value.length > MAX_HISTORY_SIZE) {
+    navigationHistory.value.shift()
+  } else {
+    navigationIndex.value++
+  }
+}
+
 // 处理跨文件链接跳转
 async function navigateToFile(filePath: string, anchor?: string) {
   // 检查文件是否为 .md 文件
   if (!filePath.endsWith('.md')) return
 
+  // 记录当前状态（跳转前的位置）
+  if (currentFilePath.value) {
+    // 更新当前状态的锚点（如果有待跳转锚点）
+    if (navigationIndex.value >= 0) {
+      navigationHistory.value[navigationIndex.value].anchor = pendingAnchor.value || undefined
+    }
+  }
+
   // 保存待跳转的锚点
   pendingAnchor.value = anchor || null
 
-  // 如果是当前文件，直接跳转到锚点
+  // 如果是当前文件，直接跳转到锚点，不添加新历史
   if (currentFilePath.value === filePath) {
     if (anchor) {
       await nextTick()
       scrollToAnchor(anchor)
+      // 更新当前状态的锚点
+      if (navigationIndex.value >= 0) {
+        navigationHistory.value[navigationIndex.value].anchor = anchor
+      }
     }
     return
   }
 
   // 打开新文件（会检查未保存改动）
   await openFileFromTree(filePath)
+}
+
+// 返回上一位置
+async function navigateBack() {
+  if (!canNavigateBack.value) return
+
+  // 保存当前位置的锚点
+  if (navigationIndex.value >= 0 && pendingAnchor.value) {
+    navigationHistory.value[navigationIndex.value].anchor = pendingAnchor.value
+  }
+
+  navigationIndex.value--
+  const state = navigationHistory.value[navigationIndex.value]
+
+  // 如果是当前文件，直接跳转到锚点
+  if (currentFilePath.value === state.filePath) {
+    pendingAnchor.value = state.anchor || null
+    if (state.anchor) {
+      await nextTick()
+      scrollToAnchor(state.anchor)
+    }
+    return
+  }
+
+  // 打开目标文件
+  pendingAnchor.value = state.anchor || null
+  await openFileFromTreeNoHistory(state.filePath)
+}
+
+// 前进到下一位置
+async function navigateForward() {
+  if (!canNavigateForward.value) return
+
+  // 保存当前位置的锚点
+  if (navigationIndex.value >= 0 && pendingAnchor.value) {
+    navigationHistory.value[navigationIndex.value].anchor = pendingAnchor.value
+  }
+
+  navigationIndex.value++
+  const state = navigationHistory.value[navigationIndex.value]
+
+  // 如果是当前文件，直接跳转到锚点
+  if (currentFilePath.value === state.filePath) {
+    pendingAnchor.value = state.anchor || null
+    if (state.anchor) {
+      await nextTick()
+      scrollToAnchor(state.anchor)
+    }
+    return
+  }
+
+  // 打开目标文件
+  pendingAnchor.value = state.anchor || null
+  await openFileFromTreeNoHistory(state.filePath)
+}
+
+// 打开文件但不记录历史（用于返回/前进）
+async function openFileFromTreeNoHistory(path: string) {
+  const canProceed = await checkUnsavedChanges()
+  if (!canProceed) return
+
+  try {
+    const [text, encoding] = await invoke<[string, string]>('read_file_with_encoding', { path })
+    const normalizedText = text.replace(/\r\n/g, '\n')
+    content.value = normalizedText
+    savedContent.value = normalizedText
+
+    const lastSep = Math.max(path.lastIndexOf('/'), path.lastIndexOf('\\'))
+    currentFileDir.value = lastSep > 0 ? path.substring(0, lastSep) : null
+    currentFilePath.value = path
+    console.log('打开文件（无历史记录）:', path, '编码:', encoding)
+
+    // 如果有待跳转的锚点，延迟跳转
+    if (pendingAnchor.value) {
+      const anchor = pendingAnchor.value
+      await nextTick()
+      setTimeout(() => scrollToAnchor(anchor), 200)
+    }
+  } catch (error) {
+    await handleError(error, '打开文件')
+  }
 }
 
 // 跳转到锚点

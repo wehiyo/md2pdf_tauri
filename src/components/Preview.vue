@@ -3,12 +3,16 @@
     <PreviewToolbar
       :preview-only-mode="previewOnlyMode"
       :show-toc="showToc"
+      :can-navigate-back="canNavigateBack"
+      :can-navigate-forward="canNavigateForward"
       @preview-only="emit('preview-only')"
       @toggle-toc="toggleToc"
       @import-folder="emit('import-folder')"
       @import-mkdocs="emit('import-mkdocs')"
       @export-html="emit('export-html')"
       @export-pdf="emit('export-pdf')"
+      @navigate-back="emit('navigate-back')"
+      @navigate-forward="emit('navigate-forward')"
     />
     <div class="preview-body">
       <div class="preview-content-wrapper">
@@ -61,6 +65,8 @@ const props = defineProps<{
   html: string
   fileDir?: string | null
   previewOnlyMode?: boolean
+  canNavigateBack?: boolean
+  canNavigateForward?: boolean
 }>()
 
 const emit = defineEmits<{
@@ -70,6 +76,8 @@ const emit = defineEmits<{
   'export-html': []
   'export-pdf': []
   'navigate-to-file': [filePath: string, anchor?: string]
+  'navigate-back': []
+  'navigate-forward': []
 }>()
 
 const previewRef = ref<HTMLDivElement>()

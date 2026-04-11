@@ -1,6 +1,30 @@
 <template>
   <div class="preview-toolbar">
     <div class="toolbar-left">
+      <!-- 导航按钮 -->
+      <button
+        class="toolbar-btn nav-btn"
+        :class="{ disabled: !canNavigateBack }"
+        :disabled="!canNavigateBack"
+        title="返回"
+        @click="$emit('navigate-back')"
+      >
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <polyline points="15 18 9 12 15 6"/>
+        </svg>
+      </button>
+      <button
+        class="toolbar-btn nav-btn"
+        :class="{ disabled: !canNavigateForward }"
+        :disabled="!canNavigateForward"
+        title="前进"
+        @click="$emit('navigate-forward')"
+      >
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <polyline points="9 18 15 12 9 6"/>
+        </svg>
+      </button>
+      <div class="nav-separator"></div>
       <button class="toolbar-btn" :class="{ active: previewOnlyMode }" title="仅预览" @click="$emit('preview-only')">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
           <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/>
@@ -96,11 +120,15 @@ const emit = defineEmits<{
   'import-mkdocs': []
   'export-html': []
   'export-pdf': []
+  'navigate-back': []
+  'navigate-forward': []
 }>()
 
 defineProps<{
   previewOnlyMode?: boolean
   showToc?: boolean
+  canNavigateBack?: boolean
+  canNavigateForward?: boolean
 }>()
 
 const dropdownOpen = ref(false)
@@ -210,6 +238,34 @@ onUnmounted(() => {
 
 .toolbar-btn span {
   font-weight: 400;
+}
+
+/* 导航按钮样式 */
+.toolbar-btn.nav-btn {
+  padding: 4px 6px;
+}
+
+.toolbar-btn.nav-btn.disabled,
+.toolbar-btn.nav-btn:disabled {
+  color: #9ca3af;
+  cursor: not-allowed;
+  background-color: transparent;
+}
+
+.dark .toolbar-btn.nav-btn.disabled,
+.dark .toolbar-btn.nav-btn:disabled {
+  color: #6b7280;
+}
+
+.nav-separator {
+  width: 1px;
+  height: 20px;
+  background-color: #e2e8f0;
+  margin: 0 4px;
+}
+
+.dark .nav-separator {
+  background-color: #334155;
 }
 
 .dark .toolbar-btn {
