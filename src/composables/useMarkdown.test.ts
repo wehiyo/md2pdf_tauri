@@ -288,6 +288,19 @@ security level: 内部
       const html = renderBody('!!! danger 危险\n    危险内容')
       expect(html).toContain('admonition danger')
     })
+
+    it('空标题 "" 应不显示标题', () => {
+      const html = renderBody('!!! note ""\n    内容')
+      expect(html).toContain('admonition note')
+      expect(html).not.toContain('admonition-title')
+    })
+
+    it('无标题参数应使用类型作为默认标题', () => {
+      const html = renderBody('!!! note\n    内容')
+      expect(html).toContain('admonition note')
+      expect(html).toContain('admonition-title')
+      expect(html).toContain('note')
+    })
   })
 
   describe('标题编号', () => {

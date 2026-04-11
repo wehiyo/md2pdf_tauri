@@ -230,7 +230,21 @@ md.block.ruler.before('fence', 'admonition_block', function admonition_block(sta
     return false
   }
 
-  const admonitionTitle = parts.length > 1 ? parts[1] : admonitionType
+  // 解析标题：支持空标题 "" 表示不显示标题
+  let admonitionTitle = ''
+  let showTitle = true
+  if (parts.length > 1) {
+    const titlePart = parts[1]
+    // 检查是否为空标题 "" 或 ""
+    if (titlePart === '""' || titlePart === '"') {
+      showTitle = false
+    } else {
+      admonitionTitle = titlePart
+    }
+  } else {
+    // 无标题参数时，使用类型作为默认标题
+    admonitionTitle = admonitionType
+  }
 
   // 收集内容，同时支持两种语法
   let nextLine = startLine + 1
@@ -290,16 +304,18 @@ md.block.ruler.before('fence', 'admonition_block', function admonition_block(sta
     openToken.attrPush(['class', `admonition ${admonitionType}`])
     openToken.map = [startLine, nextLine]
 
-    // 创建标题 token
-    const titleOpenToken = state.push('admonition_title_open', 'p', 1)
-    titleOpenToken.attrPush(['class', 'admonition-title'])
-    titleOpenToken.map = [startLine, startLine]
+    // 创建标题 token（仅当需要显示标题时）
+    if (showTitle) {
+      const titleOpenToken = state.push('admonition_title_open', 'p', 1)
+      titleOpenToken.attrPush(['class', 'admonition-title'])
+      titleOpenToken.map = [startLine, startLine]
 
-    const titleContentToken = state.push('inline', '', 0)
-    titleContentToken.content = admonitionTitle
-    titleContentToken.children = []
+      const titleContentToken = state.push('inline', '', 0)
+      titleContentToken.content = admonitionTitle
+      titleContentToken.children = []
 
-    state.push('admonition_title_close', 'p', -1)
+      state.push('admonition_title_close', 'p', -1)
+    }
 
     // 解析内容（递归解析 Markdown）
     const content = contentLines.join('\n')
