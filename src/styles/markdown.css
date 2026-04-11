@@ -730,3 +730,8 @@
 .markdown-body .tabbed-block pre {
   margin: 0;
 }
+
+/* Tabbed 内容块标题（预览区隐藏，PDF 显示） */
+.markdown-body .tabbed-block-title {
+  display: none;
+}

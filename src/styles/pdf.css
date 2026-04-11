@@ -97,10 +97,10 @@
   /* Tabbed 标签页打印：显示所有内容 */
   .tabbed-set {
     margin: 1em 0;
-    border: 1px solid #ccc;
     page-break-inside: avoid;
   }
 
+  /* 标签按钮在 PDF 中隐藏 */
   .tabbed-labels {
     display: none !important;
   }
@@ -109,25 +109,27 @@
     background-color: transparent;
   }
 
+  /* 所有标签内容块显示 */
   .tabbed-block {
     display: block !important;
-    padding: 0.5em 1em;
+    margin-bottom: 1em;
+    padding: 0.5em 0;
     border-bottom: 1px solid #ccc;
   }
 
   .tabbed-block:last-child {
     border-bottom: none;
+    margin-bottom: 0;
   }
 
-  /* 在标签内容前显示标题 */
-  .tabbed-block::before {
-    content: attr(data-tab-title);
-    display: block;
+  /* 标签标题在 PDF 中显示 */
+  .tabbed-block-title {
+    display: block !important;
     font-weight: bold;
-    font-size: 0.9em;
-    color: #666;
+    font-size: 0.95em;
+    color: #333;
     margin-bottom: 0.5em;
     padding-bottom: 0.3em;
-    border-bottom: 1px dashed #ccc;
+    border-bottom: 1px dashed #999;
   }
 }
