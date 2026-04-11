@@ -1,6 +1,6 @@
 import { invoke } from '@tauri-apps/api/core'
 import { convertFileSrc } from '@tauri-apps/api/core'
-import { useMarkdown, resetGlobalHeadingIndex } from './useMarkdown'
+import { useMarkdown, resetGlobalHeadingIndex, getGlobalHeadingIndex, incrementGlobalHeadingIndex } from './useMarkdown'
 
 // 导出给其他模块使用
 export interface NavChapter {
@@ -205,8 +205,8 @@ function slugify(text: string): string {
 export function renumberHeadings(chapters: NavChapter[]): BookmarkTreeNode[] {
   const bookmarkTree: BookmarkTreeNode[] = []
 
-  // 全局标题计数器（用于生成唯一 ID）
-  let globalHeadingIndex = 0
+  // 重置全局标题索引计数器
+  resetGlobalHeadingIndex()
 
   // 当前章节计数器（用于跨章节编号）
   const counters = { h2: 0, h3: 0, h4: 0, h5: 0, h6: 0 }
@@ -308,7 +308,8 @@ export function renumberHeadings(chapters: NavChapter[]): BookmarkTreeNode[] {
 
       // 生成调整后的 ID - 与 useMarkdown.ts 保持一致
       const baseSlug = slugify(rawHeading.text)
-      const adjustedId = `heading-${globalHeadingIndex}-${baseSlug}`
+      const currentIndex = getGlobalHeadingIndex()
+      const adjustedId = `heading-${currentIndex}-${baseSlug}`
 
       const heading: Heading = {
         level: rawHeading.level,
@@ -333,7 +334,7 @@ export function renumberHeadings(chapters: NavChapter[]): BookmarkTreeNode[] {
         })
       }
 
-      globalHeadingIndex++
+      incrementGlobalHeadingIndex()
     }
 
     chapter.headings = adjustedHeadings
@@ -341,15 +342,18 @@ export function renumberHeadings(chapters: NavChapter[]): BookmarkTreeNode[] {
     // 创建章节书签节点
     // level 0 不显示编号
     const displayTitle = chapter.chapterNumber ? `${chapter.chapterNumber}. ${chapter.title}` : chapter.title
+    // 章节ID使用与combineChaptersToHtml相同的逻辑
+    const chapterId = chapter.chapterNumber ? `chapter-${chapter.chapterNumber}` : `chapter-${getGlobalHeadingIndex()}`
+    chapter.htmlId = chapterId  // 预先设置，供后续使用
     const bookmarkNode: BookmarkTreeNode = {
-      id: chapter.htmlId || `chapter-${globalHeadingIndex}`,
+      id: chapterId,
       title: displayTitle,
       level: chapter.navLevel,
       navLevel: chapter.navLevel,
       filePath: chapter.filePath,
       children: chapterBookmarkChildren
     }
-    globalHeadingIndex++
+    incrementGlobalHeadingIndex()
 
     // 根据 navLevel 确定添加到哪个层级
     // 找到合适的父节点栈层级
@@ -475,8 +479,8 @@ export function combineChaptersToHtml(chapters: NavChapter[]): string {
       htmlParts.push('<div style="page-break-before: always;"></div>')
     }
 
-    // 生成章节 id（基于 chapterNumber 或索引）
-    const chapterId = chapter.chapterNumber ? `chapter-${chapter.chapterNumber}` : `chapter-${chapterIndex}`
+    // 使用预先设置的 htmlId（由 renumberHeadings 设置），或基于 chapterNumber/索引生成
+    const chapterId = chapter.htmlId || (chapter.chapterNumber ? `chapter-${chapter.chapterNumber}` : `chapter-${chapterIndex}`)
     chapter.htmlId = chapterId  // 存储 id 供书签跳转使用
     chapterIndex++
 

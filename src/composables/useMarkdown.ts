@@ -805,6 +805,13 @@ export function getGlobalHeadingIndex(): number {
   return globalHeadingIndex
 }
 
+/**
+ * 增加全局标题索引计数器（用于书签树ID生成）
+ */
+export function incrementGlobalHeadingIndex(): void {
+  globalHeadingIndex++
+}
+
 // 将标题文本转为 slug（与 markdown-it-anchor 一致的逻辑）
 function slugify(text: string): string {
   return text
