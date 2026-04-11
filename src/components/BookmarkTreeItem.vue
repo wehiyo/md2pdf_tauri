@@ -55,11 +55,8 @@ const hasChildren = computed(() => {
 })
 
 function handleClick() {
-  // 展开/折叠
-  if (hasChildren.value) {
-    isExpanded.value = !isExpanded.value
-  }
-  // 触发跳转（如果有 ID）
+  // 点击时不切换展开状态，只触发跳转
+  // 有下级的书签保持展开，方便用户查看结构
   if (props.chapter.id) {
     emit('click', props.chapter.id)
   }
