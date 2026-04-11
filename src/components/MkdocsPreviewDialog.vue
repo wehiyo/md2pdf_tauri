@@ -70,9 +70,14 @@ const previewRef = ref<HTMLElement | null>(null)
 function scrollToHeading(id: string) {
   if (!previewRef.value) return
 
-  const targetElement = previewRef.value.querySelector(`#${id}`)
+  // id 可能包含点号，需要转义
+  const escapedId = id.replace(/\./g, '\\.')
+  const targetElement = previewRef.value.querySelector(`#${escapedId}`)
   if (targetElement) {
     targetElement.scrollIntoView({ behavior: 'smooth', block: 'start' })
+    console.log('[scrollToHeading] 滚动到:', id)
+  } else {
+    console.warn('[scrollToHeading] 未找到元素:', id)
   }
 }
 

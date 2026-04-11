@@ -10,6 +10,7 @@ export interface NavChapter {
   headings?: Heading[]   // 提取的标题列表
   numberPrefix: string   // 编号前缀（如 "1.2."）
   chapterNumber: string  // 章节编号（如 "1"、"1.1"、"1.1.1"）
+  htmlId?: string        // HTML 标题元素的 id（用于书签跳转）
 }
 
 export interface Heading {
@@ -349,7 +350,7 @@ export function renumberHeadings(chapters: NavChapter[]): BookmarkTreeNode[] {
     // level 0 不显示编号
     const displayTitle = chapter.chapterNumber ? `${chapter.chapterNumber}. ${chapter.title}` : chapter.title
     bookmarkTree.push({
-      id: `chapter-${chapter.chapterNumber || globalHeadingIndex}`,
+      id: chapter.htmlId || `chapter-${globalHeadingIndex}`,  // 使用 htmlId 确保与 HTML 标题 id 一致
       title: displayTitle,
       level: chapter.navLevel,
       navLevel: chapter.navLevel,
@@ -375,12 +376,16 @@ export function renderChapterContent(
 
 /**
  * 合并所有章节为单一 HTML，添加分页标记和章节标题
+ * 同时为每个章节设置 htmlId（用于书签跳转）
  */
 export function combineChaptersToHtml(chapters: NavChapter[]): string {
   console.log('[combineChaptersToHtml] 开始合并，章节数:', chapters.length)
   const htmlParts: string[] = []
 
   const { parse, renderContentSkipH1 } = useMarkdown()
+
+  // 用于生成唯一的章节 id
+  let chapterIndex = 0
 
   for (let i = 0; i < chapters.length; i++) {
     const chapter = chapters[i]
@@ -396,12 +401,17 @@ export function combineChaptersToHtml(chapters: NavChapter[]): string {
       htmlParts.push('<div style="page-break-before: always;"></div>')
     }
 
+    // 生成章节 id（基于 chapterNumber 或索引）
+    const chapterId = chapter.chapterNumber ? `chapter-${chapter.chapterNumber}` : `chapter-${chapterIndex}`
+    chapter.htmlId = chapterId  // 存储 id 供书签跳转使用
+    chapterIndex++
+
     // 添加章节标题
     // nav level 决定标题层级：level 0 → h1, level 1 → h2, level 2 → h3, level 3+ → h4
     const headingLevel = Math.min(chapter.navLevel + 1, 4)
     // level 0 不显示编号
     const numberSpan = chapter.chapterNumber ? `<span class="heading-number">${chapter.chapterNumber}. </span>` : ''
-    const chapterTitleHtml = `<h${headingLevel} id="chapter-${chapter.chapterNumber || i}">${numberSpan}${chapter.title}</h${headingLevel}>`
+    const chapterTitleHtml = `<h${headingLevel} id="${chapterId}">${numberSpan}${chapter.title}</h${headingLevel}>`
     htmlParts.push(chapterTitleHtml)
 
     // 解析 frontmatter 提取 body
@@ -485,14 +495,14 @@ export async function prepareMkdocsExport(
   await loadAllMdFiles(chapters)
   console.log('[MkDocs导出] 加载文件后章节:', chapters.filter(c => c.content))
 
-  // 重新编号标题，生成书签树
-  const bookmarkTree = renumberHeadings(chapters)
-  console.log('[MkDocs导出] 书签树:', bookmarkTree)
-
-  // 合并 HTML
+  // 先合并 HTML（设置 htmlId）
   const combinedHtml = combineChaptersToHtml(chapters)
   console.log('[MkDocs导出] combinedHtml 长度:', combinedHtml.length)
   console.log('[MkDocs导出] combinedHtml 前200字符:', combinedHtml.substring(0, 200))
+
+  // 再重新编号标题，生成书签树（使用 htmlId）
+  const bookmarkTree = renumberHeadings(chapters)
+  console.log('[MkDocs导出] 书签树:', bookmarkTree)
 
   // 提取 PDF 书签
   const pdfBookmarks = extractPdfBookmarks(chapters)

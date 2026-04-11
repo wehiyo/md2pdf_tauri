@@ -3,8 +3,8 @@
     <!-- 父节点（章节标题） -->
     <div
       class="chapter-item"
-      :style="{ paddingLeft: level * 12 + 12 + 'px' }"
-      @click="toggleExpand"
+      :style="{ paddingLeft: level * 16 + 12 + 'px' }"
+      @click="handleClick"
     >
       <svg
         v-if="hasChildren"
@@ -18,10 +18,6 @@
         <polyline points="9 18 15 12 9 6"/>
       </svg>
       <span v-else class="no-arrow"></span>
-      <svg class="chapter-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-        <path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/>
-        <path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/>
-      </svg>
       <span class="item-title">{{ chapter.title }}</span>
     </div>
 
@@ -58,12 +54,13 @@ const hasChildren = computed(() => {
   return props.chapter.children && props.chapter.children.length > 0
 })
 
-function toggleExpand() {
+function handleClick() {
+  // 展开/折叠
   if (hasChildren.value) {
     isExpanded.value = !isExpanded.value
   }
-  // 点击时也触发跳转（如果有 ID）
-  if (props.chapter.id) {
+  // 触发跳转（如果有 ID 且有 filePath 表示是可跳转的章节）
+  if (props.chapter.id && props.chapter.filePath) {
     emit('click', props.chapter.id)
   }
 }
@@ -77,16 +74,18 @@ function toggleExpand() {
 .chapter-item {
   display: flex;
   align-items: center;
-  gap: 4px;
-  padding: 6px 12px;
+  gap: 6px;
+  padding: 5px 12px;
   cursor: pointer;
   transition: background-color 0.2s;
-  font-size: 12px;
+  font-size: 13px;
   color: #374151;
+  border-radius: 4px;
+  margin: 1px 4px;
 }
 
 .chapter-item:hover {
-  background-color: #e2e8f0;
+  background-color: #e5e7eb;
 }
 
 .dark .chapter-item {
@@ -98,11 +97,11 @@ function toggleExpand() {
 }
 
 .expand-arrow {
-  width: 12px;
-  height: 12px;
+  width: 14px;
+  height: 14px;
   transition: transform 0.2s;
   flex-shrink: 0;
-  color: #6b7280;
+  color: #9ca3af;
 }
 
 .expand-arrow.expanded {
@@ -110,24 +109,13 @@ function toggleExpand() {
 }
 
 .dark .expand-arrow {
-  color: #9ca3af;
+  color: #6b7280;
 }
 
 .no-arrow {
-  width: 12px;
-  height: 12px;
-  flex-shrink: 0;
-}
-
-.chapter-icon {
   width: 14px;
   height: 14px;
   flex-shrink: 0;
-  color: #3b82f6;
-}
-
-.dark .chapter-icon {
-  color: #60a5fa;
 }
 
 .item-title {
@@ -144,14 +132,5 @@ function toggleExpand() {
 /* 子节点（标题）样式调整 */
 .children .chapter-item {
   font-weight: 400;
-  padding-left: calc(var(--level, 0) * 12px + 24px);
-}
-
-.children .chapter-icon {
-  color: #6b7280;
-}
-
-.dark .children .chapter-icon {
-  color: #9ca3af;
 }
 </style>
