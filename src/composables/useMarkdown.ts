@@ -1127,6 +1127,7 @@ export function useMarkdown() {
     renderBody,
     render,
     renderWithNumberPrefix,
-    renderContentSkipH1
+    renderContentSkipH1,
+    md  // 导出 md 实例供外部解析使用
   }
 }

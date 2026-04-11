@@ -1,7 +1,7 @@
 import { invoke } from '@tauri-apps/api/core'
 import { convertFileSrc } from '@tauri-apps/api/core'
 import { useMarkdown, resetGlobalHeadingIndex, getGlobalHeadingIndex, incrementGlobalHeadingIndex } from './useMarkdown'
-import MarkdownIt from 'markdown-it'
+import type MarkdownIt from 'markdown-it'
 
 // 导出给其他模块使用
 export interface NavChapter {
@@ -173,14 +173,15 @@ function adjustHeadingLevel(originalLevel: number, navLevel: number): number {
 }
 
 /**
- * 从 Markdown 内容提取标题（使用 markdown-it 解析，获取纯文本）
+ * 从 Markdown 内容提取标题（使用与渲染相同的 md 实例解析）
+ * @param content Markdown 内容
+ * @param md markdown-it 实例（与渲染时使用的相同）
  */
-function extractHeadingsFromMd(content: string): { text: string; level: number }[] {
+function extractHeadingsFromMd(content: string, md: MarkdownIt): { text: string; level: number }[] {
   const headings: { text: string; level: number }[] = []
 
-  // 使用简单的 markdown-it 解析获取标题的纯文本内容
-  const tempMd = new MarkdownIt({ html: true })
-  const tokens = tempMd.parse(content, {})
+  // 使用传入的 md 实例解析，确保与渲染时使用相同的配置和规则
+  const tokens = md.parse(content, {})
 
   for (let i = 0; i < tokens.length; i++) {
     if (tokens[i].type === 'heading_open') {
@@ -234,9 +235,9 @@ export function renumberHeadings(chapters: NavChapter[]): BookmarkTreeNode[] {
     // 解析 frontmatter 提取 body（如果有文件）
     let rawHeadings: { text: string; level: number }[] = []
     if (chapter.filePath && chapter.content) {
-      const { parse } = useMarkdown()
+      const { parse, md } = useMarkdown()
       const { body } = parse(chapter.content)
-      rawHeadings = extractHeadingsFromMd(body)
+      rawHeadings = extractHeadingsFromMd(body, md)
     }
 
     // 更新 nav 层级计数器
