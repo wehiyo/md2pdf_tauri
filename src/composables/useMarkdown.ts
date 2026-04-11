@@ -786,6 +786,7 @@ const headingIdMap = new Map<string, string>()
 // MkDocs 组合导出时的外部编号上下文（模块级别）
 let externalNumberPrefix = ''
 let externalNavLevel = 0
+let isMkdocsExportMode = false  // 标识是否处于 MkDocs 组合导出模式
 let globalHeadingIndex = 0
 const chapterCounters = { h2: 0, h3: 0, h4: 0 }
 let lastAdjustedLevel = 0  // 存储最近的调整后层级（用于 heading_close）
@@ -811,7 +812,7 @@ md.renderer.rules.heading_open = (tokens, idx) => {
   }
 
   // 判断是否使用外部编号上下文
-  if (externalNumberPrefix !== '') {
+  if (isMkdocsExportMode) {
     // MkDocs 组合导出模式：使用外部编号上下文
 
     // 调整层级：h1 保持不变，h2+ 下降 navLevel 层
@@ -820,28 +821,33 @@ md.renderer.rules.heading_open = (tokens, idx) => {
       adjustedLevel = Math.min(originalLevel + externalNavLevel, 6)
     }
 
-    // 更新章节内计数器
-    if (adjustedLevel === 2) {
+    // 计数器更新和编号计算基于原始层级（md 内层级）
+    // h1 不计数，h2-h4 计数并生成编号
+    if (originalLevel === 2) {
       chapterCounters.h2++
       chapterCounters.h3 = 0
       chapterCounters.h4 = 0
-    } else if (adjustedLevel === 3) {
+    } else if (originalLevel === 3) {
       chapterCounters.h3++
       chapterCounters.h4 = 0
-    } else if (adjustedLevel === 4) {
+    } else if (originalLevel === 4) {
       chapterCounters.h4++
     }
 
-    // 生成编号（仅 h2-h4 显示编号，总深度不超过 4）
+    // 生成编号（基于原始层级，仅 h2-h4 显示编号，总深度不超过 4）
     let number = ''
     const prefixDepth = externalNumberPrefix.split('.').filter(s => s).length
 
-    if (adjustedLevel >= 2 && adjustedLevel <= 4 && prefixDepth + (adjustedLevel - 1) <= 4) {
-      if (adjustedLevel === 2) {
+    // 编号深度计算：nav 前缀深度 + 原始层级深度 - 1
+    // 例如：nav level 1（前缀深度1），原始 h2 → 总深度 1+1=2 → 编号 "1.1."
+    const numberDepth = prefixDepth + (originalLevel - 1)
+
+    if (originalLevel >= 2 && originalLevel <= 4 && numberDepth <= 4) {
+      if (originalLevel === 2) {
         number = `${externalNumberPrefix}${chapterCounters.h2}. `
-      } else if (adjustedLevel === 3) {
+      } else if (originalLevel === 3) {
         number = `${externalNumberPrefix}${chapterCounters.h2}.${chapterCounters.h3}. `
-      } else if (adjustedLevel === 4) {
+      } else if (originalLevel === 4) {
         number = `${externalNumberPrefix}${chapterCounters.h2}.${chapterCounters.h3}.${chapterCounters.h4}. `
       }
     }
@@ -1037,6 +1043,7 @@ export function useMarkdown() {
     // 设置外部编号上下文
     externalNumberPrefix = numberPrefix
     externalNavLevel = navLevel
+    isMkdocsExportMode = true  // 标记为 MkDocs 组合导出模式
     chapterCounters.h2 = 0
     chapterCounters.h3 = 0
     chapterCounters.h4 = 0
@@ -1071,6 +1078,7 @@ export function useMarkdown() {
       // 清除外部编号上下文
       externalNumberPrefix = ''
       externalNavLevel = 0
+      isMkdocsExportMode = false
       lastAdjustedLevel = 0
     }
   }

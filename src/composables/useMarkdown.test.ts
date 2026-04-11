@@ -390,4 +390,41 @@ title: 完整测试
       expect(result.html).toContain('<h1')
     })
   })
+
+  describe('renderWithNumberPrefix - MkDocs 编号', () => {
+    const { renderWithNumberPrefix } = useMarkdown()
+
+    it('空前缀时 h2 应生成编号', () => {
+      const body = `## First heading
+Some content
+
+## Second heading
+More content`
+      const html = renderWithNumberPrefix(body, '', 0)
+      expect(html).toContain('<span class="heading-number">1. </span>')
+      expect(html).toContain('<span class="heading-number">2. </span>')
+    })
+
+    it('有前缀时 h2 应接续编号', () => {
+      const body = `## First heading
+Some content
+
+## Second heading
+More content`
+      const html = renderWithNumberPrefix(body, '1.', 1)
+      expect(html).toContain('<span class="heading-number">1.1. </span>')
+      expect(html).toContain('<span class="heading-number">1.2. </span>')
+    })
+
+    it('h3 应生成三级编号', () => {
+      const body = `## Section
+Content
+
+### Subsection
+More`
+      const html = renderWithNumberPrefix(body, '', 0)
+      expect(html).toContain('<span class="heading-number">1. </span>')
+      expect(html).toContain('<span class="heading-number">1.1. </span>')
+    })
+  })
 })
