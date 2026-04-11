@@ -124,7 +124,7 @@
   font-size: 85%;
   background-color: #f3f4f6;
   border-radius: 3px;
-  font-family: 'JetBrains Mono', 'Fira Code', Consolas, monospace;
+  font-family: Consolas, 'Courier New', Menlo, monospace;
 }
 
 .markdown-body pre {
@@ -183,7 +183,7 @@
   border-right: 1px solid #e5e7eb;
   color: #9ca3af;
   background-color: transparent;
-  font-family: 'JetBrains Mono', 'Fira Code', Consolas, monospace;
+  font-family: Consolas, 'Courier New', Menlo, monospace;
   font-size: 85%;
   line-height: 1.45;
   user-select: none;
