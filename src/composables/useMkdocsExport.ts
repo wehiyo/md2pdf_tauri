@@ -1,6 +1,7 @@
 import { invoke } from '@tauri-apps/api/core'
 import { convertFileSrc } from '@tauri-apps/api/core'
 import { useMarkdown, resetGlobalHeadingIndex, getGlobalHeadingIndex, incrementGlobalHeadingIndex } from './useMarkdown'
+import MarkdownIt from 'markdown-it'
 
 // 导出给其他模块使用
 export interface NavChapter {
@@ -172,17 +173,24 @@ function adjustHeadingLevel(originalLevel: number, navLevel: number): number {
 }
 
 /**
- * 从 Markdown 内容提取标题（不渲染）
+ * 从 Markdown 内容提取标题（使用 markdown-it 解析，获取纯文本）
  */
 function extractHeadingsFromMd(content: string): { text: string; level: number }[] {
   const headings: { text: string; level: number }[] = []
-  const headingRegex = /^#{1,6}\s+(.+)$/gm
-  let match
 
-  while ((match = headingRegex.exec(content)) !== null) {
-    const level = match[0].match(/^#+/)![0].length
-    const text = match[1].trim()
-    headings.push({ text, level })
+  // 使用简单的 markdown-it 解析获取标题的纯文本内容
+  const tempMd = new MarkdownIt({ html: true })
+  const tokens = tempMd.parse(content, {})
+
+  for (let i = 0; i < tokens.length; i++) {
+    if (tokens[i].type === 'heading_open') {
+      const level = parseInt(tokens[i].tag.substring(1))
+      // 下一个 inline token 包含标题的纯文本内容
+      if (tokens[i + 1] && tokens[i + 1].type === 'inline') {
+        const text = tokens[i + 1].content || ''
+        headings.push({ text, level })
+      }
+    }
   }
 
   return headings
