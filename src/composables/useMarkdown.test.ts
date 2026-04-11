@@ -107,6 +107,13 @@ security level: 内部
       expect(html).not.toContain('data-num')
     })
 
+    it('缩进代码块语法应被禁用', () => {
+      const html = renderBody('    缩进四空格\n    应不是代码块')
+      expect(html).not.toContain('<pre>')
+      expect(html).toContain('<p>')
+      expect(html).toContain('缩进四空格')
+    })
+
     it('应正确渲染行内代码', () => {
       const html = renderBody('这是 `inline code` 代码')
       expect(html).toContain('<code>')

@@ -73,6 +73,9 @@ const md = new MarkdownIt({
   highlight
 })
 
+// 禁用缩进代码块语法（4空格或制表符缩进不再解析为代码块）
+md.block.ruler.disable('code')
+
 // 禁用 typographer 的注册商标转换，避免公式中 (r) 被错误渲染
 // 保留其他排版功能（智能引号、破折号等），同时跳过公式内部
 md.core.ruler.at('replacements', function replacements(state) {
