@@ -45,6 +45,7 @@
         @import-mkdocs="importMkdocs"
         @export-html="exportHTML"
         @export-pdf="exportPDF"
+        @navigate-to-file="navigateToFile"
       />
     </div>
     <ExportProgress />
@@ -667,8 +668,53 @@ async function openFileFromTree(path: string) {
     currentFileDir.value = lastSep > 0 ? path.substring(0, lastSep) : null
     currentFilePath.value = path
     console.log('从文件树打开:', path, '编码:', encoding)
+
+    // 如果有待跳转的锚点，延迟跳转（等待渲染完成）
+    if (pendingAnchor.value) {
+      const anchor = pendingAnchor.value
+      pendingAnchor.value = null
+      await nextTick()
+      setTimeout(() => scrollToAnchor(anchor), 200)
+    }
   } catch (error) {
     await handleError(error, '打开文件')
+  }
+}
+
+// 待跳转的锚点（跨文件链接跳转时使用）
+const pendingAnchor = ref<string | null>(null)
+
+// 处理跨文件链接跳转
+async function navigateToFile(filePath: string, anchor?: string) {
+  // 检查文件是否为 .md 文件
+  if (!filePath.endsWith('.md')) return
+
+  // 保存待跳转的锚点
+  pendingAnchor.value = anchor || null
+
+  // 如果是当前文件，直接跳转到锚点
+  if (currentFilePath.value === filePath) {
+    if (anchor) {
+      await nextTick()
+      scrollToAnchor(anchor)
+    }
+    return
+  }
+
+  // 打开新文件（会检查未保存改动）
+  await openFileFromTree(filePath)
+}
+
+// 跳转到锚点
+function scrollToAnchor(anchor: string) {
+  if (!previewRef.value) return
+
+  const previewContainer = previewRef.value.getScrollContainer()
+  if (!previewContainer) return
+
+  const targetElement = previewContainer.querySelector(`#${CSS.escape(anchor)}`)
+  if (targetElement) {
+    targetElement.scrollIntoView({ behavior: 'smooth', block: 'start' })
   }
 }
 

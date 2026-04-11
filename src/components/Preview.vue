@@ -69,6 +69,7 @@ const emit = defineEmits<{
   'import-mkdocs': []
   'export-html': []
   'export-pdf': []
+  'navigate-to-file': [filePath: string, anchor?: string]
 }>()
 
 const previewRef = ref<HTMLDivElement>()
@@ -125,13 +126,38 @@ function handleLinkClick(event: MouseEvent) {
   if (!link) return
 
   const href = link.getAttribute('href')
-  if (href && href.startsWith('#')) {
+  if (!href) return
+
+  // 处理锚点链接 #section
+  if (href.startsWith('#')) {
     event.preventDefault()
     const targetId = href.slice(1)
     const targetElement = previewRef.value?.querySelector(`#${CSS.escape(targetId)}`)
     if (targetElement) {
       targetElement.scrollIntoView({ behavior: 'smooth', block: 'start' })
     }
+    return
+  }
+
+  // 处理跨文件链接：other.md 或 other.md#section
+  // 支持 ../ 相对路径
+  // 只有在文件模式下才处理（有 fileDir）
+  if (props.fileDir && (href.endsWith('.md') || href.includes('.md#'))) {
+    event.preventDefault()
+
+    // 解析文件路径和锚点
+    const parts = href.split('#')
+    const fileName = parts[0]
+    const anchor = parts.length > 1 ? parts[1] : undefined
+
+    // 构建绝对路径，使用 normalizePath 处理 ../ 相对路径
+    const fileDirNormalized = props.fileDir.replace(/\\/g, '/')
+    const fullPath = fileDirNormalized + '/' + fileName
+    const filePath = normalizePath(fullPath)
+
+    // 触发导航事件
+    emit('navigate-to-file', filePath, anchor)
+    return
   }
 }
 
