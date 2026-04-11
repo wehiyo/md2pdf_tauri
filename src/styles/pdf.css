@@ -46,6 +46,10 @@
     border-collapse: collapse;
   }
 
+  table th {
+    background-color: #c2dfff;
+  }
+
   table th,
   table td {
     border: 1px solid #000;
