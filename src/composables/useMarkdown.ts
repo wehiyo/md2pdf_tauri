@@ -430,17 +430,22 @@ md.renderer.rules.fence = (tokens, idx, _options, _env, _self) => {
   const codeContent = token.content
   const lines = codeContent.split('\n')
 
-  // 解析行号起始值，支持 linenum=100 或 linenum="100" 语法
+  // 解析行号起始值，支持 linenum=xx 或 linenums=xx，带引号或不带引号
+  // 当值为 0 时，不显示行号
   let startLineNum = 1
-  const lineNumMatch = info.match(/linenum=(?:"(\d+)"|(\d+))/)
+  let showLineNumbers = true
+  const lineNumMatch = info.match(/(?:linenum|linenums)=(?:"(\d+)"|(\d+))/i)
   if (lineNumMatch) {
     startLineNum = parseInt(lineNumMatch[1] || lineNumMatch[2], 10)
+    if (startLineNum === 0) {
+      showLineNumbers = false
+    }
   }
 
   // 计算最大行号并确定行号列宽度类
   const maxLineNum = startLineNum + lines.length - 1
   const digitCount = String(maxLineNum).length
-  const widthClass = `line-num-width-${Math.min(digitCount, 5)}`
+  const widthClass = showLineNumbers ? `line-num-width-${Math.min(digitCount, 5)}` : ''
 
   let linesHtml = ''
 
@@ -451,20 +456,23 @@ md.renderer.rules.fence = (tokens, idx, _options, _env, _self) => {
 
       for (let i = 0; i < lineNodes.length; i++) {
         const lineNum = startLineNum + i
-        linesHtml += `<div class="code-line"><span class="line-number" data-num="${lineNum}"></span><span class="code-line-content">${lineNodes[i] || ''}</span></div>\n`
+        const lineNumberHtml = showLineNumbers ? `<span class="line-number" data-num="${lineNum}"></span>` : ''
+        linesHtml += `<div class="code-line">${lineNumberHtml}<span class="code-line-content">${lineNodes[i] || ''}</span></div>\n`
       }
     } catch (__) {
       // 高亮失败，使用普通文本
       lines.forEach((line, i) => {
         const lineNum = startLineNum + i
-        linesHtml += `<div class="code-line"><span class="line-number" data-num="${lineNum}"></span><span class="code-line-content">${escapeHtml(line)}</span></div>\n`
+        const lineNumberHtml = showLineNumbers ? `<span class="line-number" data-num="${lineNum}"></span>` : ''
+        linesHtml += `<div class="code-line">${lineNumberHtml}<span class="code-line-content">${escapeHtml(line)}</span></div>\n`
       })
     }
   } else {
     // 无语言或语言不支持
     lines.forEach((line, i) => {
       const lineNum = startLineNum + i
-      linesHtml += `<div class="code-line"><span class="line-number" data-num="${lineNum}"></span><span class="code-line-content">${escapeHtml(line)}</span></div>\n`
+      const lineNumberHtml = showLineNumbers ? `<span class="line-number" data-num="${lineNum}"></span>` : ''
+      linesHtml += `<div class="code-line">${lineNumberHtml}<span class="code-line-content">${escapeHtml(line)}</span></div>\n`
     })
   }
 

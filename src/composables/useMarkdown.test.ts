@@ -83,6 +83,30 @@ security level: 内部
       expect(html).toContain('language-javascript')
     })
 
+    it('应正确渲染代码块行号 linenum=10', () => {
+      const html = renderBody('```javascript linenum=10\nconst x = 1\nconst y = 2\n```')
+      expect(html).toContain('data-num="10"')
+      expect(html).toContain('data-num="11"')
+    })
+
+    it('应正确渲染代码块行号 linenums=20（带引号）', () => {
+      const html = renderBody('```python linenums="20"\nx = 1\ny = 2\n```')
+      expect(html).toContain('data-num="20"')
+      expect(html).toContain('data-num="21"')
+    })
+
+    it('linenum=0 应不显示行号', () => {
+      const html = renderBody('```javascript linenum=0\nconst x = 1\n```')
+      expect(html).not.toContain('line-number')
+      expect(html).not.toContain('data-num')
+    })
+
+    it('linenums=0 应不显示行号（带引号）', () => {
+      const html = renderBody('```python linenums="0"\nx = 1\n```')
+      expect(html).not.toContain('line-number')
+      expect(html).not.toContain('data-num')
+    })
+
     it('应正确渲染行内代码', () => {
       const html = renderBody('这是 `inline code` 代码')
       expect(html).toContain('<code>')
