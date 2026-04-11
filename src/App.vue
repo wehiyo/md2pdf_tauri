@@ -396,6 +396,10 @@ async function newFile() {
   currentFileDir.value = null
   currentFilePath.value = null
   workState.value = 'file'
+
+  // 清空导航历史
+  navigationHistory.value = []
+  navigationIndex.value = -1
 }
 
 // 打开文件
@@ -433,6 +437,9 @@ async function openFile() {
       currentFilePath.value = selected
       console.log('Opened file:', selected, 'Encoding:', encoding)
       console.log('File directory:', currentFileDir.value)
+
+      // 记录导航历史（打开文件时初始化历史栈）
+      pushNavigationState(selected)
     }
   } catch (error) {
     await handleError(error, '打开文件')
@@ -488,6 +495,10 @@ async function importFolder() {
 
     if (selected && typeof selected === 'string') {
       importedFolderPath.value = selected
+
+      // 清空导航历史（导入新文件夹时重新开始）
+      navigationHistory.value = []
+      navigationIndex.value = -1
 
       // 递归读取文件夹结构
       mdFiles.value = await readFolderRecursive(selected)
@@ -600,6 +611,10 @@ async function importMkdocs() {
       const docsPath = mkdocsPath + '/' + docsDir
 
       importedFolderPath.value = docsPath
+
+      // 清空导航历史（导入新项目时重新开始）
+      navigationHistory.value = []
+      navigationIndex.value = -1
 
       // 从 nav 结构提取 md 文件（保留层级结构）
       if (config.nav && Array.isArray(config.nav)) {
