@@ -791,6 +791,20 @@ let globalHeadingIndex = 0
 const chapterCounters = { h2: 0, h3: 0, h4: 0 }
 let lastAdjustedLevel = 0  // 存储最近的调整后层级（用于 heading_close）
 
+/**
+ * 重置全局标题索引计数器（用于 MkDocs 组合导出）
+ */
+export function resetGlobalHeadingIndex(): void {
+  globalHeadingIndex = 0
+}
+
+/**
+ * 获取当前全局标题索引（用于书签树ID匹配）
+ */
+export function getGlobalHeadingIndex(): number {
+  return globalHeadingIndex
+}
+
 // 将标题文本转为 slug（与 markdown-it-anchor 一致的逻辑）
 function slugify(text: string): string {
   return text

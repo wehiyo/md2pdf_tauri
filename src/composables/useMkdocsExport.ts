@@ -1,6 +1,6 @@
 import { invoke } from '@tauri-apps/api/core'
 import { convertFileSrc } from '@tauri-apps/api/core'
-import { useMarkdown } from './useMarkdown'
+import { useMarkdown, resetGlobalHeadingIndex } from './useMarkdown'
 
 // 导出给其他模块使用
 export interface NavChapter {
@@ -306,10 +306,9 @@ export function renumberHeadings(chapters: NavChapter[]): BookmarkTreeNode[] {
         }
       }
 
-      // 生成调整后的 ID
+      // 生成调整后的 ID - 与 useMarkdown.ts 保持一致
       const baseSlug = slugify(rawHeading.text)
-      const numberPart = chapter.numberPrefix.replace(/\./g, '-')
-      const adjustedId = numberPart ? `${numberPart}-${chapterCounters.h2}-${baseSlug}` : `${chapterCounters.h2}-${baseSlug}`
+      const adjustedId = `heading-${globalHeadingIndex}-${baseSlug}`
 
       const heading: Heading = {
         level: rawHeading.level,
@@ -317,7 +316,7 @@ export function renumberHeadings(chapters: NavChapter[]): BookmarkTreeNode[] {
         id: baseSlug,
         adjustedLevel,
         adjustedNumber,
-        adjustedId: `heading-${globalHeadingIndex}-${adjustedId}`
+        adjustedId
       }
 
       adjustedHeadings.push(heading)
@@ -325,7 +324,7 @@ export function renumberHeadings(chapters: NavChapter[]): BookmarkTreeNode[] {
       // 添加书签子节点（仅显示 h1-h6，但 h5/h6 不显示编号）
       if (adjustedLevel <= 6) {
         chapterBookmarkChildren.push({
-          id: heading.adjustedId,
+          id: adjustedId,  // 使用与HTML一致的ID
           title: adjustedNumber ? `${adjustedNumber}${rawHeading.text}` : rawHeading.text,
           level: chapter.navLevel + adjustedLevel,
           navLevel: chapter.navLevel,
@@ -570,6 +569,7 @@ export async function prepareMkdocsExport(
 
   // 重置计数器
   resetChapterCounters()
+  resetGlobalHeadingIndex()  // 重置 useMarkdown.ts 的计数器
 
   // 收集章节
   const chapters = collectNavChapters(nav, basePath, 0, '')
@@ -580,14 +580,15 @@ export async function prepareMkdocsExport(
   await loadAllMdFiles(chapters)
   console.log('[MkDocs导出] 加载文件后章节:', chapters.filter(c => c.content))
 
-  // 先合并 HTML（设置 htmlId）
+  // 先重新编号标题，生成书签树（从 globalHeadingIndex=0 开始）
+  const bookmarkTree = renumberHeadings(chapters)
+  console.log('[MkDocs导出] 书签树:', bookmarkTree)
+
+  // 重置 useMarkdown.ts 的计数器，然后渲染 HTML（从相同的 globalHeadingIndex=0 开始）
+  resetGlobalHeadingIndex()
   const combinedHtml = combineChaptersToHtml(chapters)
   console.log('[MkDocs导出] combinedHtml 长度:', combinedHtml.length)
   console.log('[MkDocs导出] combinedHtml 前200字符:', combinedHtml.substring(0, 200))
-
-  // 再重新编号标题，生成书签树（使用 htmlId）
-  const bookmarkTree = renumberHeadings(chapters)
-  console.log('[MkDocs导出] 书签树:', bookmarkTree)
 
   // 提取 PDF 书签
   const pdfBookmarks = extractPdfBookmarks(chapters)
