@@ -68,7 +68,8 @@ const emit = defineEmits<{
   'select': [path: string]
 }>()
 
-const isExpanded = ref(true)
+// 文件夹默认关闭
+const isExpanded = ref(false)
 
 function toggleFolder() {
   isExpanded.value = !isExpanded.value
