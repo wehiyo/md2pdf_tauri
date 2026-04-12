@@ -61,11 +61,26 @@
       @confirm="confirmMkdocsExport"
       @cancel="cancelMkdocsExport"
     />
+
+    <!-- 保存确认对话框 -->
+    <Teleport to="body">
+      <div v-if="showSaveConfirmDialog" class="save-confirm-overlay">
+        <div class="save-confirm-dialog">
+          <div class="save-confirm-title">保存确认</div>
+          <div class="save-confirm-message">当前文件有未保存的改动，是否保存？</div>
+          <div class="save-confirm-buttons">
+            <button class="save-btn" @click="handleSaveConfirmYes">保存</button>
+            <button class="discard-btn" @click="handleSaveConfirmNo">不保存</button>
+            <button class="cancel-btn" @click="handleSaveConfirmCancel">取消</button>
+          </div>
+        </div>
+      </div>
+    </Teleport>
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted, onUnmounted, nextTick } from 'vue'
+import { ref, computed, onMounted, onUnmounted, nextTick, watch } from 'vue'
 import Editor from './components/Editor.vue'
 import Preview from './components/Preview.vue'
 import FileTree from './components/FileTree.vue'
@@ -81,7 +96,7 @@ import {
   prepareMkdocsExport,
   type BookmarkTreeNode
 } from './composables/useMkdocsExport'
-import { save, open, message, ask } from '@tauri-apps/plugin-dialog'
+import { save, open, message } from '@tauri-apps/plugin-dialog'
 import { writeTextFile, readDir, readTextFile } from '@tauri-apps/plugin-fs'
 import { invoke } from '@tauri-apps/api/core'
 import { getCurrentWindow } from '@tauri-apps/api/window'
@@ -122,6 +137,10 @@ const currentFileDir = ref<string | null>(null)
 const currentFilePath = ref<string | null>(null)
 const savedContent = ref(defaultContent) // 记录已保存的内容
 const currentMetadata = ref<Metadata>({})
+
+// 保存确认对话框状态
+const showSaveConfirmDialog = ref(false)
+let saveConfirmResolver: ((result: 'save' | 'discard' | 'cancel' | 'none') => void) | null = null
 const { render } = useMarkdown()
 const { exportToPDF } = usePDF()
 const { theme } = useTheme()
@@ -155,6 +174,23 @@ const mkdocsChapters = ref<any[]>([])
 
 // 检测是否有未保存的改动
 const hasUnsavedChanges = computed(() => content.value !== savedContent.value)
+
+// 计算窗口标题
+const windowTitle = computed(() => {
+  if (!currentFilePath.value) {
+    return hasUnsavedChanges.value ? 'MarkRefine*' : 'MarkRefine'
+  }
+  // 提取文件名
+  const lastSep = Math.max(currentFilePath.value.lastIndexOf('/'), currentFilePath.value.lastIndexOf('\\'))
+  const fileName = lastSep > 0 ? currentFilePath.value.substring(lastSep + 1) : currentFilePath.value
+  return hasUnsavedChanges.value ? `${fileName}* - MarkRefine` : `${fileName} - MarkRefine`
+})
+
+// 更新窗口标题
+async function updateWindowTitle() {
+  const win = getCurrentWindow()
+  await win.setTitle(windowTitle.value)
+}
 
 // 滚动容器引用
 const editorScrollContainer = ref<HTMLElement | null>(null)
@@ -453,30 +489,53 @@ function extractH1Title(mdContent: string): string | null {
 }
 
 // 检查未保存改动并提示用户
-async function checkUnsavedChanges(): Promise<boolean> {
-  if (!hasUnsavedChanges.value) return true
+// 返回：'save' - 用户选择保存，'discard' - 用户选择不保存，'cancel' - 用户取消，'none' - 无改动
+async function checkUnsavedChanges(): Promise<'save' | 'discard' | 'cancel' | 'none'> {
+  if (!hasUnsavedChanges.value) return 'none'
 
-  const shouldSave = await ask('当前文件有未保存的改动，是否保存？', {
-    title: '保存确认',
-    kind: 'warning'
+  // 显示自定义保存确认对话框
+  showSaveConfirmDialog.value = true
+
+  // 等待用户选择
+  return new Promise((resolve) => {
+    saveConfirmResolver = resolve
   })
+}
 
-  if (shouldSave) {
-    // 用户选择保存，尝试保存
-    await saveFile()
-    // 即使保存失败（用户取消），也允许继续操作
-    return true
+// 保存确认对话框按钮处理
+function handleSaveConfirmYes() {
+  showSaveConfirmDialog.value = false
+  if (saveConfirmResolver) {
+    saveConfirmResolver('save')
+    saveConfirmResolver = null
   }
+}
 
-  // 用户选择不保存，继续操作
-  return true
+function handleSaveConfirmNo() {
+  showSaveConfirmDialog.value = false
+  if (saveConfirmResolver) {
+    saveConfirmResolver('discard')
+    saveConfirmResolver = null
+  }
+}
+
+function handleSaveConfirmCancel() {
+  showSaveConfirmDialog.value = false
+  if (saveConfirmResolver) {
+    saveConfirmResolver('cancel')
+    saveConfirmResolver = null
+  }
 }
 
 // 新建文件
 async function newFile() {
   // 检查未保存改动
-  const canProceed = await checkUnsavedChanges()
-  if (!canProceed) return
+  const result = await checkUnsavedChanges()
+  if (result === 'cancel') return
+  if (result === 'save') {
+    const saved = await saveFile()
+    if (!saved) return  // 保存失败（用户取消），不继续新建
+  }
 
   content.value = ''
   savedContent.value = ''
@@ -492,8 +551,12 @@ async function newFile() {
 // 打开文件
 async function openFile() {
   // 检查未保存改动
-  const canProceed = await checkUnsavedChanges()
-  if (!canProceed) return
+  const result = await checkUnsavedChanges()
+  if (result === 'cancel') return
+  if (result === 'save') {
+    const saved = await saveFile()
+    if (!saved) return  // 保存失败（用户取消），不继续打开
+  }
 
   try {
     const selected = await open({
@@ -540,7 +603,6 @@ async function saveFile(): Promise<boolean> {
     if (currentFilePath.value) {
       await writeTextFile(currentFilePath.value, content.value)
       savedContent.value = content.value
-      await message('文件保存成功！', { title: '成功', kind: 'info' })
       return true
     }
 
@@ -561,7 +623,6 @@ async function saveFile(): Promise<boolean> {
       const lastSep = Math.max(filePath.lastIndexOf('/'), filePath.lastIndexOf('\\'))
       currentFileDir.value = lastSep > 0 ? filePath.substring(0, lastSep) : null
 
-      await message('文件保存成功！', { title: '成功', kind: 'info' })
       return true
     }
 
@@ -761,8 +822,13 @@ function extractMdFilesFromNav(nav: any[], basePath: string): MdFile[] {
 
 // 从文件树打开文件
 async function openFileFromTree(path: string) {
-  const canProceed = await checkUnsavedChanges()
-  if (!canProceed) return
+  // 检查未保存改动
+  const result = await checkUnsavedChanges()
+  if (result === 'cancel') return
+  if (result === 'save') {
+    const saved = await saveFile()
+    if (!saved) return  // 保存失败（用户取消），不继续打开
+  }
 
   try {
     const [text, encoding] = await invoke<[string, string]>('read_file_with_encoding', { path })
@@ -929,8 +995,13 @@ async function navigateForward() {
 
 // 打开文件但不记录历史（用于返回/前进）
 async function openFileFromTreeNoHistory(path: string) {
-  const canProceed = await checkUnsavedChanges()
-  if (!canProceed) return
+  // 检查未保存改动
+  const result = await checkUnsavedChanges()
+  if (result === 'cancel') return
+  if (result === 'save') {
+    const saved = await saveFile()
+    if (!saved) return  // 保存失败（用户取消），不继续打开
+  }
 
   try {
     const [text, encoding] = await invoke<[string, string]>('read_file_with_encoding', { path })
@@ -988,12 +1059,18 @@ let windowCloseUnlisten: (() => void) | null = null
 // 处理窗口关闭请求
 async function handleCloseRequest() {
   // 检查是否有未保存的改动
-  const canProceed = await checkUnsavedChanges()
-  if (canProceed) {
-    // 用户确认关闭，真正关闭窗口
-    const appWindow = getCurrentWindow()
-    await appWindow.destroy()
+  const result = await checkUnsavedChanges()
+  if (result === 'cancel') return  // 用户取消，不做任何操作
+
+  if (result === 'save') {
+    // 用户选择保存，保存后关闭
+    const saved = await saveFile()
+    if (!saved) return  // 保存失败（用户取消），不关闭
   }
+
+  // 用户选择不保存，或者保存成功，关闭窗口
+  const appWindow = getCurrentWindow()
+  await appWindow.destroy()
 }
 
 // 初始化
@@ -1004,6 +1081,14 @@ onMounted(async () => {
 
   // 监听窗口关闭请求事件（来自 Rust 后端）
   windowCloseUnlisten = await listen('close-requested', handleCloseRequest)
+
+  // 初始化窗口标题
+  updateWindowTitle()
+})
+
+// 监听标题变化，更新窗口标题
+watch(windowTitle, () => {
+  updateWindowTitle()
 })
 
 onUnmounted(() => {
@@ -1077,5 +1162,130 @@ onUnmounted(() => {
 
 .dark .splitter:active {
   background-color: #60a5fa;
+}
+
+/* 保存确认对话框样式 */
+.save-confirm-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background-color: rgba(0, 0, 0, 0.5);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 9999;
+}
+
+.dark .save-confirm-overlay {
+  background-color: rgba(0, 0, 0, 0.7);
+}
+
+.save-confirm-dialog {
+  background-color: #ffffff;
+  border-radius: 8px;
+  padding: 24px;
+  min-width: 320px;
+  max-width: 400px;
+  box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.25);
+}
+
+.dark .save-confirm-dialog {
+  background-color: #1e293b;
+  box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5);
+}
+
+.save-confirm-title {
+  font-size: 18px;
+  font-weight: 600;
+  color: #1e293b;
+  margin-bottom: 12px;
+}
+
+.dark .save-confirm-title {
+  color: #f1f5f9;
+}
+
+.save-confirm-message {
+  font-size: 14px;
+  color: #475569;
+  margin-bottom: 20px;
+}
+
+.dark .save-confirm-message {
+  color: #cbd5e1;
+}
+
+.save-confirm-buttons {
+  display: flex;
+  justify-content: flex-end;
+  gap: 12px;
+}
+
+.save-confirm-buttons .save-btn {
+  padding: 8px 20px;
+  font-size: 14px;
+  font-weight: 500;
+  color: #ffffff;
+  background-color: #3b82f6;
+  border: none;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: background-color 0.2s;
+}
+
+.save-confirm-buttons .save-btn:hover {
+  background-color: #2563eb;
+}
+
+.save-confirm-buttons .discard-btn {
+  padding: 8px 20px;
+  font-size: 14px;
+  font-weight: 500;
+  color: #374151;
+  background-color: #f3f4f6;
+  border: none;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: background-color 0.2s;
+}
+
+.save-confirm-buttons .discard-btn:hover {
+  background-color: #e5e7eb;
+}
+
+.dark .save-confirm-buttons .discard-btn {
+  color: #e2e8f0;
+  background-color: #334155;
+}
+
+.dark .save-confirm-buttons .discard-btn:hover {
+  background-color: #475569;
+}
+
+.save-confirm-buttons .cancel-btn {
+  padding: 8px 20px;
+  font-size: 14px;
+  font-weight: 500;
+  color: #374151;
+  background-color: #f3f4f6;
+  border: none;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: background-color 0.2s;
+}
+
+.save-confirm-buttons .cancel-btn:hover {
+  background-color: #e5e7eb;
+}
+
+.dark .save-confirm-buttons .cancel-btn {
+  color: #e2e8f0;
+  background-color: #334155;
+}
+
+.dark .save-confirm-buttons .cancel-btn:hover {
+  background-color: #475569;
 }
 </style>
