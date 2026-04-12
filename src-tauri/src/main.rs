@@ -12,6 +12,7 @@ use bookmark::inject_bookmarks;
 use pdf_extract::extract_pdf_markers;
 use std::fs;
 use encoding_rs::{UTF_8, GB18030};
+use tauri::Emitter;
 
 /// 读取文件，自动检测编码（支持 UTF-8 和 GB18030）
 /// 返回 (解码后的文本, 检测到的编码名称)
@@ -51,6 +52,14 @@ fn main() {
             extract_pdf_markers,
             read_file_with_encoding
         ])
+        .on_window_event(|window, event| {
+            if let tauri::WindowEvent::CloseRequested { api, .. } = event {
+                // 阻止默认关闭行为，让前端处理
+                api.prevent_close();
+                // 发送事件到前端
+                let _ = window.emit("close-requested", ());
+            }
+        })
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
 }

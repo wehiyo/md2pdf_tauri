@@ -84,6 +84,8 @@ import {
 import { save, open, message, ask } from '@tauri-apps/plugin-dialog'
 import { writeTextFile, readDir, readTextFile } from '@tauri-apps/plugin-fs'
 import { invoke } from '@tauri-apps/api/core'
+import { getCurrentWindow } from '@tauri-apps/api/window'
+import { listen } from '@tauri-apps/api/event'
 import { parse as parseYaml } from 'yaml'
 import katexStyles from './assets/katex/katex-inline.css?raw'
 import highlightStyles from './assets/github.min.css?raw'
@@ -980,15 +982,37 @@ async function initScrollSync() {
   }, 100)
 }
 
+// 窗口关闭事件监听清理函数
+let windowCloseUnlisten: (() => void) | null = null
+
+// 处理窗口关闭请求
+async function handleCloseRequest() {
+  // 检查是否有未保存的改动
+  const canProceed = await checkUnsavedChanges()
+  if (canProceed) {
+    // 用户确认关闭，真正关闭窗口
+    const appWindow = getCurrentWindow()
+    await appWindow.destroy()
+  }
+}
+
 // 初始化
-onMounted(() => {
+onMounted(async () => {
   initScrollSync()
   // 添加滚轮缩放事件监听
   window.addEventListener('wheel', handleWheel, { passive: false })
+
+  // 监听窗口关闭请求事件（来自 Rust 后端）
+  windowCloseUnlisten = await listen('close-requested', handleCloseRequest)
 })
 
 onUnmounted(() => {
   window.removeEventListener('wheel', handleWheel)
+  // 清理关闭事件监听
+  if (windowCloseUnlisten) {
+    windowCloseUnlisten()
+    windowCloseUnlisten = null
+  }
 })
 </script>
 
