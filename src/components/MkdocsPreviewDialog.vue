@@ -80,7 +80,7 @@ const previewRef = ref<HTMLElement | null>(null)
 
 // 对话框尺寸（响应式）
 const dialogWidth = ref('90vw')
-const dialogHeight = ref('85vh')
+const dialogHeight = ref('100vh')
 
 // 书签树宽度
 const treeWidth = ref(250)
