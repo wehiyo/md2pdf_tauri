@@ -145,7 +145,7 @@ function togglePreview() {
 }
 
 .md-editor:deep(textarea.md-editor-input) {
-  font-family: 'JetBrains Mono', 'Fira Code', Consolas, Monaco, monospace;
+  font-family: 'SourceCodePro', Consolas, 'Courier New', Monaco, monospace;
   font-size: 14px;
   line-height: 1.6;
 }

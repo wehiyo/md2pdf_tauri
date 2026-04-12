@@ -5,8 +5,70 @@
     <link rel="icon" type="image/svg+xml" href="/vite.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>MarkRefine - Markdown 编辑器</title>
+    <style>
+      /* 启动加载动画样式 */
+      #splash {
+        position: fixed;
+        top: 0;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        z-index: 9999;
+        transition: opacity 0.3s ease-out;
+      }
+
+      #splash.fade-out {
+        opacity: 0;
+      }
+
+      #splash-logo {
+        font-size: 48px;
+        font-weight: 700;
+        color: #ffffff;
+        letter-spacing: 2px;
+        margin-bottom: 12px;
+        animation: pulse 1.5s ease-in-out infinite;
+      }
+
+      #splash-subtitle {
+        font-size: 18px;
+        color: rgba(255, 255, 255, 0.9);
+        letter-spacing: 8px;
+        margin-bottom: 30px;
+      }
+
+      @keyframes pulse {
+        0%, 100% { opacity: 1; transform: scale(1); }
+        50% { opacity: 0.7; transform: scale(0.98); }
+      }
+
+      #splash-spinner {
+        width: 40px;
+        height: 40px;
+        border: 3px solid rgba(255, 255, 255, 0.3);
+        border-top-color: #ffffff;
+        border-radius: 50%;
+        animation: spin 1s linear infinite;
+      }
+
+      @keyframes spin {
+        to { transform: rotate(360deg); }
+      }
+    </style>
   </head>
   <body>
+    <!-- 启动加载动画 -->
+    <div id="splash">
+      <div id="splash-logo">MarkRefine编辑器</div>
+      <div id="splash-subtitle">Markdown 编辑 浏览 发布</div>
+      <div id="splash-spinner"></div>
+    </div>
+
     <div id="app"></div>
     <script type="module" src="/src/main.ts"></script>
   </body>

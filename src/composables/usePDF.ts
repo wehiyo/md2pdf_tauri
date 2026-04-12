@@ -32,7 +32,6 @@ export function usePDF() {
    */
   async function exportToPDF(htmlContent: string, metadata: Metadata = {}): Promise<void> {
     if (isExporting) {
-      console.log('[诊断] 已有导出任务在进行中，忽略重复调用')
       return
     }
     isExporting = true
@@ -134,15 +133,26 @@ export function usePDF() {
         // WaveDrom 使用 JavaScript 对象字面量语法，使用 JSON5 安全解析
         const data = JSON5.parse(code)
         // 使用 wavedrom 的内部渲染函数生成 SVG
-        const svgContent = wavedrom.renderAny(0, data, wavedrom.waveSkin)
+        // renderAny 返回 SVG 字符串，需要确保有正确的 xmlns 属性
+        let svgContent = wavedrom.renderAny(0, data, wavedrom.waveSkin)
+
+        // 确保 SVG 有 xmlns 属性，否则在某些渲染引擎中可能不显示
+        if (svgContent && !svgContent.includes('xmlns=')) {
+          svgContent = svgContent.replace('<svg', '<svg xmlns="http://www.w3.org/2000/svg"')
+        }
+
+        // 添加内联样式确保正确显示
+        if (svgContent) {
+          // 确保 SVG 有基本的显示样式
+          svgContent = svgContent.replace('<svg', '<svg style="display:block;max-width:100%;height:auto;"')
+        }
+
         result = result.replace(full, `<div class="wavedrom" data-processed="true">${svgContent}</div>`)
-        console.log(`[PDF导出] WaveDrom 时序图 ${i + 1}/${wavedromMatches.length} 渲染完成`)
       } catch (e) {
         handleWarning(e, 'WaveDrom 渲染')
       }
     }
 
-    console.log(`[PDF导出] 图表预渲染完成: ${mermaidMatches.length} Mermaid, ${plantumlMatches.length} PlantUML, ${wavedromMatches.length} WaveDrom`)
     return result
   }
 
@@ -213,10 +223,15 @@ export function usePDF() {
 
       // Step 8: 从 PDF 提取标记位置
       updateStep('提取书签位置...', 3)
-      const markerPositions = await invoke<Array<{ marker: string; page: number; y: number }>>('extract_pdf_markers', {
-        pdfPath: printResult.path,
-        markers: markers
-      })
+      let markerPositions: Array<{ marker: string; page: number; y: number }> = []
+      try {
+        markerPositions = await invoke<Array<{ marker: string; page: number; y: number }>>('extract_pdf_markers', {
+          pdfPath: printResult.path,
+          markers: markers
+        })
+      } catch (extractError) {
+        await handleWarning(extractError, '提取标记位置')
+      }
 
       // Step 9: 构建书签数据
       const bookmarks = headings.map((h, i) => {
@@ -641,6 +656,11 @@ function getFullHtml(title: string, metaHtml: string, content: string): string {
 
     h1, h2, h3, h4 { page-break-after: avoid; }
     pre, blockquote, table, figure, img, svg, .mermaid, .wavedrom { page-break-inside: avoid; }
+
+    /* WaveDrom 时序图样式 */
+    .wavedrom { margin: 1em 0; text-align: center; }
+    .wavedrom svg { max-width: 100%; height: auto; display: block; margin: 0 auto; }
+
     * { -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
   </style>
 </head>

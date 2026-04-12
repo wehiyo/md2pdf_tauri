@@ -1,3 +1,12 @@
+/* 代码字体 */
+@font-face {
+  font-family: 'SourceCodePro';
+  src: url('@/assets/fonts/SourceCodePro-Regular.ttf') format('truetype');
+  font-weight: normal;
+  font-style: normal;
+  font-display: swap;
+}
+
 /* Markdown 基础样式 */
 .markdown-body {
   line-height: 1.6;
@@ -124,7 +133,7 @@
   font-size: 85%;
   background-color: #f3f4f6;
   border-radius: 3px;
-  font-family: Consolas, 'Courier New', Menlo, monospace;
+  font-family: 'SourceCodePro', Consolas, 'Courier New', Menlo, monospace;
 }
 
 .markdown-body pre {
@@ -624,6 +633,17 @@
 
 .markdown-body .plantuml svg {
   max-width: 100%;
+}
+
+/* WaveDrom 时序图 */
+.markdown-body .wavedrom {
+  margin: 1em 0;
+  text-align: center;
+}
+
+.markdown-body .wavedrom svg {
+  max-width: 100%;
+  height: auto;
 }
 
 /* Figure 图片容器 */

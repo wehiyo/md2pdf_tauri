@@ -59,8 +59,8 @@ pub async fn print_to_pdf(
         // 在隐藏窗口中导航并打印
         let result = print_in_hidden_window(&print_window, &html, &save_path).await;
 
-        // 关闭隐藏窗口
-        let _ = print_window.close();
+        // 不关闭窗口，避免中断 IPC 通信
+        // 窗口会在应用退出时自动清理
 
         result
     }
@@ -96,8 +96,8 @@ pub async fn print_to_pdf_with_bookmarks(
         // 在隐藏窗口中导航、提取位置并打印
         let result = print_and_extract_bookmarks(&print_window, &html, &save_path, &heading_ids).await;
 
-        // 关闭隐藏窗口
-        let _ = print_window.close();
+        // 不关闭窗口，避免中断 IPC 通信
+        // 窗口会在应用退出时自动清理
 
         result
     }
@@ -115,7 +115,6 @@ fn create_print_window(app: &AppHandle) -> Result<WebviewWindow, String> {
     let blank_url = Url::parse("about:blank").expect("URL should be valid");
 
     // A4 尺寸 @ 96 DPI: 210mm × 297mm ≈ 794px × 1123px
-    // 使用更大的窗口确保内容正确渲染
     let print_window = tauri::WebviewWindowBuilder::new(
         app,
         "print-window",
@@ -277,13 +276,10 @@ async fn print_and_extract_bookmarks(
     }
 
     // Step 3: 等待图表渲染（Mermaid 和 PlantUML 需要时间）
-    // 增加等待时间确保所有图表渲染完成
     std::thread::sleep(Duration::from_millis(1500));
 
     // Step 4: 执行 JavaScript 获取标题位置
     let bookmarks = extract_bookmark_positions(print_window, heading_ids).await?;
-
-    println!("[PDF书签] 从打印窗口提取到 {} 个位置", bookmarks.len());
 
     // Step 5: 执行打印
     let print_result = print_content(print_window, save_path).await?;
@@ -434,7 +430,6 @@ async fn extract_bookmark_positions(
         .ok_or_else(|| "JavaScript 执行超时".to_string())?;
 
     // ExecuteScript 返回的是 JSON 字符串（带引号），需要先解析
-    // 例如: "\"[{\"title\":\"xxx\"}]\"" -> 需要去掉外层引号
     let json_str: String = serde_json::from_str(&js_result)
         .map_err(|e| format!("解析 JavaScript 结果失败: {} - 原始: {}", e, js_result))?;
 

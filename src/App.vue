@@ -1084,7 +1084,22 @@ onMounted(async () => {
 
   // 初始化窗口标题
   updateWindowTitle()
+
+  // 隐藏启动动画
+  hideSplash()
 })
+
+// 隐藏启动加载动画
+function hideSplash() {
+  const splash = document.getElementById('splash')
+  if (splash) {
+    splash.classList.add('fade-out')
+    // 等待动画完成后移除元素
+    setTimeout(() => {
+      splash.remove()
+    }, 300)
+  }
+}
 
 // 监听标题变化，更新窗口标题
 watch(windowTitle, () => {
@@ -1102,11 +1117,18 @@ onUnmounted(() => {
 </script>
 
 <style scoped>
+/* 应用容器淡入动画 */
 .app-container {
   display: flex;
   flex-direction: column;
   height: 100vh;
   background-color: #f8fafc;
+  animation: fadeIn 0.3s ease-out;
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
 }
 
 .dark .app-container {
