@@ -24,9 +24,37 @@
 </template>
 
 <script setup lang="ts">
-import { useExportProgress } from '../composables/useExportProgress'
+import { onMounted, onUnmounted } from 'vue'
+import { listen, type UnlistenFn } from '@tauri-apps/api/event'
+import { useExportProgress, EXPORT_STEPS } from '../composables/useExportProgress'
 
-const { progress } = useExportProgress()
+const { progress, updateStep } = useExportProgress()
+
+// 监听后端发送的进度事件
+let unlisten: UnlistenFn | null = null
+
+onMounted(async () => {
+  unlisten = await listen<string>('export-progress', (event) => {
+    const stepText = event.payload
+
+    // 根据进度文本更新步骤索引
+    if (stepText.includes('生成 PDF')) {
+      updateStep(EXPORT_STEPS.GENERATE_PDF.text, EXPORT_STEPS.GENERATE_PDF.index)
+    } else if (stepText.includes('提取书签')) {
+      updateStep(EXPORT_STEPS.EXTRACT_BOOKMARKS.text, EXPORT_STEPS.EXTRACT_BOOKMARKS.index)
+    } else if (stepText.includes('注入书签')) {
+      updateStep(EXPORT_STEPS.INJECT_BOOKMARKS.text, EXPORT_STEPS.INJECT_BOOKMARKS.index)
+    } else if (stepText.includes('添加页码')) {
+      updateStep(EXPORT_STEPS.ADD_PAGE_NUMBERS.text, EXPORT_STEPS.ADD_PAGE_NUMBERS.index)
+    }
+  })
+})
+
+onUnmounted(() => {
+  if (unlisten) {
+    unlisten()
+  }
+})
 </script>
 
 <style scoped>

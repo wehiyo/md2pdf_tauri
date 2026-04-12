@@ -7,7 +7,7 @@ use serde::{Deserialize, Serialize};
 use std::sync::{Arc, Mutex};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::Duration;
-use tauri::{WebviewWindow, AppHandle, WebviewUrl};
+use tauri::{WebviewWindow, AppHandle, WebviewUrl, Manager, Emitter};
 use url::Url;
 
 /// 打印结果
@@ -593,4 +593,308 @@ pub async fn check_print_support(window: WebviewWindow) -> Result<bool, String> 
         let _ = window;
         Ok(false)
     }
+}
+
+/// 使用 PrintToPdfStream API 将 PDF 打印到内存流
+#[cfg(windows)]
+async fn print_to_pdf_stream_internal(
+    print_window: &WebviewWindow,
+) -> Result<Vec<u8>, String> {
+    use tauri::webview::PlatformWebview;
+    use webview2_com::Microsoft::Web::WebView2::Win32::*;
+    use windows_core::Interface;
+    use windows::Win32::System::Com::{IStream, STATSTG, STATFLAG_DEFAULT, STREAM_SEEK_SET};
+
+    let result = Arc::new(Mutex::new(None::<Result<Vec<u8>, String>>));
+    let result_clone = result.clone();
+    let completed = Arc::new(AtomicBool::new(false));
+    let completed_clone = completed.clone();
+
+    print_window
+        .with_webview(move |webview: PlatformWebview| {
+            unsafe {
+                let controller = webview.controller();
+                let core_webview = match controller.CoreWebView2() {
+                    Ok(w) => w,
+                    Err(e) => {
+                        *result_clone.lock().unwrap() = Some(Err(format!("无法获取 CoreWebView2: {}", e)));
+                        completed_clone.store(true, Ordering::SeqCst);
+                        return;
+                    }
+                };
+
+                // 使用 ICoreWebView2_16 接口（支持 PrintToPdfStream）
+                let webview_16: ICoreWebView2_16 = match core_webview.cast() {
+                    Ok(w) => w,
+                    Err(e) => {
+                        *result_clone.lock().unwrap() = Some(Err(format!("WebView2 版本不支持 PrintToPdfStream: {}", e)));
+                        completed_clone.store(true, Ordering::SeqCst);
+                        return;
+                    }
+                };
+
+                let environment = webview.environment();
+                let environment_6: ICoreWebView2Environment6 = match environment.cast() {
+                    Ok(e) => e,
+                    Err(e) => {
+                        *result_clone.lock().unwrap() = Some(Err(format!("Environment 版本不支持: {}", e)));
+                        completed_clone.store(true, Ordering::SeqCst);
+                        return;
+                    }
+                };
+
+                let settings: ICoreWebView2PrintSettings = match environment_6.CreatePrintSettings() {
+                    Ok(s) => s,
+                    Err(e) => {
+                        *result_clone.lock().unwrap() = Some(Err(format!("无法创建打印设置: {}", e)));
+                        completed_clone.store(true, Ordering::SeqCst);
+                        return;
+                    }
+                };
+
+                // A4 页面设置
+                settings.SetOrientation(COREWEBVIEW2_PRINT_ORIENTATION(0)).ok();
+                settings.SetPageWidth(8.27).ok();
+                settings.SetPageHeight(11.69).ok();
+                settings.SetMarginTop(0.79).ok();
+                settings.SetMarginBottom(0.79).ok();
+                settings.SetMarginLeft(0.98).ok();
+                settings.SetMarginRight(0.98).ok();
+
+                let result_for_closure = result_clone.clone();
+                let completed_for_closure = completed_clone.clone();
+                let handler = webview2_com::PrintToPdfStreamCompletedHandler::create(
+                    Box::new(move |error_result: windows::core::Result<()>, pdf_stream: Option<IStream>| {
+                        if error_result.is_err() {
+                            *result_for_closure.lock().unwrap() = Some(Err(format!("PrintToPdfStream 失败: {:?}", error_result)));
+                            completed_for_closure.store(true, Ordering::SeqCst);
+                            return Ok(());
+                        }
+
+                        let stream = match pdf_stream {
+                            Some(s) => s,
+                            None => {
+                                *result_for_closure.lock().unwrap() = Some(Err("PrintToPdfStream 返回空流".to_string()));
+                                completed_for_closure.store(true, Ordering::SeqCst);
+                                return Ok(());
+                            }
+                        };
+
+                        // 获取流大小
+                        let mut statstg = STATSTG::default();
+                        if let Err(e) = stream.Stat(&mut statstg, STATFLAG_DEFAULT) {
+                            *result_for_closure.lock().unwrap() = Some(Err(format!("获取 PDF 流大小失败: {}", e)));
+                            completed_for_closure.store(true, Ordering::SeqCst);
+                            return Ok(());
+                        }
+                        let size = statstg.cbSize as usize;
+
+                        // 回到流的起始位置
+                        if let Err(e) = stream.Seek(0, STREAM_SEEK_SET, None) {
+                            *result_for_closure.lock().unwrap() = Some(Err(format!("Seek 失败: {}", e)));
+                            completed_for_closure.store(true, Ordering::SeqCst);
+                            return Ok(());
+                        }
+
+                        // 读取所有数据
+                        let mut buffer = Vec::with_capacity(size);
+                        let chunk_size = 4096u32;
+                        let mut total_read = 0usize;
+
+                        while total_read < size {
+                            let remaining = size - total_read;
+                            let to_read = chunk_size.min(remaining as u32);
+                            let mut chunk = vec![0u8; to_read as usize];
+                            let mut bytes_read = 0u32;
+
+                            let hr = stream.Read(
+                                chunk.as_mut_ptr() as *mut core::ffi::c_void,
+                                to_read,
+                                Some(&mut bytes_read),
+                            );
+
+                            if hr.is_err() || bytes_read == 0 {
+                                break;
+                            }
+
+                            buffer.extend_from_slice(&chunk[..bytes_read as usize]);
+                            total_read += bytes_read as usize;
+                        }
+
+                        *result_for_closure.lock().unwrap() = Some(Ok(buffer));
+                        completed_for_closure.store(true, Ordering::SeqCst);
+                        Ok(())
+                    }),
+                );
+
+                if let Err(e) = webview_16.PrintToPdfStream(&settings, &handler) {
+                    *result_clone.lock().unwrap() = Some(Err(format!("PrintToPdfStream 调用失败: {}", e)));
+                    completed_clone.store(true, Ordering::SeqCst);
+                }
+            }
+        })
+        .map_err(|e| format!("PrintToPdfStream with_webview 错误: {}", e))?;
+
+    // 等待打印完成
+    let start = std::time::Instant::now();
+    let timeout = std::time::Duration::from_secs(60);
+    while !completed.load(Ordering::SeqCst) && start.elapsed() < timeout {
+        std::thread::sleep(std::time::Duration::from_millis(50));
+    }
+
+    let guard = result.lock().unwrap();
+    guard.clone().unwrap_or_else(|| Err("未获取到 PDF 数据".to_string()))
+}
+
+/// 静默打印 HTML 内容到 PDF 内存流，并提取标记位置
+#[tauri::command]
+pub async fn print_to_pdf_stream_with_markers(
+    app: AppHandle,
+    _window: WebviewWindow,
+    html: String,
+    save_path: String,
+    markers: Vec<String>,
+) -> Result<PrintResultWithBookmarks, String> {
+    #[cfg(windows)]
+    {
+        if html.is_empty() {
+            return Err("HTML 内容为空".to_string());
+        }
+        if save_path.is_empty() {
+            return Err("保存路径为空".to_string());
+        }
+
+        // 创建隐藏的打印窗口
+        let print_window = create_print_window(&app)?;
+
+        // 加载 HTML 并打印
+        let result = load_html_and_print_stream(&print_window, &html, &save_path, &markers).await;
+
+        // 不关闭窗口，避免中断 IPC 通信或 WebView2 内部回调
+        // 隐藏窗口在应用退出时会自动清理
+        // 如果需要清理，可以在下次导出时复用或延迟销毁
+
+        result
+    }
+
+    #[cfg(not(windows))]
+    {
+        let _ = (app, window, html, save_path, markers);
+        Err("PDF silent print is only supported on Windows".to_string())
+    }
+}
+
+/// 加载 HTML 并打印到 PDF 流，同时提取标记位置
+#[cfg(windows)]
+async fn load_html_and_print_stream(
+    print_window: &WebviewWindow,
+    html: &str,
+    save_path: &str,
+    markers: &[String],
+) -> Result<PrintResultWithBookmarks, String> {
+    use tauri::webview::PlatformWebview;
+    use windows_core::HSTRING;
+
+    // 获取窗口的 app handle 用于发送事件
+    let app = print_window.app_handle();
+
+    let nav_completed = Arc::new(AtomicBool::new(false));
+    let nav_completed_clone = nav_completed.clone();
+    let html_owned = html.to_string();
+    let error = Arc::new(Mutex::new(None::<String>));
+    let error_clone = error.clone();
+    let error_for_check = error.clone();
+
+    // Step 1: 在隐藏窗口中加载 HTML
+    // 发送进度事件
+    let _ = app.emit("export-progress", "生成 PDF...");
+
+    print_window
+        .with_webview(move |webview: PlatformWebview| {
+            unsafe {
+                let controller = webview.controller();
+                let core_webview = match controller.CoreWebView2() {
+                    Ok(w) => w,
+                    Err(e) => {
+                        *error_clone.lock().unwrap() = Some(format!("无法获取 CoreWebView2: {}", e));
+                        return;
+                    }
+                };
+
+                // 注册 NavigationCompleted 回调
+                let nav_completed_for_callback = nav_completed_clone.clone();
+                let handler = webview2_com::NavigationCompletedEventHandler::create(Box::new(
+                    move |_sender, _args| {
+                        nav_completed_for_callback.store(true, Ordering::SeqCst);
+                        Ok(())
+                    },
+                ));
+
+                let mut token: i64 = 0;
+                if let Err(e) = core_webview.add_NavigationCompleted(&handler, &mut token as *mut i64) {
+                    *error.lock().unwrap() = Some(format!("无法注册导航事件: {}", e));
+                    return;
+                }
+
+                let html_hstring = HSTRING::from(html_owned.as_str());
+                if let Err(e) = core_webview.NavigateToString(&html_hstring) {
+                    *error.lock().unwrap() = Some(format!("NavigateToString 失败: {}", e));
+                    return;
+                }
+            }
+        })
+        .map_err(|e| format!("with_webview 错误: {}", e))?;
+
+    // 检查导航错误
+    if let Some(err) = error_for_check.lock().unwrap().take() {
+        return Err(err);
+    }
+
+    // Step 2: 等待导航完成
+    let start = std::time::Instant::now();
+    let timeout = Duration::from_secs(30);
+
+    while !nav_completed.load(Ordering::SeqCst) && start.elapsed() < timeout {
+        std::thread::sleep(Duration::from_millis(50));
+    }
+
+    if !nav_completed.load(Ordering::SeqCst) {
+        return Err("等待打印窗口渲染超时".to_string());
+    }
+
+    // Step 3: 等待图表渲染（Mermaid 和 PlantUML 需要时间）
+    std::thread::sleep(Duration::from_millis(1500));
+
+    // Step 4: 使用 PrintToPdfStream 获取 PDF bytes
+    // 发送进度事件：提取书签位置
+    let _ = app.emit("export-progress", "提取书签位置...");
+
+    let pdf_bytes = print_to_pdf_stream_internal(print_window).await?;
+
+    // Step 5: 从内存中的 PDF bytes 提取标记位置
+    let bookmark_positions = crate::pdf_extract::extract_marker_positions_from_bytes(&pdf_bytes, markers)?;
+
+    // Step 6: 将 PDF bytes 写入磁盘文件
+    // 发送进度事件：注入书签
+    let _ = app.emit("export-progress", "注入书签...");
+
+    std::fs::write(save_path, &pdf_bytes)
+        .map_err(|e| format!("写入 PDF 文件失败: {}", e))?;
+
+    // 转换为 BookmarkPosition 格式
+    let bookmarks: Vec<BookmarkPosition> = bookmark_positions.iter()
+        .map(|mp| BookmarkPosition {
+            title: mp.marker.clone(),
+            page: mp.page,
+            y: mp.y,
+            level: 0, // 标记文本不包含层级信息，需要从标题 ID 推断
+        })
+        .collect();
+
+    Ok(PrintResultWithBookmarks {
+        success: true,
+        path: save_path.to_string(),
+        error: None,
+        bookmarks,
+    })
 }

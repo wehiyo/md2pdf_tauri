@@ -6,13 +6,13 @@ mod plantuml;
 mod bookmark;
 mod pdf_extract;
 
-use print::{print_to_pdf, print_to_pdf_with_bookmarks, check_print_support};
+use print::{print_to_pdf, print_to_pdf_with_bookmarks, check_print_support, print_to_pdf_stream_with_markers};
 use plantuml::render_plantuml;
 use bookmark::inject_bookmarks;
-use pdf_extract::extract_pdf_markers;
+use pdf_extract::{extract_pdf_markers, extract_pdf_markers_from_bytes};
 use std::fs;
 use encoding_rs::{UTF_8, GB18030};
-use tauri::Emitter;
+use tauri::{Emitter, Manager};
 
 /// 读取文件，自动检测编码（支持 UTF-8 和 GB18030）
 /// 返回 (解码后的文本, 检测到的编码名称)
@@ -50,14 +50,25 @@ fn main() {
             render_plantuml,
             inject_bookmarks,
             extract_pdf_markers,
+            extract_pdf_markers_from_bytes,
+            print_to_pdf_stream_with_markers,
             read_file_with_encoding
         ])
         .on_window_event(|window, event| {
             if let tauri::WindowEvent::CloseRequested { api, .. } = event {
-                // 阻止默认关闭行为，让前端处理
-                api.prevent_close();
-                // 发送事件到前端
-                let _ = window.emit("close-requested", ());
+                // 检查是否是主窗口
+                if window.label() == "main" {
+                    // 清理隐藏的打印窗口（如果存在）
+                    if let Some(print_window) = window.app_handle().get_webview_window("print-window") {
+                        // 使用 destroy 直接销毁，不触发关闭事件
+                        let _ = print_window.destroy();
+                    }
+
+                    // 阻止默认关闭行为，让前端处理
+                    api.prevent_close();
+                    // 发送事件到前端
+                    let _ = window.emit("close-requested", ());
+                }
             }
         })
         .run(tauri::generate_context!())

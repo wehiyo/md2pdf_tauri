@@ -95,7 +95,6 @@ export function usePDF() {
         const id = `mermaid-pdf-${i}`
         const { svg } = await mermaid.render(id, code)
         result = result.replace(full, `<div class="mermaid" data-processed="true">${svg}</div>`)
-        console.log(`[PDF导出] Mermaid 图表 ${i + 1}/${mermaidMatches.length} 渲染完成`)
       } catch (e) {
         handleWarning(e, 'Mermaid 渲染')
       }
@@ -114,7 +113,6 @@ export function usePDF() {
         const content = decodeURIComponent(encoded)
         const svg = await invoke<string>('render_plantuml', { content })
         result = result.replace(full, `<div class="plantuml" data-processed="true">${svg}</div>`)
-        console.log(`[PDF导出] PlantUML 图表 ${i + 1}/${plantumlMatches.length} 渲染完成`)
       } catch (e) {
         handleWarning(e, 'PlantUML 渲染')
       }
@@ -208,12 +206,18 @@ export function usePDF() {
     // Step 6: 创建 HTML 文档
     const fullHtml = getFullHtml(title, metaHtml, contentWithPageBreaks)
 
-    // Step 7: 调用 Rust command 打印 PDF
+    // Step 7: 调用 Rust command 打印 PDF 并提取标记位置（使用内存流优化）
+    // 进度会通过 Tauri 事件推送，前端监听 export-progress 事件
     try {
-      updateStep('生成 PDF...', 2)
-      const printResult = await invoke<{ success: boolean; path: string; error?: string }>('print_to_pdf', {
+      const printResult = await invoke<{
+        success: boolean
+        path: string
+        error?: string
+        bookmarks: Array<{ title: string; page: number; y: number; level: number }>
+      }>('print_to_pdf_stream_with_markers', {
         html: fullHtml,
-        savePath: savePath
+        savePath: savePath,
+        markers: markers
       })
 
       if (!printResult.success) {
@@ -221,31 +225,18 @@ export function usePDF() {
         return
       }
 
-      // Step 8: 从 PDF 提取标记位置
-      updateStep('提取书签位置...', 3)
-      let markerPositions: Array<{ marker: string; page: number; y: number }> = []
-      try {
-        markerPositions = await invoke<Array<{ marker: string; page: number; y: number }>>('extract_pdf_markers', {
-          pdfPath: printResult.path,
-          markers: markers
-        })
-      } catch (extractError) {
-        await handleWarning(extractError, '提取标记位置')
-      }
-
-      // Step 9: 构建书签数据
+      // Step 8: 构建书签数据（使用返回的位置信息）
+      // 进度已通过事件推送为"注入书签..."
       const bookmarks = headings.map((h, i) => {
-        const pos = markerPositions.find(p => p.marker === markers[i])
+        const pos = printResult.bookmarks.find(b => b.title === markers[i])
         return {
           title: h.text,
           level: h.level,
-          page: pos ? pos.page - 2 : 0,
+          page: pos ? pos.page - 2 : 0,  // 减 2 因为封面页和目录页
           y: pos ? pos.y : 700
         }
       })
 
-      // Step 10: 注入书签
-      updateStep('注入书签...', 4)
       if (bookmarks.length > 0) {
         try {
           await invoke<void>('inject_bookmarks', {
@@ -257,7 +248,7 @@ export function usePDF() {
         }
       }
 
-      // Step 11: 添加页码和页眉
+      // Step 9: 添加页码和页眉
       updateStep('添加页码...', 5)
       try {
         const pdfBytes = await readFile(printResult.path)
@@ -444,7 +435,6 @@ async function addPageNumbers(
   }
 
   const savedBytes = await pdfDoc.save()
-  console.log('[PDF] Saved PDF size:', savedBytes.length)
   return savedBytes
 }
 

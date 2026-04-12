@@ -21,7 +21,8 @@ serde_json = "1"
 url = "2"
 
 # PDF 书签注入支持
-lopdf = "0.34"
+# 注意：pdf-extract 使用 lopdf 0.38，这里使用相同版本避免冲突
+lopdf = "0.38"
 
 # PDF 文本提取（支持 ToUnicode CMap 解析）
 pdf-extract = "0.10.0"
