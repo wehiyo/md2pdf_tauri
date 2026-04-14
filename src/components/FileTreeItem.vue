@@ -109,14 +109,6 @@ function selectFile() {
   background-color: #e2e8f0;
 }
 
-.dark .folder-item {
-  color: #e2e8f0;
-}
-
-.dark .folder-item:hover {
-  background-color: #334155;
-}
-
 .folder-arrow {
   width: 12px;
   height: 12px;
@@ -139,14 +131,6 @@ function selectFile() {
   color: #fbbf24;
 }
 
-.dark .folder-icon {
-  color: #fbbf24;
-}
-
-.dark .folder-icon.folder-open {
-  color: #fcd34d;
-}
-
 .file-item {
   display: flex;
   align-items: center;
@@ -162,22 +146,9 @@ function selectFile() {
   background-color: #e2e8f0;
 }
 
-.dark .file-item {
-  color: #e2e8f0;
-}
-
-.dark .file-item:hover {
-  background-color: #334155;
-}
-
 .file-item.active {
   background-color: #dbeafe;
   color: #2563eb;
-}
-
-.dark .file-item.active {
-  background-color: #1e3a5f;
-  color: #60a5fa;
 }
 
 .file-icon {
@@ -187,16 +158,8 @@ function selectFile() {
   color: #6b7280;
 }
 
-.dark .file-icon {
-  color: #9ca3af;
-}
-
 .file-item.active .file-icon {
   color: #2563eb;
-}
-
-.dark .file-item.active .file-icon {
-  color: #60a5fa;
 }
 
 .item-name {

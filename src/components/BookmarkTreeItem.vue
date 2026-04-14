@@ -85,14 +85,6 @@ function handleClick() {
   background-color: #e5e7eb;
 }
 
-.dark .chapter-item {
-  color: #e2e8f0;
-}
-
-.dark .chapter-item:hover {
-  background-color: #334155;
-}
-
 .expand-arrow {
   width: 14px;
   height: 14px;
@@ -103,10 +95,6 @@ function handleClick() {
 
 .expand-arrow.expanded {
   transform: rotate(90deg);
-}
-
-.dark .expand-arrow {
-  color: #6b7280;
 }
 
 .no-arrow {

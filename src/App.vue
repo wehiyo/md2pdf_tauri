@@ -1,6 +1,6 @@
 <template>
   <div class="app-container">
-    <div class="main-content" :style="{ zoom: zoomLevel + '%' }">
+    <div class="main-content" :style="mainContentStyle">
       <FileTree
         v-if="showFileTree"
         :folder-path="importedFolderPath || ''"
@@ -19,7 +19,6 @@
         ref="editorRef"
         v-show="!previewOnlyMode"
         v-model="content"
-        :theme="theme"
         class="editor-pane"
         :style="editorPaneStyle"
         @new-file="newFile"
@@ -89,7 +88,6 @@ import MkdocsPreviewDialog from './components/MkdocsPreviewDialog.vue'
 import { useMarkdown } from './composables/useMarkdown'
 import type { Metadata } from './composables/useMarkdown'
 import { usePDF } from './composables/usePDF'
-import { useTheme } from './composables/useTheme'
 import { useScrollSync } from './composables/useScrollSync'
 import { useErrorHandling } from './composables/useErrorHandling'
 import {
@@ -143,7 +141,6 @@ const showSaveConfirmDialog = ref(false)
 let saveConfirmResolver: ((result: 'save' | 'discard' | 'cancel' | 'none') => void) | null = null
 const { render } = useMarkdown()
 const { exportToPDF } = usePDF()
-const { theme } = useTheme()
 const { handleError } = useErrorHandling()
 const editorRef = ref<InstanceType<typeof Editor>>()
 const previewRef = ref<InstanceType<typeof Preview>>()
@@ -233,6 +230,14 @@ const previewPaneStyle = computed(() => {
     return { display: 'none' }
   }
   return { flex: `${100 - editorWidth.value} 1 0` }
+})
+
+// 计算主内容区域样式（只在缩放时应用 zoom）
+const mainContentStyle = computed(() => {
+  if (zoomLevel.value !== 100) {
+    return { zoom: zoomLevel.value / 100 }
+  }
+  return {}
 })
 
 // 开始拖动分割器
@@ -1084,22 +1089,7 @@ onMounted(async () => {
 
   // 初始化窗口标题
   updateWindowTitle()
-
-  // 隐藏启动动画
-  hideSplash()
 })
-
-// 隐藏启动加载动画
-function hideSplash() {
-  const splash = document.getElementById('splash')
-  if (splash) {
-    splash.classList.add('fade-out')
-    // 等待动画完成后移除元素
-    setTimeout(() => {
-      splash.remove()
-    }, 300)
-  }
-}
 
 // 监听标题变化，更新窗口标题
 watch(windowTitle, () => {
@@ -1117,22 +1107,11 @@ onUnmounted(() => {
 </script>
 
 <style scoped>
-/* 应用容器淡入动画 */
 .app-container {
   display: flex;
   flex-direction: column;
   height: 100vh;
   background-color: #f8fafc;
-  animation: fadeIn 0.3s ease-out;
-}
-
-@keyframes fadeIn {
-  from { opacity: 0; }
-  to { opacity: 1; }
-}
-
-.dark .app-container {
-  background-color: #0f172a;
 }
 
 .main-content {
@@ -1144,16 +1123,12 @@ onUnmounted(() => {
 .editor-pane,
 .preview-pane {
   min-width: 0;
-  overflow: hidden;
   flex-shrink: 0;
 }
 
 .editor-pane {
+  overflow: hidden;
   border-right: none;
-}
-
-.dark .editor-pane {
-  border-right-color: transparent;
 }
 
 /* 分割器样式 */
@@ -1174,18 +1149,6 @@ onUnmounted(() => {
   background-color: #2563eb;
 }
 
-.dark .splitter {
-  background-color: #334155;
-}
-
-.dark .splitter:hover {
-  background-color: #3b82f6;
-}
-
-.dark .splitter:active {
-  background-color: #60a5fa;
-}
-
 /* 保存确认对话框样式 */
 .save-confirm-overlay {
   position: fixed;
@@ -1200,10 +1163,6 @@ onUnmounted(() => {
   z-index: 9999;
 }
 
-.dark .save-confirm-overlay {
-  background-color: rgba(0, 0, 0, 0.7);
-}
-
 .save-confirm-dialog {
   background-color: #ffffff;
   border-radius: 8px;
@@ -1213,11 +1172,6 @@ onUnmounted(() => {
   box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.25);
 }
 
-.dark .save-confirm-dialog {
-  background-color: #1e293b;
-  box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5);
-}
-
 .save-confirm-title {
   font-size: 18px;
   font-weight: 600;
@@ -1225,18 +1179,10 @@ onUnmounted(() => {
   margin-bottom: 12px;
 }
 
-.dark .save-confirm-title {
-  color: #f1f5f9;
-}
-
 .save-confirm-message {
   font-size: 14px;
   color: #475569;
   margin-bottom: 20px;
-}
-
-.dark .save-confirm-message {
-  color: #cbd5e1;
 }
 
 .save-confirm-buttons {
@@ -1277,15 +1223,6 @@ onUnmounted(() => {
   background-color: #e5e7eb;
 }
 
-.dark .save-confirm-buttons .discard-btn {
-  color: #e2e8f0;
-  background-color: #334155;
-}
-
-.dark .save-confirm-buttons .discard-btn:hover {
-  background-color: #475569;
-}
-
 .save-confirm-buttons .cancel-btn {
   padding: 8px 20px;
   font-size: 14px;
@@ -1300,14 +1237,5 @@ onUnmounted(() => {
 
 .save-confirm-buttons .cancel-btn:hover {
   background-color: #e5e7eb;
-}
-
-.dark .save-confirm-buttons .cancel-btn {
-  color: #e2e8f0;
-  background-color: #334155;
-}
-
-.dark .save-confirm-buttons .cancel-btn:hover {
-  background-color: #475569;
 }
 </style>

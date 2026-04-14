@@ -378,10 +378,6 @@ onUpdated(async () => {
   background-color: #ffffff;
 }
 
-.dark .preview-container {
-  background-color: #1e293b;
-}
-
 .preview-body {
   display: flex;
   flex: 1;
@@ -414,11 +410,6 @@ onUpdated(async () => {
   flex-shrink: 0;
 }
 
-.dark .toc-panel {
-  border-left-color: #334155;
-  background-color: #0f172a;
-}
-
 .toc-header {
   display: flex;
   align-items: center;
@@ -428,11 +419,6 @@ onUpdated(async () => {
   font-weight: 600;
   font-size: 14px;
   color: #374151;
-}
-
-.dark .toc-header {
-  border-bottom-color: #334155;
-  color: #e2e8f0;
 }
 
 .toc-close {
@@ -447,10 +433,6 @@ onUpdated(async () => {
 
 .toc-close:hover {
   color: #374151;
-}
-
-.dark .toc-close:hover {
-  color: #e2e8f0;
 }
 
 .toc-content {
@@ -472,14 +454,6 @@ onUpdated(async () => {
 
 .toc-item:hover {
   background-color: #e2e8f0;
-}
-
-.dark .toc-item {
-  color: #9ca3af;
-}
-
-.dark .toc-item:hover {
-  background-color: #1e293b;
 }
 
 .toc-level-1 {

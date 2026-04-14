@@ -35,7 +35,12 @@ export default defineConfig(async () => ({
     minify: !process.env.TAURI_DEBUG ? 'esbuild' : false,
     // produce sourcemaps for debug builds
     sourcemap: !!process.env.TAURI_DEBUG,
+    // Tauri 使用 asset:// 协议，需要相对路径
+    assetsDir: 'assets',
   },
+
+  // Tauri 使用 asset:// 协议加载前端，必须使用相对路径
+  base: './',
 
   // 5. optimize dependencies to handle ESM modules with top-level await
   optimizeDeps: {

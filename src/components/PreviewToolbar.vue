@@ -200,11 +200,6 @@ onUnmounted(() => {
   flex-shrink: 0;
 }
 
-.dark .preview-toolbar {
-  background-color: #1e293b;
-  border-bottom-color: #334155;
-}
-
 .toolbar-left,
 .toolbar-right {
   display: flex;
@@ -252,11 +247,6 @@ onUnmounted(() => {
   background-color: transparent;
 }
 
-.dark .toolbar-btn.nav-btn.disabled,
-.dark .toolbar-btn.nav-btn:disabled {
-  color: #6b7280;
-}
-
 .nav-separator {
   width: 1px;
   height: 20px;
@@ -264,26 +254,9 @@ onUnmounted(() => {
   margin: 0 4px;
 }
 
-.dark .nav-separator {
-  background-color: #334155;
-}
-
-.dark .toolbar-btn {
-  color: #e2e8f0;
-}
-
-.dark .toolbar-btn:hover {
-  background-color: #333;
-}
-
 .toolbar-btn.active {
   background-color: #dbeafe;
   color: #2563eb;
-}
-
-.dark .toolbar-btn.active {
-  background-color: #1e3a5f;
-  color: #60a5fa;
 }
 
 /* 下拉菜单样式 */
@@ -314,12 +287,6 @@ onUnmounted(() => {
   padding: 4px 0;
 }
 
-.dark .dropdown-menu {
-  background-color: #1e293b;
-  border-color: #334155;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
-}
-
 .dropdown-item {
   display: flex;
   align-items: center;
@@ -342,13 +309,5 @@ onUnmounted(() => {
 .dropdown-item svg {
   width: 16px;
   height: 16px;
-}
-
-.dark .dropdown-item {
-  color: #e2e8f0;
-}
-
-.dark .dropdown-item:hover {
-  background-color: #334155;
 }
 </style>

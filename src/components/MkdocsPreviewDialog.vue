@@ -159,10 +159,6 @@ watch(() => props.visible, async (newVal) => {
   z-index: 1000;
 }
 
-.dark .preview-dialog-overlay {
-  background-color: rgba(0, 0, 0, 0.7);
-}
-
 .preview-dialog {
   display: flex;
   flex-direction: column;
@@ -170,11 +166,6 @@ watch(() => props.visible, async (newVal) => {
   border-radius: 8px;
   box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.25);
   overflow: hidden;
-}
-
-.dark .preview-dialog {
-  background-color: #1e293b;
-  box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5);
 }
 
 /* 主内容区域（水平布局） */
@@ -194,22 +185,12 @@ watch(() => props.visible, async (newVal) => {
   min-width: 150px;
 }
 
-.dark .bookmark-tree {
-  background-color: #0f172a;
-  border-right-color: #334155;
-}
-
 .bookmark-tree-header {
   display: flex;
   align-items: center;
   padding: 12px 16px;
   background-color: #e2e8f0;
   border-bottom: 1px solid #cbd5e1;
-}
-
-.dark .bookmark-tree-header {
-  background-color: #334155;
-  border-bottom-color: #475569;
 }
 
 .bookmark-tree-content {
@@ -231,14 +212,6 @@ watch(() => props.visible, async (newVal) => {
   background-color: #3b82f6;
 }
 
-.dark .dialog-divider {
-  background-color: #334155;
-}
-
-.dark .dialog-divider:hover {
-  background-color: #3b82f6;
-}
-
 /* 右侧预览区 */
 .preview-container {
   display: flex;
@@ -255,11 +228,6 @@ watch(() => props.visible, async (newVal) => {
   border-bottom: 1px solid #cbd5e1;
 }
 
-.dark .preview-header {
-  background-color: #334155;
-  border-bottom-color: #475569;
-}
-
 .preview-content {
   flex: 1;
   overflow-y: auto;
@@ -267,18 +235,10 @@ watch(() => props.visible, async (newVal) => {
   background-color: #ffffff;
 }
 
-.dark .preview-content {
-  background-color: #0f172a;
-}
-
 .header-title {
   font-size: 14px;
   font-weight: 600;
   color: #374151;
-}
-
-.dark .header-title {
-  color: #e2e8f0;
 }
 
 /* 底部按钮 */
@@ -290,11 +250,6 @@ watch(() => props.visible, async (newVal) => {
   padding: 16px;
   background-color: #f8fafc;
   border-top: 1px solid #e2e8f0;
-}
-
-.dark .dialog-footer {
-  background-color: #1e293b;
-  border-top-color: #334155;
 }
 
 .confirm-btn {
@@ -328,15 +283,6 @@ watch(() => props.visible, async (newVal) => {
 .cancel-btn:hover {
   background-color: #e5e7eb;
 }
-
-.dark .cancel-btn {
-  color: #e2e8f0;
-  background-color: #334155;
-}
-
-.dark .cancel-btn:hover {
-  background-color: #475569;
-}
 </style>
 
 <style>
@@ -346,9 +292,5 @@ watch(() => props.visible, async (newVal) => {
   font-weight: 600;
   color: #3b82f6;
   margin-right: 0.25em;
-}
-
-.dark .preview-content .markdown-body .heading-number {
-  color: #60a5fa;
 }
 </style>

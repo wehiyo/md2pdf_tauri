@@ -64,11 +64,6 @@ const folderName = computed(() => {
   flex-shrink: 0;
 }
 
-.dark .file-tree {
-  background-color: #1e293b;
-  border-right-color: #334155;
-}
-
 .file-tree-header {
   display: flex;
   align-items: center;
@@ -78,11 +73,6 @@ const folderName = computed(() => {
   border-bottom: 1px solid #cbd5e1;
 }
 
-.dark .file-tree-header {
-  background-color: #334155;
-  border-bottom-color: #475569;
-}
-
 .header-title {
   font-size: 12px;
   font-weight: 600;
@@ -90,10 +80,6 @@ const folderName = computed(() => {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-}
-
-.dark .header-title {
-  color: #e2e8f0;
 }
 
 .close-btn {
@@ -113,15 +99,6 @@ const folderName = computed(() => {
   color: #374151;
 }
 
-.dark .close-btn {
-  color: #94a3b8;
-}
-
-.dark .close-btn:hover {
-  background-color: #475569;
-  color: #e2e8f0;
-}
-
 .close-btn svg {
   width: 14px;
   height: 14px;
@@ -138,9 +115,5 @@ const folderName = computed(() => {
   text-align: center;
   color: #9ca3af;
   font-size: 12px;
-}
-
-.dark .empty-message {
-  color: #6b7280;
 }
 </style>

@@ -5,7 +5,6 @@
       v-model="content"
       :preview="false"
       :htmlPreview="false"
-      :theme="theme"
       :language="language"
       :toolbars="toolbars"
       :scrollAuto="false"
@@ -25,7 +24,6 @@ import 'md-editor-v3/lib/style.css'
 
 const props = defineProps<{
   modelValue: string
-  theme: 'light' | 'dark'
 }>()
 
 const emit = defineEmits<{
@@ -117,34 +115,42 @@ function togglePreview() {
   height: 100%;
   display: flex;
   flex-direction: column;
+  overflow: hidden;
 }
 
-.md-editor {
+.editor-container :deep(.md-editor) {
   height: 100%;
-  flex: 1;
-}
-
-/* 覆盖 md-editor-v3 的默认样式以适配容器 */
-.md-editor:deep(.md-editor) {
-  height: 100%;
+  display: flex;
+  flex-direction: column;
   border: none;
   border-radius: 0;
 }
 
-.md-editor:deep(.md-editor-content) {
+.editor-container :deep(.md-editor-content) {
+  height: 100%;
+  flex: 1;
+  display: flex;
+}
+
+.editor-container :deep(.md-editor-input-wrapper) {
+  height: 100%;
+  flex: 1;
+}
+
+.editor-container :deep(.cm-editor) {
   height: 100%;
 }
 
-.md-editor:deep(.md-editor-input-wrapper) {
-  height: 100%;
+.editor-container :deep(.cm-scroller) {
+  overflow: auto;
 }
 
 /* CodeMirror 滚动区域底部 padding，确保最后几行可见 */
-.md-editor:deep(.cm-scroller) {
+.editor-container :deep(.cm-content) {
   padding-bottom: 80px;
 }
 
-.md-editor:deep(textarea.md-editor-input) {
+.editor-container :deep(textarea.md-editor-input) {
   font-family: 'SourceCodePro', Consolas, 'Courier New', Monaco, monospace;
   font-size: 14px;
   line-height: 1.6;
@@ -156,7 +162,7 @@ function togglePreview() {
 }
 
 /* 确保自定义工具栏按钮与内置按钮样式一致 */
-.md-editor:deep(.md-editor-toolbar-item) {
+.editor-container :deep(.md-editor-toolbar-item) {
   display: inline-flex;
   align-items: center;
   justify-content: center;
