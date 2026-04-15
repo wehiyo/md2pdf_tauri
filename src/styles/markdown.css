@@ -1,16 +1,14 @@
-/* 代码字体 */
-@font-face {
-  font-family: 'SourceCodePro';
-  src: url('@/assets/fonts/SourceCodePro-Regular.ttf') format('truetype');
-  font-weight: normal;
-  font-style: normal;
-  font-display: swap;
-}
-
 /* Markdown 基础样式 */
 .markdown-body {
   line-height: 1.6;
   color: #1f2937;
+  font-family: var(--body-font), sans-serif;
+}
+
+/* 代码字体通过动态注入 */
+.markdown-body code,
+.markdown-body pre {
+  font-family: var(--code-font), monospace;
 }
 
 .markdown-body h1,
@@ -133,7 +131,6 @@
   font-size: 85%;
   background-color: #f3f4f6;
   border-radius: 3px;
-  font-family: 'SourceCodePro', Consolas, 'Courier New', Menlo, monospace;
 }
 
 .markdown-body pre {
@@ -192,7 +189,6 @@
   border-right: 1px solid #e5e7eb;
   color: #9ca3af;
   background-color: transparent;
-  font-family: Consolas, 'Courier New', Menlo, monospace;
   font-size: 85%;
   line-height: 1.45;
   user-select: none;

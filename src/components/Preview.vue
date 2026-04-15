@@ -13,6 +13,7 @@
       @export-pdf="emit('export-pdf')"
       @navigate-back="emit('navigate-back')"
       @navigate-forward="emit('navigate-forward')"
+      @open-settings="showSettings = true"
     />
     <div class="preview-body">
       <div class="preview-content-wrapper">
@@ -44,6 +45,12 @@
         </div>
       </div>
     </div>
+    <SettingsDialog
+      :visible="showSettings"
+      :config="fontConfig"
+      @close="showSettings = false"
+      @save="handleSettingsSave"
+    />
   </div>
 </template>
 
@@ -54,6 +61,9 @@ import wavedrom from 'wavedrom'
 import JSON5 from 'json5'
 import { convertFileSrc, invoke } from '@tauri-apps/api/core'
 import PreviewToolbar from './PreviewToolbar.vue'
+import SettingsDialog from './SettingsDialog.vue'
+import { loadConfig, saveConfig, type FontConfig } from '../composables/useConfig'
+import { loadFonts } from '../composables/useFonts'
 
 interface TocItem {
   id: string
@@ -84,6 +94,23 @@ const emit = defineEmits<{
 const previewRef = ref<HTMLDivElement>()
 const showToc = ref(false)
 const tocItems = ref<TocItem[]>([])
+
+// 字体设置对话框状态
+const showSettings = ref(false)
+const fontConfig = ref<FontConfig>({
+  bodyFont: 'SourceHanSans',
+  codeFont: 'SourceCodePro',
+  bodyCustomFonts: [],
+  codeCustomFonts: []
+})
+
+// 处理设置保存
+async function handleSettingsSave(config: FontConfig) {
+  fontConfig.value = config
+  await saveConfig(config)
+  await loadFonts(config)
+  showSettings.value = false
+}
 
 // 暴露滚动容器
 defineExpose({
@@ -174,8 +201,13 @@ function handleLinkClick(event: MouseEvent) {
   }
 }
 
-// 初始化 Mermaid
-onMounted(() => {
+// 初始化 Mermaid 和字体配置
+onMounted(async () => {
+  // 加载字体配置
+  const config = await loadConfig()
+  fontConfig.value = config
+  await loadFonts(config)
+
   mermaid.initialize({
     startOnLoad: false,
     theme: 'default',
