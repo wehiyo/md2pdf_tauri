@@ -208,7 +208,8 @@ md.renderer.rules.math_inline_bracket = (tokens, idx) => {
 
 // 自定义标题定义列表解析器：支持 #标题作为定义术语
 // 格式：#### Markdown :   定义内容
-md.block.ruler.before('lheading', 'heading_deflist', function heading_deflist(state, startLine, endLine, silent) {
+// 必须在 heading 规则之前运行，否则 heading 规则会先处理标题行
+md.block.ruler.before('heading', 'heading_deflist', function heading_deflist(state, startLine, endLine, silent) {
   const pos = state.bMarks[startLine] + state.tShift[startLine]
   const max = state.eMarks[startLine]
 
@@ -250,7 +251,7 @@ md.block.ruler.before('lheading', 'heading_deflist', function heading_deflist(st
   const nextPos = state.bMarks[nextLine] + state.tShift[nextLine]
   const nextMax = state.eMarks[nextLine]
 
-  // 检查是否以 : 开头（后跟空格或冒号后直接是内容）
+  // 检查是否以 : 开头（后跟空格或 Tab）
   if (nextPos >= nextMax || state.src.charCodeAt(nextPos) !== 0x3A /* : */) {
     return false
   }
@@ -259,10 +260,9 @@ md.block.ruler.before('lheading', 'heading_deflist', function heading_deflist(st
   let defPos = nextPos + 1
   if (defPos < nextMax) {
     const charAfterColon = state.src.charCodeAt(defPos)
-    // 允许冒号后是空格、Tab 或直接开始内容（至少需要一些缩进感）
     if (charAfterColon !== 0x20 /* space */ && charAfterColon !== 0x09 /* tab */) {
-      // 如果冒号后直接是内容，也接受（但通常格式是 ":   内容"）
-      // 这里我们放宽条件，只要冒号后有内容就接受
+      // 冒号后必须有空格或 Tab 才是有效的定义行
+      return false
     }
   }
 
@@ -271,31 +271,12 @@ md.block.ruler.before('lheading', 'heading_deflist', function heading_deflist(st
     return true
   }
 
-  // 开始生成 token
-  // 创建 dl 开始标签
-  let token = state.push('dl_open', 'dl', 1)
-  token.map = [startLine, nextLine]
-
-  // 创建 dt 标签（标题内容）
-  token = state.push('dt_open', 'dt', 1)
-  token.map = [startLine, startLine + 1]
-
-  // 创建 dt 内的 inline 内容
-  token = state.push('inline', '', 0)
-  token.content = titleText
-  token.map = [startLine, startLine + 1]
-  token.children = []
-  state.md.inline.parse(titleText, state.md, state.env, token.children)
-
-  token = state.push('dt_close', 'dt', -1)
-
   // 解析定义内容（可能多行）
-  // 收集定义行
   let defLines: string[] = []
   let currentLine = nextLine
 
   // 获取第一行定义内容（去掉冒号和缩进）
-  let defContent = state.src.substring(defPos, nextMax).trim()
+  let defContent = state.src.substring(defPos, nextMax)
   defLines.push(defContent)
 
   currentLine++
@@ -310,10 +291,10 @@ md.block.ruler.before('lheading', 'heading_deflist', function heading_deflist(st
       break
     }
 
-    // 检查是否是缩进行（以空格或 Tab 开始）
+    // 检查是否是缩进行（以空格或 Tab 开始，且有足够缩进）
     const firstChar = state.src.charCodeAt(linePos)
     if (firstChar === 0x20 /* space */ || firstChar === 0x09 /* tab */) {
-      // 这是续行，添加到定义内容
+      // 这是续行，添加到定义内容（保留缩进）
       const lineContent = state.src.substring(linePos, lineMax)
       defLines.push(lineContent)
       currentLine++
@@ -323,28 +304,77 @@ md.block.ruler.before('lheading', 'heading_deflist', function heading_deflist(st
     }
   }
 
-  // 创建 dd 标签
-  token = state.push('dd_open', 'dd', 1)
-  token.map = [nextLine, currentLine]
-
-  // 创建 dd 内的 inline 内容
+  // 定义文本
   const defText = defLines.join('\n')
-  token = state.push('inline', '', 0)
-  token.content = defText
-  token.map = [nextLine, currentLine]
-  token.children = []
-  state.md.inline.parse(defText, state.md, state.env, token.children)
 
-  token = state.push('dd_close', 'dd', -1)
+  // 使用自定义 token，在渲染阶段处理编号
+  // 这样可以避免 deflist 插件重复处理
+  let token = state.push('heading_deflist_block', '', 0)
+  token.content = JSON.stringify({ level, titleText, defText })
+  token.map = [startLine, currentLine]
 
-  // 创建 dl 结束标签
-  token = state.push('dl_close', 'dl', -1)
-
-  // 更新行位置
+  // 更新行位置（消耗标题行和所有定义行）
   state.line = currentLine
 
   return true
 })
+
+// 自定义渲染规则：处理 heading_deflist_block token
+// 在渲染阶段统一处理编号，确保顺序正确
+md.renderer.rules.heading_deflist_block = (tokens, idx) => {
+  const token = tokens[idx]
+  const data = JSON.parse(token.content)
+  const level = data.level as number
+  const titleText = data.titleText as string
+  const defText = data.defText as string
+
+  // 更新计数器（与 heading_open 渲染规则逻辑一致）
+  let number = ''
+  let numberPrefix = ''
+  if (level === 2) {
+    headingCounters.h2++
+    headingCounters.h3 = 0
+    headingCounters.h4 = 0
+    number = `${headingCounters.h2}. `
+    numberPrefix = `${headingCounters.h2}-`
+  } else if (level === 3) {
+    headingCounters.h3++
+    headingCounters.h4 = 0
+    number = `${headingCounters.h2}.${headingCounters.h3}. `
+    numberPrefix = `${headingCounters.h2}-${headingCounters.h3}-`
+  } else if (level === 4) {
+    headingCounters.h4++
+    number = `${headingCounters.h2}.${headingCounters.h3}.${headingCounters.h4}. `
+    numberPrefix = `${headingCounters.h2}-${headingCounters.h3}-${headingCounters.h4}-`
+  }
+
+  // 生成带编号前缀的 ID
+  const baseSlug = slugify(titleText)
+  const headingId = numberPrefix ? `${numberPrefix}${baseSlug}` : baseSlug
+
+  // 存储映射
+  if (baseSlug) {
+    headingIdMap.set(baseSlug, headingId)
+  }
+
+  // 渲染 inline 内容（处理链接、强调等）
+  const renderInlineContent = (text: string): string => {
+    // 创建临时 markdown-it 实例来渲染 inline 内容
+    // 或者直接处理常见格式
+    return text
+      .replace(/\[([^\]]+)\]\(([^)]+)\)/g, '<a href="$2">$1</a>')
+      .replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>')
+      .replace(/\*([^*]+)\*/g, '<em>$1</em>')
+      .replace(/`([^`]+)`/g, '<code>$1</code>')
+  }
+
+  const headingContent = renderInlineContent(titleText)
+  const ddContent = renderInlineContent(defText)
+
+  // 输出 HTML：标题 + dd（标题已显示术语，不需要 dt）
+  const numberSpan = number ? `<span class="heading-number">${number}</span>` : ''
+  return `<h${level} id="${headingId}">${numberSpan}${headingContent}</h${level}><dd>${ddContent}</dd>`
+}
 
 // 自定义 Admonition 解析器（支持缩进语法和结束标记语法）
 md.block.ruler.before('fence', 'admonition_block', function admonition_block(state, startLine, endLine, silent) {
