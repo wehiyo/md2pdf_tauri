@@ -206,6 +206,146 @@ md.renderer.rules.math_inline_bracket = (tokens, idx) => {
   }
 }
 
+// 自定义标题定义列表解析器：支持 #标题作为定义术语
+// 格式：#### Markdown :   定义内容
+md.block.ruler.before('lheading', 'heading_deflist', function heading_deflist(state, startLine, endLine, silent) {
+  const pos = state.bMarks[startLine] + state.tShift[startLine]
+  const max = state.eMarks[startLine]
+
+  // 检查是否以 # 开头（ATX 标题）
+  if (pos >= max || state.src.charCodeAt(pos) !== 0x23 /* # */) {
+    return false
+  }
+
+  // 计算标题级别
+  let level = 0
+  let p = pos
+  while (p < max && state.src.charCodeAt(p) === 0x23) {
+    level++
+    p++
+  }
+
+  // 标题级别应该是 1-6
+  if (level < 1 || level > 6) {
+    return false
+  }
+
+  // 跳过 # 后的空格
+  while (p < max && state.src.charCodeAt(p) === 0x20 /* space */) {
+    p++
+  }
+
+  // 提取标题文本
+  const titleText = state.src.substring(p, max).trim()
+  if (!titleText) {
+    return false // 空标题不处理
+  }
+
+  // 检查下一行是否是定义行（以 : 开头，后跟空格）
+  const nextLine = startLine + 1
+  if (nextLine >= endLine) {
+    return false // 没有下一行
+  }
+
+  const nextPos = state.bMarks[nextLine] + state.tShift[nextLine]
+  const nextMax = state.eMarks[nextLine]
+
+  // 检查是否以 : 开头（后跟空格或冒号后直接是内容）
+  if (nextPos >= nextMax || state.src.charCodeAt(nextPos) !== 0x3A /* : */) {
+    return false
+  }
+
+  // 检查冒号后是否至少有一个空格或 Tab
+  let defPos = nextPos + 1
+  if (defPos < nextMax) {
+    const charAfterColon = state.src.charCodeAt(defPos)
+    // 允许冒号后是空格、Tab 或直接开始内容（至少需要一些缩进感）
+    if (charAfterColon !== 0x20 /* space */ && charAfterColon !== 0x09 /* tab */) {
+      // 如果冒号后直接是内容，也接受（但通常格式是 ":   内容"）
+      // 这里我们放宽条件，只要冒号后有内容就接受
+    }
+  }
+
+  // 如果是 silent 模式，只做检测，不生成 token
+  if (silent) {
+    return true
+  }
+
+  // 开始生成 token
+  // 创建 dl 开始标签
+  let token = state.push('dl_open', 'dl', 1)
+  token.map = [startLine, nextLine]
+
+  // 创建 dt 标签（标题内容）
+  token = state.push('dt_open', 'dt', 1)
+  token.map = [startLine, startLine + 1]
+
+  // 创建 dt 内的 inline 内容
+  token = state.push('inline', '', 0)
+  token.content = titleText
+  token.map = [startLine, startLine + 1]
+  token.children = []
+  state.md.inline.parse(titleText, state.md, state.env, token.children)
+
+  token = state.push('dt_close', 'dt', -1)
+
+  // 解析定义内容（可能多行）
+  // 收集定义行
+  let defLines: string[] = []
+  let currentLine = nextLine
+
+  // 获取第一行定义内容（去掉冒号和缩进）
+  let defContent = state.src.substring(defPos, nextMax).trim()
+  defLines.push(defContent)
+
+  currentLine++
+
+  // 检查后续行是否是续行（缩进的行）
+  while (currentLine < endLine) {
+    const linePos = state.bMarks[currentLine] + state.tShift[currentLine]
+    const lineMax = state.eMarks[currentLine]
+
+    // 空行结束定义
+    if (linePos >= lineMax) {
+      break
+    }
+
+    // 检查是否是缩进行（以空格或 Tab 开始）
+    const firstChar = state.src.charCodeAt(linePos)
+    if (firstChar === 0x20 /* space */ || firstChar === 0x09 /* tab */) {
+      // 这是续行，添加到定义内容
+      const lineContent = state.src.substring(linePos, lineMax)
+      defLines.push(lineContent)
+      currentLine++
+    } else {
+      // 不是续行，定义结束
+      break
+    }
+  }
+
+  // 创建 dd 标签
+  token = state.push('dd_open', 'dd', 1)
+  token.map = [nextLine, currentLine]
+
+  // 创建 dd 内的 inline 内容
+  const defText = defLines.join('\n')
+  token = state.push('inline', '', 0)
+  token.content = defText
+  token.map = [nextLine, currentLine]
+  token.children = []
+  state.md.inline.parse(defText, state.md, state.env, token.children)
+
+  token = state.push('dd_close', 'dd', -1)
+
+  // 创建 dl 结束标签
+  token = state.push('dl_close', 'dl', -1)
+
+  // 更新行位置
+  state.line = currentLine
+
+  return true
+})
+
 // 自定义 Admonition 解析器（支持缩进语法和结束标记语法）
 md.block.ruler.before('fence', 'admonition_block', function admonition_block(state, startLine, endLine, silent) {
   const pos = state.bMarks[startLine] + state.tShift[startLine]
