@@ -291,14 +291,20 @@ async function loadChineseFont(): Promise<Uint8Array | null> {
   }
 
   try {
-    // 使用 fetch 从 assets 加载字体
-    const fontUrl = new URL('../assets/fonts/SourceHanSansSC-Regular.ttf', import.meta.url)
-    const response = await fetch(fontUrl.href)
-    if (!response.ok) {
-      return null
+    const isDev = import.meta.env.DEV
+    let fontPath: string
+
+    if (isDev) {
+      // 开发模式：从 src-tauri/assets 读取
+      fontPath = 'src-tauri/assets/fonts/SourceHanSansSC-Regular.ttf'
+    } else {
+      // 生产模式：从 resource_dir 读取
+      const resDir = await invoke<string>('get_resource_dir')
+      fontPath = `${resDir}/assets/fonts/SourceHanSansSC-Regular.ttf`
     }
-    const arrayBuffer = await response.arrayBuffer()
-    cachedChineseFont = new Uint8Array(arrayBuffer)
+
+    const fontBytes = await readFile(fontPath)
+    cachedChineseFont = fontBytes
     return cachedChineseFont
   } catch (e) {
     console.warn('加载中文字体失败:', e)

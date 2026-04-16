@@ -222,24 +222,37 @@ md.block.ruler.before('fence', 'admonition_block', function admonition_block(sta
     return false
   }
 
-  const parts = params.split(' ', 2)
-  const admonitionType = parts[0].toLowerCase()
+  // 提取类型（第一个单词）
+  const typeMatch = params.match(/^(\w+)/)
+  if (!typeMatch) {
+    return false
+  }
+  const admonitionType = typeMatch[1].toLowerCase()
 
   // 检查类型是否有效
   if (!ADMONITION_TYPES.includes(admonitionType)) {
     return false
   }
 
-  // 解析标题：支持空标题 "" 表示不显示标题
+  // 解析标题：支持引号括起来的多词标题
   let admonitionTitle = ''
   let showTitle = true
-  if (parts.length > 1) {
-    const titlePart = parts[1]
-    // 检查是否为空标题 "" 或 ""
-    if (titlePart === '""' || titlePart === '"') {
-      showTitle = false
+
+  const remaining = params.substring(typeMatch[0].length).trim()
+
+  if (remaining) {
+    // 检查是否是引号括起来的标题："Title" 或 'Title'
+    const quotedTitleMatch = remaining.match(/^"([^"]*)"|^'([^']*)'/)
+    if (quotedTitleMatch) {
+      const quotedTitle = quotedTitleMatch[1] !== undefined ? quotedTitleMatch[1] : quotedTitleMatch[2]
+      if (quotedTitle === '') {
+        showTitle = false  // 空引号 "" 表示无标题
+      } else {
+        admonitionTitle = quotedTitle
+      }
     } else {
-      admonitionTitle = titlePart
+      // 没有引号，按原方式处理（整个剩余部分作为标题）
+      admonitionTitle = remaining
     }
   } else {
     // 无标题参数时，使用类型作为默认标题

@@ -4,27 +4,40 @@
 
 use std::process::{Command, Stdio};
 use std::io::Write;
+use tauri::{AppHandle, Manager};
+
+// Windows 平台：导入 CommandExt trait 以使用 creation_flags
+#[cfg(windows)]
+use std::os::windows::process::CommandExt;
+
+// Windows 平台隐藏子进程窗口的标志
+#[cfg(windows)]
+const CREATE_NO_WINDOW: u32 = 0x08000000;
 
 /// 渲染 PlantUML 内容为 SVG
 #[tauri::command]
-pub async fn render_plantuml(content: String) -> Result<String, String> {
+pub async fn render_plantuml(app: AppHandle, content: String) -> Result<String, String> {
     // 获取 plantuml.jar 路径
-    // 在开发模式下，jar 文件在 src-tauri/assets/ 目录
-    // 在生产模式下，jar 文件在应用的资源目录
-    let jar_path = get_plantuml_jar_path()?;
+    let jar_path = get_plantuml_jar_path(&app)?;
 
-    // 调用 Java 渲染 PlantUML
-    let mut child = Command::new("java")
-        .arg("-jar")
+    // 构建 Java 命令
+    let mut cmd = Command::new("java");
+    cmd.arg("-jar")
         .arg(&jar_path)
-        .arg("-tsvg")        // 输出 SVG 格式
-        .arg("-pipe")        // 从 stdin 读取内容
+        .arg("-tsvg")
+        .arg("-pipe")
         .arg("-charset")
-        .arg("UTF-8")        // 支持 UTF-8 编码
+        .arg("UTF-8")
         .stdin(Stdio::piped())
         .stdout(Stdio::piped())
-        .stderr(Stdio::piped())
-        .spawn()
+        .stderr(Stdio::piped());
+
+    // Windows 平台：隐藏控制台窗口
+    #[cfg(windows)]
+    cmd.creation_flags(CREATE_NO_WINDOW);
+
+    // 启动进程
+    let mut child = cmd.spawn()
         .map_err(|e| {
             if e.kind() == std::io::ErrorKind::NotFound {
                 "未找到 Java 运行时。请安装 Java 8 或更高版本。\n下载地址: https://www.java.com/download/".to_string()
@@ -56,19 +69,26 @@ pub async fn render_plantuml(content: String) -> Result<String, String> {
 }
 
 /// 获取 plantuml.jar 的路径
-fn get_plantuml_jar_path() -> Result<String, String> {
-    // 尝试多个可能的路径
-    let possible_paths = vec![
-        // 开发模式：相对于当前工作目录
-        "src-tauri/assets/plantuml.jar".to_string(),
-        // 开发模式：相对于可执行文件
-        "./assets/plantuml.jar".to_string(),
+fn get_plantuml_jar_path(app: &AppHandle) -> Result<String, String> {
+    // 尝试开发模式的路径
+    let dev_paths = [
+        "src-tauri/assets/plantuml.jar",
+        "./assets/plantuml.jar",
     ];
 
-    for path in possible_paths {
-        if std::path::Path::new(&path).exists() {
-            return Ok(path);
+    for path in dev_paths {
+        if std::path::Path::new(path).exists() {
+            return Ok(path.to_string());
         }
+    }
+
+    // 生产模式：使用 resource_dir
+    let resource_dir = app.path().resource_dir()
+        .map_err(|e| format!("获取资源目录失败: {}", e))?;
+
+    let jar_path = resource_dir.join("assets/plantuml.jar");
+    if jar_path.exists() {
+        return Ok(jar_path.to_string_lossy().to_string());
     }
 
     Err("未找到 plantuml.jar 文件".to_string())
