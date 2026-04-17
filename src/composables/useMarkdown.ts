@@ -246,35 +246,65 @@ md.block.ruler.before('heading', 'heading_deflist', function heading_deflist(sta
     return true
   }
 
-  // 解析定义内容（可能多行）
+  // 定义文本：收集所有同样缩进的内容，包括代码块、表格等
+  // 参考 markdown-it-deflist 的处理逻辑
+
+  // 计算定义内容的缩进量（冒号后的空格/tab数量）
+  // 标准格式是 ":    内容"，有4个空格缩进
+  let defIndent = 0
+  let indentPos = defPos
+  while (indentPos < nextMax && state.src.charCodeAt(indentPos) === 0x20) {
+    defIndent++
+    indentPos++
+  }
+  // 如果没有空格，至少假设有1个（冒号后直接是内容）
+  if (defIndent === 0 && indentPos < nextMax && state.src.charCodeAt(indentPos) !== 0x0A) {
+    defIndent = 1
+  }
+
+  // 收集定义内容行
   let defLines: string[] = []
   let currentLine = nextLine
 
-  // 获取第一行定义内容（去掉冒号和缩进）
-  let defContent = state.src.substring(defPos, nextMax)
-  defLines.push(defContent)
+  // 获取第一行定义内容（去掉冒号后的缩进空格）
+  // 注意：保留内容的原始格式，只去掉定义缩进
+  let firstLineStart = defPos
+  // 跳过缩进空格（但保留其他内容）
+  while (firstLineStart < nextMax && state.src.charCodeAt(firstLineStart) === 0x20) {
+    firstLineStart++
+  }
+  let firstLineContent = state.src.substring(firstLineStart, nextMax)
+  defLines.push(firstLineContent)
 
   currentLine++
 
-  // 检查后续行是否是续行（缩进的行）
+  // 检查后续行：必须保持至少与定义相同的缩进
+  // 续行去掉定义缩进量，保留相对缩进（用于代码块等）
   while (currentLine < endLine) {
-    const linePos = state.bMarks[currentLine] + state.tShift[currentLine]
-    const lineMax = state.eMarks[currentLine]
+    // 获取行的原始起始位置（包含缩进空格）
+    const lineOrigStart = state.bMarks[currentLine]
+    const lineStart = lineOrigStart + state.tShift[currentLine]  // 去掉缩进后的内容起始
+    const lineEnd = state.eMarks[currentLine]
 
-    // 空行结束定义
-    if (linePos >= lineMax) {
-      break
+    // 空行处理：空行也是定义的一部分（特别是在代码块中）
+    if (lineStart >= lineEnd) {
+      defLines.push('')
+      currentLine++
+      continue
     }
 
-    // 检查是否是缩进行（以空格或 Tab 开始，且有足够缩进）
-    const firstChar = state.src.charCodeAt(linePos)
-    if (firstChar === 0x20 /* space */ || firstChar === 0x09 /* tab */) {
-      // 这是续行，添加到定义内容（保留缩进）
-      const lineContent = state.src.substring(linePos, lineMax)
+    // 使用 tShift 作为原始缩进量
+    const lineIndent = state.tShift[currentLine]
+
+    // 缩进量必须 >= 定义缩进量才能作为续行
+    if (lineIndent >= defIndent) {
+      // 从原始位置移除定义缩进量的空格，保留相对缩进
+      const contentStart = lineOrigStart + defIndent
+      const lineContent = state.src.substring(contentStart, lineEnd)
       defLines.push(lineContent)
       currentLine++
     } else {
-      // 不是续行，定义结束
+      // 缩进不足，定义结束
       break
     }
   }
@@ -282,10 +312,28 @@ md.block.ruler.before('heading', 'heading_deflist', function heading_deflist(sta
   // 定义文本
   const defText = defLines.join('\n')
 
+  // 使用 markdown-it 解析定义内容（支持代码块、表格等）
+  const defMd = new MarkdownIt({
+    html: true,
+    linkify: true,
+    typographer: true,
+    highlight
+  })
+  defMd.use(footnote)
+  defMd.use(sup)
+  defMd.use(sub)
+  defMd.use(abbr)
+  defMd.use(deflist)
+  defMd.use(emoji)
+
+  // 解析定义内容并渲染
+  const defHtml = defMd.render(defText)
+
   // 使用自定义 token，在渲染阶段处理编号
   // 这样可以避免 deflist 插件重复处理
+  // 存储 defHtml 而不是 defText，因为内容已经解析完成
   let token = state.push('heading_deflist_block', '', 0)
-  token.content = JSON.stringify({ level, titleText, defText })
+  token.content = JSON.stringify({ level, titleText, defHtml })
   token.map = [startLine, currentLine]
 
   // 更新行位置（消耗标题行和所有定义行）
@@ -301,7 +349,7 @@ md.renderer.rules.heading_deflist_block = (tokens, idx) => {
   const data = JSON.parse(token.content)
   const level = data.level as number
   const titleText = data.titleText as string
-  const defText = data.defText as string
+  const defHtml = data.defHtml as string
 
   // 更新计数器（与 heading_open 渲染规则逻辑一致）
   let number = ''
@@ -332,23 +380,16 @@ md.renderer.rules.heading_deflist_block = (tokens, idx) => {
     headingIdMap.set(baseSlug, headingId)
   }
 
-  // 渲染 inline 内容（处理链接、强调等）
-  const renderInlineContent = (text: string): string => {
-    // 创建临时 markdown-it 实例来渲染 inline 内容
-    // 或者直接处理常见格式
-    return text
-      .replace(/\[([^\]]+)\]\(([^)]+)\)/g, '<a href="$2">$1</a>')
-      .replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>')
-      .replace(/\*([^*]+)\*/g, '<em>$1</em>')
-      .replace(/`([^`]+)`/g, '<code>$1</code>')
-  }
-
-  const headingContent = renderInlineContent(titleText)
-  const ddContent = renderInlineContent(defText)
+  // 渲染标题 inline 内容（处理链接、强调等）
+  const headingContent = titleText
+    .replace(/\[([^\]]+)\]\(([^)]+)\)/g, '<a href="$2">$1</a>')
+    .replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>')
+    .replace(/\*([^*]+)\*/g, '<em>$1</em>')
+    .replace(/`([^`]+)`/g, '<code>$1</code>')
 
   // 输出 HTML：标题 + dd（标题已显示术语，不需要 dt）
   const numberSpan = number ? `<span class="heading-number">${number}</span>` : ''
-  return `<h${level} id="${headingId}">${numberSpan}${headingContent}</h${level}><dd>${ddContent}</dd>`
+  return `<h${level} id="${headingId}">${numberSpan}${headingContent}</h${level}><dd>${defHtml}</dd>`
 }
 
 // 自定义 Admonition 解析器（支持缩进语法和结束标记语法）
