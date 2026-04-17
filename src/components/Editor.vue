@@ -84,9 +84,7 @@ const toolbars: ToolbarNames[] = [
   'revoke',
   'next',
   '=',
-  3,  // 切换预览（最后）
-  'pageFullscreen',
-  'fullscreen'
+  3  // 切换预览（最后）
 ]
 
 // 新建文件
