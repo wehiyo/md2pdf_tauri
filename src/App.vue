@@ -518,6 +518,8 @@ function handleSaveConfirmYes() {
 
 function handleSaveConfirmNo() {
   showSaveConfirmDialog.value = false
+  // 同步 savedContent，避免后续再次触发保存确认
+  savedContent.value = content.value
   if (saveConfirmResolver) {
     saveConfirmResolver('discard')
     saveConfirmResolver = null
