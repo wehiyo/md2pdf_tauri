@@ -640,6 +640,14 @@ async function saveFile(): Promise<boolean> {
 
 // 导入文件夹（递归读取子文件夹）
 async function importFolder() {
+  // 检查未保存改动
+  const result = await checkUnsavedChanges()
+  if (result === 'cancel') return
+  if (result === 'save') {
+    const saved = await saveFile()
+    if (!saved) return  // 保存失败（用户取消），不继续导入
+  }
+
   try {
     const selected = await open({
       directory: true,
@@ -747,6 +755,14 @@ function findFirstMdFilePath(files: MdFile[]): string | null {
 
 // 导入 Mkdocs（解析完整导航结构）
 async function importMkdocs() {
+  // 检查未保存改动
+  const result = await checkUnsavedChanges()
+  if (result === 'cancel') return
+  if (result === 'save') {
+    const saved = await saveFile()
+    if (!saved) return  // 保存失败（用户取消），不继续导入
+  }
+
   try {
     const selected = await open({
       multiple: false,
