@@ -76,20 +76,21 @@ const md = new MarkdownIt({
 // 禁用缩进代码块语法（4空格或制表符缩进不再解析为代码块）
 md.block.ruler.disable('code')
 
-// 禁用 typographer 的注册商标转换，避免公式中 (r) 被错误渲染
-// 保留其他排版功能（智能引号、破折号等），同时跳过公式内部
+// 禁用 typographer 的商标符号转换，避免公式中 (r) 等被错误渲染
+// 保留其他排版功能（智能引号、破折号等）
 md.core.ruler.at('replacements', function replacements(state) {
   const typographerReplacements = [
     ['+-', '±'],
     ['...', '…'],
     ['--', '–'],
-    ['---', '—'],
-    ['(c)', '©'],
-    ['(r)', '®'],
-    ['(tm)', '™'],
-    ['(C)', '©'],
-    ['(R)', '®'],
-    ['(TM)', '™']
+    ['---', '—']
+    // 移除商标符号替换：(c), (r), (tm) 等可能出现在公式中
+    // ['(c)', '©'],
+    // ['(r)', '®'],
+    // ['(tm)', '™'],
+    // ['(C)', '©'],
+    // ['(R)', '®'],
+    // ['(TM)', '™']
   ]
 
   for (let i = 0; i < state.tokens.length; i++) {
@@ -100,38 +101,12 @@ md.core.ruler.at('replacements', function replacements(state) {
       const token = block.children[j]
       if (token.type !== 'text') continue
 
-      // 跳过公式内部的内容：检查是否在 $...$ 或 \(...\) 范围内
-      // 方法：临时保护公式内容，执行替换后恢复
       let content = token.content
-
-      // 先提取并保护 $...$ 格式的公式
-      const dollarFormulaRanges: { start: number; end: number; content: string }[] = []
-      content = content.replace(/\$([^$]+)\$/g, (match, _formula, offset) => {
-        dollarFormulaRanges.push({ start: offset, end: offset + match.length, content: match })
-        return `\x00DOLLAR${dollarFormulaRanges.length - 1}\x00`
-      })
-
-      // 提取并保护 \(...\) 格式的公式
-      const bracketFormulaRanges: { start: number; end: number; content: string }[] = []
-      content = content.replace(/\\\([^)]+\\\)/g, (match, offset) => {
-        bracketFormulaRanges.push({ start: offset, end: offset + match.length, content: match })
-        return `\x00BRACKET${bracketFormulaRanges.length - 1}\x00`
-      })
 
       // 执行 typographer 替换
       for (const [pattern, replacement] of typographerReplacements) {
         content = content.replace(pattern, replacement)
       }
-
-      // 恢复 $...$ 公式
-      content = content.replace(/\x00DOLLAR(\d+)\x00/g, (_, idx) => {
-        return dollarFormulaRanges[parseInt(idx)].content
-      })
-
-      // 恢复 \(...\) 公式
-      content = content.replace(/\x00BRACKET(\d+)\x00/g, (_, idx) => {
-        return bracketFormulaRanges[parseInt(idx)].content
-      })
 
       token.content = content
     }
