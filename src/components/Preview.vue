@@ -60,6 +60,7 @@ import mermaid from 'mermaid'
 import wavedrom from 'wavedrom'
 import JSON5 from 'json5'
 import { convertFileSrc, invoke } from '@tauri-apps/api/core'
+import { open } from '@tauri-apps/plugin-shell'
 import PreviewToolbar from './PreviewToolbar.vue'
 import SettingsDialog from './SettingsDialog.vue'
 import { loadConfig, saveConfig, type FontConfig } from '../composables/useConfig'
@@ -163,6 +164,13 @@ function handleLinkClick(event: MouseEvent) {
 
   const href = link.getAttribute('href')
   if (!href) return
+
+  // 处理外部链接（http/https）：在系统浏览器中打开
+  if (href.startsWith('http://') || href.startsWith('https://')) {
+    event.preventDefault()
+    open(href)
+    return
+  }
 
   // 处理锚点链接 #section
   if (href.startsWith('#')) {
