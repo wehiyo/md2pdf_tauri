@@ -2,6 +2,7 @@ import { message, save } from '@tauri-apps/plugin-dialog'
 import { PDFDocument, StandardFonts, rgb } from 'pdf-lib'
 import { readFile, writeFile } from '@tauri-apps/plugin-fs'
 import { invoke } from '@tauri-apps/api/core'
+import { join } from '@tauri-apps/api/path'
 import fontkit from '@pdf-lib/fontkit'
 import mermaid from 'mermaid'
 import wavedrom from 'wavedrom'
@@ -291,17 +292,10 @@ async function loadChineseFont(): Promise<Uint8Array | null> {
   }
 
   try {
-    const isDev = import.meta.env.DEV
-    let fontPath: string
-
-    if (isDev) {
-      // 开发模式：从 src-tauri/assets 读取
-      fontPath = 'src-tauri/assets/fonts/SourceHanSansSC-Regular.ttf'
-    } else {
-      // 生产模式：从 resource_dir 读取
-      const resDir = await invoke<string>('get_resource_dir')
-      fontPath = `${resDir}/assets/fonts/SourceHanSansSC-Regular.ttf`
-    }
+    // 始终使用 get_resource_dir 获取资源目录
+    const resDir = await invoke<string>('get_resource_dir')
+    // 使用 Tauri path API 正确拼接路径
+    const fontPath = await join(resDir, 'assets', 'fonts', 'SourceHanSansSC-Regular.ttf')
 
     const fontBytes = await readFile(fontPath)
     cachedChineseFont = fontBytes
