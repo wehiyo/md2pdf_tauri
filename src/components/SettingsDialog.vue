@@ -26,6 +26,12 @@
                 </svg>
               </button>
             </div>
+            <div v-if="localConfig.bodyCustomFonts?.length > 0" class="custom-fonts-inline">
+              <div v-for="font in localConfig.bodyCustomFonts" :key="font.id" class="custom-font-inline-item">
+                <span class="font-name">{{ font.name }}</span>
+                <button class="remove-inline-btn" title="移除" @click="removeCustomFont(font.id, 'body')">×</button>
+              </div>
+            </div>
           </div>
           <div class="settings-item">
             <label>代码字体</label>
@@ -49,23 +55,10 @@
                 </svg>
               </button>
             </div>
-          </div>
-          <div class="settings-item" v-if="localConfig.bodyCustomFonts?.length > 0 || localConfig.codeCustomFonts?.length > 0">
-            <label>已添加的字体</label>
-            <div class="custom-fonts-list">
-              <div v-if="localConfig.bodyCustomFonts?.length > 0" class="custom-fonts-group">
-                <div class="group-label">正文</div>
-                <div v-for="font in localConfig.bodyCustomFonts" :key="font.id" class="custom-font-item">
-                  <span>{{ font.name }}</span>
-                  <button class="remove-btn" @click="removeCustomFont(font.id, 'body')">移除</button>
-                </div>
-              </div>
-              <div v-if="localConfig.codeCustomFonts?.length > 0" class="custom-fonts-group">
-                <div class="group-label">代码</div>
-                <div v-for="font in localConfig.codeCustomFonts" :key="font.id" class="custom-font-item">
-                  <span>{{ font.name }}</span>
-                  <button class="remove-btn" @click="removeCustomFont(font.id, 'code')">移除</button>
-                </div>
+            <div v-if="localConfig.codeCustomFonts?.length > 0" class="custom-fonts-inline">
+              <div v-for="font in localConfig.codeCustomFonts" :key="font.id" class="custom-font-inline-item">
+                <span class="font-name">{{ font.name }}</span>
+                <button class="remove-inline-btn" title="移除" @click="removeCustomFont(font.id, 'code')">×</button>
               </div>
             </div>
           </div>
@@ -324,52 +317,43 @@ function selectFont(font: CustomFont) {
   stroke: #64748b;
 }
 
-.custom-fonts-list {
+.custom-fonts-inline {
   display: flex;
-  flex-direction: column;
-  gap: 12px;
-}
-
-.custom-fonts-group {
-  display: flex;
-  flex-direction: column;
+  flex-wrap: wrap;
   gap: 6px;
+  margin-top: 8px;
 }
 
-.group-label {
-  font-size: 12px;
-  color: #64748b;
-  font-weight: 500;
-  padding-left: 4px;
-}
-
-.custom-font-item {
+.custom-font-inline-item {
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  padding: 8px 12px;
-  background-color: #f3f4f6;
-  border-radius: 6px;
-}
-
-.custom-font-item span {
-  font-size: 14px;
-  color: #374151;
-}
-
-.remove-btn {
-  padding: 4px 12px;
-  font-size: 12px;
-  color: #dc2626;
-  background-color: transparent;
-  border: 1px solid #dc2626;
+  padding: 4px 8px;
+  background-color: #f1f5f9;
   border-radius: 4px;
-  cursor: pointer;
+  font-size: 13px;
 }
 
-.remove-btn:hover {
-  background-color: #dc2626;
-  color: #fff;
+.custom-font-inline-item .font-name {
+  color: #475569;
+}
+
+.remove-inline-btn {
+  margin-left: 6px;
+  width: 18px;
+  height: 18px;
+  border: none;
+  background-color: transparent;
+  color: #94a3b8;
+  font-size: 16px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: color 0.2s;
+}
+
+.remove-inline-btn:hover {
+  color: #dc2626;
 }
 
 .settings-footer {
