@@ -5,11 +5,13 @@ mod print;
 mod plantuml;
 mod bookmark;
 mod pdf_extract;
+mod font_subset;
 
 use print::{print_to_pdf, print_to_pdf_with_bookmarks, check_print_support, print_to_pdf_stream_with_markers};
 use plantuml::render_plantuml;
 use bookmark::inject_bookmarks;
 use pdf_extract::{extract_pdf_markers, extract_pdf_markers_from_bytes};
+use font_subset::subset_chinese_font;
 use std::fs;
 use encoding_rs::{UTF_8, GB18030};
 use tauri::{Emitter, Manager, AppHandle};
@@ -135,7 +137,8 @@ fn main() {
             read_file_with_encoding,
             get_resource_dir,
             get_config_dir,
-            scan_fonts_dir
+            scan_fonts_dir,
+            subset_chinese_font
         ])
         .on_window_event(|window, event| {
             if let tauri::WindowEvent::CloseRequested { api, .. } = event {

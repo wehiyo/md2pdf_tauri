@@ -27,6 +27,9 @@ lopdf = "0.38"
 # PDF 文本提取（支持 ToUnicode CMap 解析）
 pdf-extract = "0.10.0"
 
+# 字体子集化支持
+fontcull = "2.0.1"
+
 # 文件编码支持（GB18030 等）
 encoding_rs = "0.8"
 

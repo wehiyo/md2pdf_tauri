@@ -2,7 +2,6 @@ import { message, save } from '@tauri-apps/plugin-dialog'
 import { PDFDocument, StandardFonts, rgb } from 'pdf-lib'
 import { readFile, writeFile } from '@tauri-apps/plugin-fs'
 import { invoke } from '@tauri-apps/api/core'
-import { join } from '@tauri-apps/api/path'
 import fontkit from '@pdf-lib/fontkit'
 import mermaid from 'mermaid'
 import wavedrom from 'wavedrom'
@@ -10,9 +9,6 @@ import JSON5 from 'json5'
 import type { Metadata } from './useMarkdown'
 import { useExportProgress } from './useExportProgress'
 import { useErrorHandling } from './useErrorHandling'
-
-// 字体缓存
-let cachedChineseFont: Uint8Array | null = null
 
 // Mermaid 初始化标志
 let mermaidInitialized = false
@@ -282,26 +278,20 @@ function hasNonAscii(text: string): boolean {
 }
 
 /**
- * 尝试加载中文字体
- * 返回字体字节数组，如果失败则返回 null
+ * 加载子集化的中文字体
+ * 只嵌入实际使用的字符，大幅减小 PDF 文件体积
+ * @param text 需要显示的文字内容
+ * @returns 子集化后的字体字节数组
  */
-async function loadChineseFont(): Promise<Uint8Array | null> {
-  // 使用缓存
-  if (cachedChineseFont) {
-    return cachedChineseFont
-  }
-
+async function loadChineseFontSubset(text: string): Promise<Uint8Array | null> {
   try {
-    // 始终使用 get_resource_dir 获取资源目录
-    const resDir = await invoke<string>('get_resource_dir')
-    // 使用 Tauri path API 正确拼接路径
-    const fontPath = await join(resDir, 'assets', 'fonts', 'SourceHanSansSC-Regular.ttf')
-
-    const fontBytes = await readFile(fontPath)
-    cachedChineseFont = fontBytes
-    return cachedChineseFont
+    // Tauri 返回 Vec<u8>，需要转换为 Uint8Array
+    const result = await invoke<number[]>('subset_chinese_font', { text })
+    const subsetBytes = new Uint8Array(result)
+    console.log(`字体子集化成功: ${subsetBytes.length} bytes (原文: ${text.length} 字符)`)
+    return subsetBytes
   } catch (e) {
-    console.warn('加载中文字体失败:', e)
+    console.warn('字体子集化失败:', e)
     return null
   }
 }
@@ -346,10 +336,17 @@ async function addPageNumbers(
 
   if (hasChinese) {
     try {
-      const chineseFontBytes = await loadChineseFont()
+      // 收集所有需要显示的文字（标题 + 密级 + "密级："）
+      const allText = headerTitle + securityLevel + '密级：'
+      console.log('准备子集化字体，文字:', allText)
+      const chineseFontBytes = await loadChineseFontSubset(allText)
+      console.log('子集化字体结果:', chineseFontBytes ? `${chineseFontBytes.length} bytes` : 'null')
       if (chineseFontBytes) {
+        // 使用 Rust 子集化的字体，直接嵌入（已包含所需字符）
         headerFont = await pdfDoc.embedFont(chineseFontBytes)
+        console.log('字体嵌入成功')
       } else {
+        console.log('字体子集化返回 null，禁用页眉')
         canShowHeader = false
       }
     } catch (e) {
