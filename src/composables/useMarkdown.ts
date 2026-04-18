@@ -1272,6 +1272,35 @@ export function useMarkdown() {
     try {
       let html = md.render(body)
 
+      // 后处理：处理 figure 标签（与 renderBody 相同）
+      html = html.replace(/<figure\s+markdown="span">([\s\S]*?)<\/figure>/g, (_match, content) => {
+        let figcaption = ''
+        let imgMarkdown = content
+
+        const figcaptionMatch = content.match(/<figcaption>([\s\S]*?)<\/figcaption>/)
+        if (figcaptionMatch) {
+          figcaption = figcaptionMatch[1]
+          imgMarkdown = content.replace(/<figcaption>[\s\S]*?<\/figcaption>/, '').trim()
+        }
+
+        imgMarkdown = imgMarkdown.split('\n').map((line: string) => line.trim()).join('\n').trim()
+
+        imgMarkdown = imgMarkdown.replace(/!\[([^\]]*)\]\(([^)]+)\)\s*\{([^}]*)\}/g,
+          (_m: string, alt: string, src: string, attrStr: string) => {
+            const attrs = parseImageAttributes(attrStr)
+            const style = buildImageStyle(attrs)
+            const imgTag = `<img src="${src}" alt="${alt}"${style ? ` style="${style}"` : ''}>`
+            return wrapImageByAlign(imgTag, attrs.align)
+          }
+        )
+
+        let imgContent = md.render(imgMarkdown)
+        imgContent = imgContent.replace(/<p>(<img[^>]*>)<\/p>/g, '$1')
+        imgContent = imgContent.replace(/<p>(<div[^>]*><img[^>]*><\/div>)<\/p>/g, '$1')
+
+        return `<figure class="figure-span">${imgContent}${figcaption ? `<figcaption>${figcaption}</figcaption>` : ''}</figure>`
+      })
+
       // 后处理：处理图片属性语法（与 renderBody 相同）
       html = html.replace(/<p><img([^>]*)>\s*\{([^}]*)\}<\/p>/g,
         (_match, imgAttrs, attrStr: string) => {
