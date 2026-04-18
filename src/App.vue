@@ -210,6 +210,8 @@ const MAX_ZOOM = 200
 // 分割器相关
 const editorWidth = ref(50) // 编辑器宽度百分比
 const isResizing = ref(false)
+let resizeStartX = 0 // 拖动开始时的鼠标 X 坐标
+let resizeStartWidth = 0 // 拖动开始时的编辑器宽度百分比
 
 // 计算编辑器和预览区样式
 const editorPaneStyle = computed(() => {
@@ -244,6 +246,8 @@ const mainContentStyle = computed(() => {
 function startResize(event: MouseEvent) {
   event.preventDefault()
   isResizing.value = true
+  resizeStartX = event.clientX
+  resizeStartWidth = editorWidth.value
   document.addEventListener('mousemove', handleResize)
   document.addEventListener('mouseup', stopResize)
   document.body.style.cursor = 'col-resize'
@@ -258,7 +262,10 @@ function handleResize(event: MouseEvent) {
   if (!mainContent) return
 
   const rect = mainContent.getBoundingClientRect()
-  const newWidth = ((event.clientX - rect.left) / rect.width) * 100
+  // 计算鼠标移动的距离（像素），转换为宽度百分比变化
+  const deltaX = event.clientX - resizeStartX
+  const deltaPercent = (deltaX / rect.width) * 100
+  const newWidth = resizeStartWidth + deltaPercent
 
   // 限制最小和最大宽度
   editorWidth.value = Math.min(80, Math.max(20, newWidth))
@@ -275,10 +282,14 @@ function stopResize() {
 
 // 文件树分割器拖动
 let isFileTreeResizing = false
+let fileTreeResizeStartX = 0
+let fileTreeResizeStartWidth = 0
 
 function startFileTreeResize(event: MouseEvent) {
   event.preventDefault()
   isFileTreeResizing = true
+  fileTreeResizeStartX = event.clientX
+  fileTreeResizeStartWidth = fileTreeWidth.value
   document.addEventListener('mousemove', handleFileTreeResize)
   document.addEventListener('mouseup', stopFileTreeResize)
   document.body.style.cursor = 'col-resize'
@@ -293,7 +304,9 @@ function handleFileTreeResize(event: MouseEvent) {
 
   const rect = mainContent.getBoundingClientRect()
   const zoom = zoomLevel.value / 100
-  const newWidth = (event.clientX - rect.left) / zoom
+  // 计算鼠标移动的距离，考虑 zoom 缩放
+  const deltaX = (event.clientX - fileTreeResizeStartX) / zoom
+  const newWidth = fileTreeResizeStartWidth + deltaX
 
   fileTreeWidth.value = Math.min(MAX_FILE_TREE_WIDTH, Math.max(MIN_FILE_TREE_WIDTH, newWidth))
 }
