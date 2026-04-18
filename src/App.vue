@@ -39,6 +39,8 @@
         :preview-only-mode="previewOnlyMode"
         :can-navigate-back="canNavigateBack"
         :can-navigate-forward="canNavigateForward"
+        :has-multiple-files="mdFiles.length > 0"
+        :md-files="mdFiles"
         class="preview-pane"
         :style="previewPaneStyle"
         @preview-only="togglePreviewOnly"
@@ -50,6 +52,9 @@
         @navigate-to-anchor="navigateToAnchor"
         @navigate-back="navigateBack"
         @navigate-forward="navigateForward"
+        @search="handleSearch"
+        @search-jump="handleSearchJump"
+        @search-clear="handleSearchClear"
       />
     </div>
     <ExportProgress />
@@ -1068,6 +1073,59 @@ function scrollToAnchor(anchor: string) {
   if (targetElement) {
     targetElement.scrollIntoView({ behavior: 'smooth', block: 'start' })
   }
+}
+
+// 搜索处理
+async function handleSearch(text: string, mode: 'current' | 'global', files?: MdFile[]) {
+  if (mode === 'global' && files && files.length > 0) {
+    // 全局搜索 - 搜索所有文件
+    const results = await searchInAllFiles(text, files)
+    console.log('全局搜索结果:', results.length)
+    // TODO: 显示搜索结果对话框
+  }
+}
+
+function handleSearchJump(_direction: 'prev' | 'next') {
+  // Preview 组件内部处理
+}
+
+function handleSearchClear() {
+  // Preview 组件内部处理
+}
+
+// 递归搜索所有文件
+async function searchInAllFiles(text: string, files: MdFile[]): Promise<{ path: string; matches: number }[]> {
+  const results: { path: string; matches: number }[] = []
+
+  for (const file of files) {
+    if (file.isFolder && file.children) {
+      const subResults = await searchInAllFiles(text, file.children)
+      results.push(...subResults)
+    } else if (file.path) {
+      try {
+        const [fileContent] = await invoke<[string, string]>('read_file_with_encoding', { path: file.path })
+        const matches = countMatches(fileContent, text)
+        if (matches > 0) {
+          results.push({ path: file.path, matches })
+        }
+      } catch {
+        // 跳过无法读取的文件
+      }
+    }
+  }
+
+  return results
+}
+
+// 计算匹配次数
+function countMatches(content: string, text: string): number {
+  let count = 0
+  let index = content.indexOf(text)
+  while (index >= 0) {
+    count++
+    index = content.indexOf(text, index + text.length)
+  }
+  return count
 }
 
 // 初始化滚动同步

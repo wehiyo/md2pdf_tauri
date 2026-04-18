@@ -25,6 +25,15 @@
         </svg>
       </button>
       <div class="nav-separator"></div>
+      <!-- 搜索框 -->
+      <SearchBox
+        ref="searchBoxRef"
+        :has-multiple-files="hasMultipleFiles"
+        @search="handleSearch"
+        @jump="handleJump"
+        @clear="handleClear"
+      />
+      <div class="nav-separator"></div>
       <button class="toolbar-btn" :class="{ active: previewOnlyMode }" title="仅预览" @click="$emit('preview-only')">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
           <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/>
@@ -118,6 +127,7 @@
 
 <script setup lang="ts">
 import { ref, onMounted, onUnmounted } from 'vue'
+import SearchBox from './SearchBox.vue'
 
 const emit = defineEmits<{
   'preview-only': []
@@ -129,6 +139,9 @@ const emit = defineEmits<{
   'navigate-back': []
   'navigate-forward': []
   'open-settings': []
+  'search': [text: string, mode: 'current' | 'global']
+  'search-jump': [direction: 'prev' | 'next']
+  'search-clear': []
 }>()
 
 defineProps<{
@@ -136,10 +149,12 @@ defineProps<{
   showToc?: boolean
   canNavigateBack?: boolean
   canNavigateForward?: boolean
+  hasMultipleFiles?: boolean
 }>()
 
 const dropdownOpen = ref(false)
 const importDropdownOpen = ref(false)
+const searchBoxRef = ref<InstanceType<typeof SearchBox>>()
 
 function toggleDropdown() {
   dropdownOpen.value = !dropdownOpen.value
@@ -170,6 +185,26 @@ function exportPdf() {
   dropdownOpen.value = false
   emit('export-pdf')
 }
+
+// 搜索相关
+function handleSearch(text: string, mode: 'current' | 'global') {
+  emit('search', text, mode)
+}
+
+function handleJump(direction: 'prev' | 'next') {
+  emit('search-jump', direction)
+}
+
+function handleClear() {
+  emit('search-clear')
+}
+
+// 暴露方法供外部更新搜索结果
+defineExpose({
+  updateSearchResults: (total: number, current: number) => {
+    searchBoxRef.value?.updateResults(total, current)
+  }
+})
 
 // 点击外部关闭下拉菜单
 function handleClickOutside(event: MouseEvent) {

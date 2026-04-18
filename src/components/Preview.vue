@@ -1,10 +1,12 @@
 <template>
   <div class="preview-container">
     <PreviewToolbar
+      ref="toolbarRef"
       :preview-only-mode="previewOnlyMode"
       :show-toc="showToc"
       :can-navigate-back="canNavigateBack"
       :can-navigate-forward="canNavigateForward"
+      :has-multiple-files="hasMultipleFiles"
       @preview-only="emit('preview-only')"
       @toggle-toc="toggleToc"
       @import-folder="emit('import-folder')"
@@ -14,6 +16,9 @@
       @navigate-back="emit('navigate-back')"
       @navigate-forward="emit('navigate-forward')"
       @open-settings="showSettings = true"
+      @search="handleSearch"
+      @search-jump="handleSearchJump"
+      @search-clear="handleSearchClear"
     />
     <div class="preview-body">
       <div class="preview-content-wrapper">
@@ -78,6 +83,8 @@ const props = defineProps<{
   previewOnlyMode?: boolean
   canNavigateBack?: boolean
   canNavigateForward?: boolean
+  hasMultipleFiles?: boolean
+  mdFiles?: MdFile[]
 }>()
 
 const emit = defineEmits<{
@@ -90,11 +97,28 @@ const emit = defineEmits<{
   'navigate-to-anchor': [anchor: string]
   'navigate-back': []
   'navigate-forward': []
+  'search': [text: string, mode: 'current' | 'global', mdFiles?: MdFile[]]
+  'search-jump': [direction: 'prev' | 'next']
+  'search-clear': []
 }>()
 
+// MdFile 类型定义
+interface MdFile {
+  name: string
+  path?: string
+  children?: MdFile[]
+  isFolder?: boolean
+}
+
 const previewRef = ref<HTMLDivElement>()
+const toolbarRef = ref<InstanceType<typeof PreviewToolbar>>()
 const showToc = ref(false)
 const tocItems = ref<TocItem[]>([])
+
+// 搜索相关状态
+const searchHighlights = ref<HTMLElement[]>([])
+const currentSearchIndex = ref(0)
+const currentSearchText = ref('')
 
 // 字体设置对话框状态
 const showSettings = ref(false)
@@ -113,10 +137,127 @@ async function handleSettingsSave(config: FontConfig) {
   showSettings.value = false
 }
 
-// 暴露滚动容器
+// 暴露滚动容器和搜索相关方法
 defineExpose({
-  getScrollContainer: (): HTMLElement | null => previewRef.value ?? null
+  getScrollContainer: (): HTMLElement | null => previewRef.value ?? null,
+  highlightSearchResults,
+  clearSearchHighlights,
+  jumpToSearchResult
 })
+
+// 搜索处理
+function handleSearch(text: string, mode: 'current' | 'global') {
+  currentSearchText.value = text
+  if (mode === 'current') {
+    // 当前文件搜索
+    const highlights = highlightSearchResults(text)
+    toolbarRef.value?.updateSearchResults(highlights.length, highlights.length > 0 ? 0 : -1)
+    if (highlights.length > 0) {
+      currentSearchIndex.value = 0
+      jumpToSearchResult(0)
+    }
+  } else {
+    // 全局搜索 - 传递给 App.vue 处理
+    emit('search', text, mode, props.mdFiles)
+  }
+}
+
+function handleSearchJump(direction: 'prev' | 'next') {
+  if (searchHighlights.value.length === 0) return
+
+  if (direction === 'prev') {
+    currentSearchIndex.value = (currentSearchIndex.value - 1 + searchHighlights.value.length) % searchHighlights.value.length
+  } else {
+    currentSearchIndex.value = (currentSearchIndex.value + 1) % searchHighlights.value.length
+  }
+
+  jumpToSearchResult(currentSearchIndex.value)
+  toolbarRef.value?.updateSearchResults(searchHighlights.value.length, currentSearchIndex.value)
+}
+
+function handleSearchClear() {
+  clearSearchHighlights()
+  currentSearchText.value = ''
+  searchHighlights.value = []
+  currentSearchIndex.value = 0
+}
+
+// 高亮搜索结果
+function highlightSearchResults(text: string): HTMLElement[] {
+  if (!previewRef.value || !text) return []
+
+  // 先清除之前的高亮
+  clearSearchHighlights()
+
+  const highlights: HTMLElement[] = []
+
+  // 使用更安全的方式：先收集所有文本节点和位置，然后再修改 DOM
+  const textNodes: { node: Text; index: number; length: number }[] = []
+
+  // 收集所有匹配位置
+  const walker = document.createTreeWalker(previewRef.value, NodeFilter.SHOW_TEXT)
+  while (walker.nextNode()) {
+    const node = walker.currentNode as Text
+    const content = node.textContent || ''
+    let index = content.indexOf(text)
+    while (index >= 0) {
+      textNodes.push({ node, index, length: text.length })
+      index = content.indexOf(text, index + text.length)
+    }
+  }
+
+  // 按位置修改 DOM
+  for (const { node, index, length } of textNodes) {
+    try {
+      // 检查节点是否还在 DOM 中
+      if (!node.parentNode) continue
+
+      const range = document.createRange()
+      range.setStart(node, index)
+      range.setEnd(node, index + length)
+      const mark = document.createElement('mark')
+      mark.className = 'search-highlight'
+      range.surroundContents(mark)
+      highlights.push(mark)
+    } catch {
+      // 跳过无法包裹的情况（如跨元素边界）
+    }
+  }
+
+  searchHighlights.value = highlights
+  return highlights
+}
+
+// 清除高亮
+function clearSearchHighlights() {
+  searchHighlights.value.forEach(mark => {
+    const parent = mark.parentNode
+    if (parent) {
+      while (mark.firstChild) {
+        parent.insertBefore(mark.firstChild, mark)
+      }
+      parent.removeChild(mark)
+    }
+  })
+  searchHighlights.value = []
+}
+
+// 跳转到指定搜索结果
+function jumpToSearchResult(index: number) {
+  if (searchHighlights.value.length === 0 || index < 0 || index >= searchHighlights.value.length) return
+
+  const target = searchHighlights.value[index]
+  target.scrollIntoView({ behavior: 'smooth', block: 'center' })
+
+  // 更新当前高亮的样式
+  searchHighlights.value.forEach((mark, i) => {
+    if (i === index) {
+      mark.classList.add('search-highlight-current')
+    } else {
+      mark.classList.remove('search-highlight-current')
+    }
+  })
+}
 
 // 切换目录显示
 function toggleToc() {
@@ -519,5 +660,22 @@ onUpdated(async () => {
   text-align: center;
   color: #9ca3af;
   font-size: 13px;
+}
+
+/* 搜索高亮样式 - 使用 :deep 以应用到动态创建的元素 */
+:deep(.search-highlight) {
+  background-color: #fef08a;
+  padding: 1px 2px;
+  border-radius: 2px;
+  transition: all 0.15s ease;
+}
+
+/* 当前高亮搜索结果 - 更加醒目的样式 */
+:deep(.search-highlight.search-highlight-current) {
+  background-color: #f59e0b;
+  color: #ffffff;
+  padding: 1px 4px;
+  border-radius: 3px;
+  font-weight: 500;
 }
 </style>
