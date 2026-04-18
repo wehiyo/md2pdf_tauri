@@ -40,6 +40,7 @@
             :key="item.id"
             class="toc-item"
             :class="'toc-level-' + item.level"
+            :title="item.text"
             @click="scrollToHeading(item.id)"
           >
             {{ item.text }}
