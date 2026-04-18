@@ -20,8 +20,12 @@ pub async fn render_plantuml(app: AppHandle, content: String) -> Result<String, 
     // 获取 plantuml.jar 路径
     let jar_path = get_plantuml_jar_path(&app)?;
 
+    // 查找 Java 可执行文件路径
+    // 优先使用 JAVA_HOME 环境变量，否则使用系统 PATH
+    let java_path = get_java_path();
+
     // 构建 Java 命令
-    let mut cmd = Command::new("java");
+    let mut cmd = Command::new(&java_path);
     cmd.arg("-jar")
         .arg(&jar_path)
         .arg("-tsvg")
@@ -40,7 +44,11 @@ pub async fn render_plantuml(app: AppHandle, content: String) -> Result<String, 
     let mut child = cmd.spawn()
         .map_err(|e| {
             if e.kind() == std::io::ErrorKind::NotFound {
-                "未找到 Java 运行时。请安装 Java 8 或更高版本。\n下载地址: https://www.java.com/download/".to_string()
+                if java_path != "java" {
+                    format!("未找到 Java 运行时。JAVA_HOME 配置的路径无效: {}\n请检查 JAVA_HOME 环境变量或安装 Java 8+。\n下载地址: https://www.java.com/download/", java_path)
+                } else {
+                    "未找到 Java 运行时。请安装 Java 8 或更高版本，或设置 JAVA_HOME 环境变量。\n下载地址: https://www.java.com/download/".to_string()
+                }
             } else {
                 format!("启动 Java 失败: {}", e)
             }
@@ -66,6 +74,36 @@ pub async fn render_plantuml(app: AppHandle, content: String) -> Result<String, 
         .map_err(|e| format!("SVG 输出解析失败: {}", e))?;
 
     Ok(svg)
+}
+
+/// 查找 Java 可执行文件路径
+/// 优先使用 JAVA_HOME 环境变量，否则使用系统 PATH
+fn get_java_path() -> String {
+    // 尝试从 JAVA_HOME 环境变量获取
+    if let Ok(java_home) = std::env::var("JAVA_HOME") {
+        // 构建完整路径
+        let java_bin = if java_home.ends_with('/') || java_home.ends_with('\\') {
+            format!("{}bin/java", java_home)
+        } else {
+            format!("{}/bin/java", java_home)
+        };
+
+        // Windows 平台添加 .exe 后缀
+        #[cfg(windows)]
+        let java_bin = format!("{}.exe", java_bin);
+
+        // 检查文件是否存在
+        if std::path::Path::new(&java_bin).exists() {
+            println!("使用 JAVA_HOME: {} -> {}", java_home, java_bin);
+            return java_bin;
+        }
+
+        println!("JAVA_HOME 设置但未找到 java: {}", java_bin);
+    }
+
+    // 使用系统 PATH
+    println!("使用系统 PATH 查找 java");
+    "java".to_string()
 }
 
 /// 获取 plantuml.jar 的路径
