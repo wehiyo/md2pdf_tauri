@@ -905,6 +905,15 @@ async function openFileFromTree(path: string) {
       pendingAnchor.value = null
       await nextTick()
       setTimeout(() => scrollToAnchor(anchor), 200)
+    } else {
+      // 没有锚点跳转，重置滚动位置到顶部
+      await nextTick()
+      setTimeout(() => {
+        const scrollContainer = previewRef.value?.getScrollContainer()
+        if (scrollContainer) {
+          scrollContainer.scrollTop = 0
+        }
+      }, 100)
     }
   } catch (error) {
     await handleError(error, '打开文件')
@@ -1072,8 +1081,18 @@ async function openFileFromTreeNoHistory(path: string) {
     // 如果有待跳转的锚点，延迟跳转
     if (pendingAnchor.value) {
       const anchor = pendingAnchor.value
+      pendingAnchor.value = null
       await nextTick()
       setTimeout(() => scrollToAnchor(anchor), 200)
+    } else {
+      // 没有锚点跳转，重置滚动位置到顶部
+      await nextTick()
+      setTimeout(() => {
+        const scrollContainer = previewRef.value?.getScrollContainer()
+        if (scrollContainer) {
+          scrollContainer.scrollTop = 0
+        }
+      }, 100)
     }
   } catch (error) {
     await handleError(error, '打开文件')
