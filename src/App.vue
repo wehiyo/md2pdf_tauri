@@ -65,6 +65,13 @@
       @confirm="confirmMkdocsExport"
       @cancel="cancelMkdocsExport"
     />
+    <SearchResultDialog
+      :visible="showSearchResults"
+      :search-text="globalSearchText"
+      :results="globalSearchResults"
+      @close="showSearchResults = false"
+      @select="handleSearchResultSelect"
+    />
 
     <!-- 保存确认对话框 -->
     <Teleport to="body">
@@ -90,6 +97,7 @@ import Preview from './components/Preview.vue'
 import FileTree from './components/FileTree.vue'
 import ExportProgress from './components/ExportProgress.vue'
 import MkdocsPreviewDialog from './components/MkdocsPreviewDialog.vue'
+import SearchResultDialog from './components/SearchResultDialog.vue'
 import { useMarkdown } from './composables/useMarkdown'
 import type { Metadata } from './composables/useMarkdown'
 import { usePDF } from './composables/usePDF'
@@ -173,6 +181,16 @@ const showMkdocsPreview = ref(false)
 const mkdocsBookmarkTree = ref<BookmarkTreeNode[]>([])
 const mkdocsCombinedHtml = ref('')
 const mkdocsChapters = ref<any[]>([])
+
+// 全局搜索结果对话框状态
+const showSearchResults = ref(false)
+const globalSearchText = ref('')
+interface GlobalSearchResult {
+  path: string
+  matches: number
+  context?: string
+}
+const globalSearchResults = ref<GlobalSearchResult[]>([])
 
 // 检测是否有未保存的改动
 const hasUnsavedChanges = computed(() => content.value !== savedContent.value)
@@ -1079,9 +1097,9 @@ function scrollToAnchor(anchor: string) {
 async function handleSearch(text: string, mode: 'current' | 'global', files?: MdFile[]) {
   if (mode === 'global' && files && files.length > 0) {
     // 全局搜索 - 搜索所有文件
-    const results = await searchInAllFiles(text, files)
-    console.log('全局搜索结果:', results.length)
-    // TODO: 显示搜索结果对话框
+    globalSearchText.value = text
+    globalSearchResults.value = await searchInAllFiles(text, files)
+    showSearchResults.value = true
   }
 }
 
@@ -1093,9 +1111,35 @@ function handleSearchClear() {
   // Preview 组件内部处理
 }
 
+// 选择搜索结果，跳转到对应文件
+async function handleSearchResultSelect(path: string) {
+  // 检查未保存改动
+  const result = await checkUnsavedChanges()
+  if (result === 'cancel') return
+  if (result === 'save') {
+    const saved = await saveFile()
+    if (!saved) return
+  }
+
+  // 打开选中的文件
+  await openFileFromTree(path)
+
+  // 等待渲染完成后，在 Preview 中高亮搜索文本并跳转到第一个结果
+  await nextTick()
+  setTimeout(() => {
+    if (previewRef.value && globalSearchText.value) {
+      const highlights = previewRef.value.highlightSearchResults(globalSearchText.value)
+      // highlightSearchResults 已自动更新工具栏显示，再跳转到第一个结果
+      if (highlights.length > 0) {
+        previewRef.value.jumpToSearchResult(0)
+      }
+    }
+  }, 300)
+}
+
 // 递归搜索所有文件
-async function searchInAllFiles(text: string, files: MdFile[]): Promise<{ path: string; matches: number }[]> {
-  const results: { path: string; matches: number }[] = []
+async function searchInAllFiles(text: string, files: MdFile[]): Promise<GlobalSearchResult[]> {
+  const results: GlobalSearchResult[] = []
 
   for (const file of files) {
     if (file.isFolder && file.children) {
@@ -1106,7 +1150,9 @@ async function searchInAllFiles(text: string, files: MdFile[]): Promise<{ path: 
         const [fileContent] = await invoke<[string, string]>('read_file_with_encoding', { path: file.path })
         const matches = countMatches(fileContent, text)
         if (matches > 0) {
-          results.push({ path: file.path, matches })
+          // 提取上下文（第一个匹配位置前后各 50 个字符）
+          const context = extractContext(fileContent, text)
+          results.push({ path: file.path, matches, context })
         }
       } catch {
         // 跳过无法读取的文件
@@ -1126,6 +1172,23 @@ function countMatches(content: string, text: string): number {
     index = content.indexOf(text, index + text.length)
   }
   return count
+}
+
+// 提取搜索上下文（第一个匹配位置前后各 50 个字符）
+function extractContext(content: string, text: string): string {
+  const index = content.indexOf(text)
+  if (index < 0) return ''
+
+  const start = Math.max(0, index - 50)
+  const end = Math.min(content.length, index + text.length + 50)
+
+  let context = content.substring(start, end)
+  // 如果不是从头开始，添加省略号
+  if (start > 0) context = '...' + context
+  // 如果不是到末尾结束，添加省略号
+  if (end < content.length) context = context + '...'
+
+  return context.replace(/\n/g, ' ').trim()
 }
 
 // 初始化滚动同步

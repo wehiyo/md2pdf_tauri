@@ -147,13 +147,10 @@ defineExpose({
 
 // 搜索处理
 function handleSearch(text: string, mode: 'current' | 'global') {
-  currentSearchText.value = text
   if (mode === 'current') {
     // 当前文件搜索
     const highlights = highlightSearchResults(text)
-    toolbarRef.value?.updateSearchResults(highlights.length, highlights.length > 0 ? 0 : -1)
     if (highlights.length > 0) {
-      currentSearchIndex.value = 0
       jumpToSearchResult(0)
     }
   } else {
@@ -189,43 +186,67 @@ function highlightSearchResults(text: string): HTMLElement[] {
   // 先清除之前的高亮
   clearSearchHighlights()
 
+  // 更新当前搜索文本
+  currentSearchText.value = text
+
   const highlights: HTMLElement[] = []
 
-  // 使用更安全的方式：先收集所有文本节点和位置，然后再修改 DOM
-  const textNodes: { node: Text; index: number; length: number }[] = []
-
-  // 收集所有匹配位置
+  // 使用 TreeWalker 遍历文本节点
   const walker = document.createTreeWalker(previewRef.value, NodeFilter.SHOW_TEXT)
+  const textNodes: Text[] = []
+
+  // 先收集所有文本节点（不修改 DOM）
   while (walker.nextNode()) {
-    const node = walker.currentNode as Text
-    const content = node.textContent || ''
-    let index = content.indexOf(text)
-    while (index >= 0) {
-      textNodes.push({ node, index, length: text.length })
-      index = content.indexOf(text, index + text.length)
-    }
+    textNodes.push(walker.currentNode as Text)
   }
 
-  // 按位置修改 DOM
-  for (const { node, index, length } of textNodes) {
-    try {
-      // 检查节点是否还在 DOM 中
-      if (!node.parentNode) continue
-
-      const range = document.createRange()
-      range.setStart(node, index)
-      range.setEnd(node, index + length)
-      const mark = document.createElement('mark')
-      mark.className = 'search-highlight'
-      range.surroundContents(mark)
-      highlights.push(mark)
-    } catch {
-      // 跳过无法包裹的情况（如跨元素边界）
-    }
+  // 对每个文本节点进行处理
+  for (const node of textNodes) {
+    // 递归处理一个节点中的所有匹配
+    processNodeMatches(node, text, highlights)
   }
 
   searchHighlights.value = highlights
+
+  // 更新搜索索引和工具栏显示
+  if (highlights.length > 0) {
+    currentSearchIndex.value = 0
+    toolbarRef.value?.updateSearchResults(highlights.length, 0)
+  } else {
+    currentSearchIndex.value = -1
+    toolbarRef.value?.updateSearchResults(0, -1)
+  }
+
   return highlights
+}
+
+// 递归处理单个文本节点中的所有匹配
+function processNodeMatches(node: Text, text: string, highlights: HTMLElement[]) {
+  if (!node.parentNode) return
+
+  const content = node.textContent || ''
+  const index = content.indexOf(text)
+
+  if (index < 0) return // 没有匹配
+
+  try {
+    // 分割文本节点：前部分 + 高亮部分 + 后部分
+    const before = node.splitText(index)
+    const highlighted = before.splitText(text.length)
+
+    // 创建高亮元素包裹匹配文本
+    const mark = document.createElement('mark')
+    mark.className = 'search-highlight'
+    node.parentNode.insertBefore(mark, before)
+    mark.appendChild(before)
+
+    highlights.push(mark)
+
+    // 继续处理剩余文本（highlighted 节点之后的文本）
+    processNodeMatches(highlighted, text, highlights)
+  } catch {
+    // 跳过无法处理的情况
+  }
 }
 
 // 清除高亮
