@@ -1237,6 +1237,13 @@ onMounted(async () => {
 
   // 初始化窗口标题
   updateWindowTitle()
+
+  // 关闭 splash 窗口并显示主窗口
+  try {
+    await invoke('close_splash_window')
+  } catch {
+    // splash 窗口可能不存在（开发模式或单文件模式）
+  }
 })
 
 // 监听标题变化，更新窗口标题

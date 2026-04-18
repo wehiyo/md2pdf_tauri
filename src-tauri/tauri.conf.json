@@ -12,6 +12,20 @@
   "app": {
     "windows": [
       {
+        "label": "splash",
+        "title": "MarkRefine",
+        "url": "/splash.html",
+        "width": 400,
+        "height": 300,
+        "center": true,
+        "resizable": false,
+        "decorations": false,
+        "transparent": true,
+        "visible": true,
+        "skipTaskbar": true
+      },
+      {
+        "label": "main",
         "title": "MarkRefine - Markdown 编辑器",
         "width": 1400,
         "height": 900,
@@ -20,7 +34,8 @@
         "center": true,
         "resizable": true,
         "fullscreen": false,
-        "decorations": true
+        "decorations": true,
+        "visible": false
       }
     ],
     "security": {
@@ -34,11 +49,13 @@
           "identifier": "default",
           "description": "Default capabilities",
           "local": true,
-          "windows": ["main"],
+          "windows": ["main", "splash"],
           "permissions": [
             "core:default",
             "core:window:allow-set-title",
             "core:window:allow-destroy",
+            "core:window:allow-show",
+            "core:window:allow-set-focus",
             "dialog:default",
             "dialog:allow-open",
             "dialog:allow-save",

@@ -120,6 +120,23 @@ fn scan_fonts_dir(app: AppHandle) -> Result<Vec<(String, String, String)>, Strin
     Ok(fonts)
 }
 
+/// 关闭 splash 窗口并显示主窗口
+#[tauri::command]
+fn close_splash_window(app: AppHandle) -> Result<(), String> {
+    // 关闭 splash 窗口
+    if let Some(splash_window) = app.get_webview_window("splash") {
+        let _ = splash_window.destroy();
+    }
+
+    // 显示主窗口
+    if let Some(main_window) = app.get_webview_window("main") {
+        let _ = main_window.show();
+        let _ = main_window.set_focus();
+    }
+
+    Ok(())
+}
+
 fn main() {
     tauri::Builder::default()
         .plugin(tauri_plugin_shell::init())
@@ -138,10 +155,17 @@ fn main() {
             get_resource_dir,
             get_config_dir,
             scan_fonts_dir,
-            subset_chinese_font
+            subset_chinese_font,
+            close_splash_window
         ])
         .on_window_event(|window, event| {
             if let tauri::WindowEvent::CloseRequested { api, .. } = event {
+                // splash 窗口不允许手动关闭
+                if window.label() == "splash" {
+                    api.prevent_close();
+                    return;
+                }
+
                 // 检查是否是主窗口
                 if window.label() == "main" {
                     // 清理隐藏的打印窗口（如果存在）
