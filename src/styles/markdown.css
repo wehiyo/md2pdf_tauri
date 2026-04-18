@@ -2,13 +2,13 @@
 .markdown-body {
   line-height: 1.6;
   color: #1f2937;
-  font-family: var(--body-font), sans-serif;
+  font-family: var(--body-font);
 }
 
 /* 代码字体通过动态注入 */
 .markdown-body code,
 .markdown-body pre {
-  font-family: var(--code-font), monospace;
+  font-family: var(--code-font);
 }
 
 .markdown-body h1,

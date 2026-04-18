@@ -12,25 +12,19 @@ import { BUILTIN_BODY_FONTS, BUILTIN_CODE_FONTS, getFontInfo } from './useConfig
  * 加载单个字体文件
  */
 async function loadSingleFont(fontId: string, filename: string): Promise<void> {
-  const isDev = import.meta.env.DEV
-
-  let path: string
-  if (isDev) {
-    path = `src-tauri/assets/fonts/${filename}`
-  } else {
-    const resDir = await invoke<string>('get_resource_dir')
-    path = `${resDir}/assets/fonts/${filename}`
-  }
-
-  const fontUrl = isDev ? path : convertFileSrc(path)
-
-  // 注入 @font-face
   const styleId = `font-face-${fontId}`
 
   // 检查是否已注入
   if (document.getElementById(styleId)) {
+    console.log('字体已存在，跳过:', fontId)
     return
   }
+
+  // 通过 Rust 命令获取字体文件的绝对路径
+  const absolutePath = await invoke<string>('get_font_path', { filename })
+
+  // 使用 convertFileSrc 转换为 asset URL
+  const fontUrl = convertFileSrc(absolutePath)
 
   const style = document.createElement('style')
   style.id = styleId
@@ -44,6 +38,7 @@ async function loadSingleFont(fontId: string, filename: string): Promise<void> {
     }
   `
   document.head.appendChild(style)
+  console.log('字体已注入:', fontId, '路径:', absolutePath, 'URL:', fontUrl)
 }
 
 /**
@@ -114,5 +109,12 @@ export async function loadFonts(config: FontConfig): Promise<void> {
   document.documentElement.style.setProperty('--body-font', bodyCss)
   document.documentElement.style.setProperty('--code-font', codeCss)
 
-  console.log('字体已加载:', { body: config.bodyFont, code: config.codeFont, bodyCustomFonts: config.bodyCustomFonts, codeCustomFonts: config.codeCustomFonts })
+  console.log('字体已加载:', {
+    body: config.bodyFont,
+    code: config.codeFont,
+    bodyCss,
+    codeCss,
+    bodyCustomFonts: config.bodyCustomFonts,
+    codeCustomFonts: config.codeCustomFonts
+  })
 }

@@ -48,6 +48,29 @@ fn get_resource_dir(app: AppHandle) -> Result<String, String> {
         .map_err(|e| format!("获取资源目录失败: {}", e))
 }
 
+/// 获取字体文件的绝对路径（供前端调用）
+#[tauri::command]
+fn get_font_path(app: AppHandle, filename: String) -> Result<String, String> {
+    let is_dev = cfg!(debug_assertions);
+
+    let path = if is_dev {
+        // 开发模式：当前工作目录是 src-tauri，使用相对路径并转换为绝对路径
+        let cwd = std::env::current_dir()
+            .map_err(|e| format!("获取当前目录失败: {}", e))?;
+        cwd.join("assets/fonts").join(&filename)
+    } else {
+        // 生产模式：resource_dir/assets/fonts/
+        app.path().resource_dir()
+            .map_err(|e| format!("获取资源目录失败: {}", e))?
+            .join("assets/fonts")
+            .join(&filename)
+    };
+
+    let absolute_path = path.to_string_lossy().to_string();
+    println!("字体路径: {}", absolute_path);
+    Ok(absolute_path)
+}
+
 /// 获取配置目录路径（供前端调用）
 #[tauri::command]
 fn get_config_dir(app: AppHandle) -> Result<String, String> {
@@ -154,6 +177,7 @@ fn main() {
             read_file_with_encoding,
             get_resource_dir,
             get_config_dir,
+            get_font_path,
             scan_fonts_dir,
             subset_chinese_font,
             close_splash_window
