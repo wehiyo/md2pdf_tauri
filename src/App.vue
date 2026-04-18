@@ -299,10 +299,6 @@ function startFileTreeResize(event: MouseEvent) {
 function handleFileTreeResize(event: MouseEvent) {
   if (!isFileTreeResizing) return
 
-  const mainContent = document.querySelector('.main-content') as HTMLElement
-  if (!mainContent) return
-
-  const rect = mainContent.getBoundingClientRect()
   const zoom = zoomLevel.value / 100
   // 计算鼠标移动的距离，考虑 zoom 缩放
   const deltaX = (event.clientX - fileTreeResizeStartX) / zoom
