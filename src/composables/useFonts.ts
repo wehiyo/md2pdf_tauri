@@ -23,8 +23,11 @@ async function loadSingleFont(fontId: string, filename: string): Promise<void> {
   // 通过 Rust 命令获取字体文件的绝对路径
   const absolutePath = await invoke<string>('get_font_path', { filename })
 
+  // 将 Windows 反斜杠路径转换为正斜杠（convertFileSrc 需要）
+  const normalizedPath = absolutePath.replace(/\\/g, '/')
+
   // 使用 convertFileSrc 转换为 asset URL
-  const fontUrl = convertFileSrc(absolutePath)
+  const fontUrl = convertFileSrc(normalizedPath)
 
   const style = document.createElement('style')
   style.id = styleId
@@ -38,6 +41,13 @@ async function loadSingleFont(fontId: string, filename: string): Promise<void> {
     }
   `
   document.head.appendChild(style)
+
+  // 存储调试信息到 window 对象（方便 release 版本调试）
+  if (!(window as any).__fontDebug) {
+    (window as any).__fontDebug = []
+  }
+  (window as any).__fontDebug.push({ fontId, filename, absolutePath, fontUrl })
+
   console.log('字体已注入:', fontId, '路径:', absolutePath, 'URL:', fontUrl)
 }
 
