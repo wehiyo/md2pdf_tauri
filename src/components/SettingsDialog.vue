@@ -5,43 +5,86 @@
         <div class="settings-header">字体设置</div>
         <div class="settings-body">
           <div class="settings-item">
-            <label>正文字体</label>
+            <label>中文字体</label>
             <div class="font-select-row">
-              <div class="custom-select" @click="toggleBodyFontDropdown">
-                <span class="selected-font-name">{{ getFontDisplayName(localConfig.bodyFont, 'body') }}</span>
+              <div class="custom-select" @click="toggleChineseFontDropdown">
+                <span class="selected-font-name">{{ getFontDisplayName(localConfig.chineseFont, 'chinese') }}</span>
                 <svg class="select-arrow" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                   <polyline points="6 9 12 15 18 9"/>
                 </svg>
               </div>
-              <button class="add-font-btn" title="添加字体" @click="showFontPicker('body')">
+              <button class="add-font-btn" title="添加字体" @click="showFontPicker('chinese')">
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                   <line x1="12" y1="5" x2="12" y2="19"/>
                   <line x1="5" y1="12" x2="19" y2="12"/>
                 </svg>
               </button>
-              <div v-if="bodyFontDropdownOpen" class="dropdown-menu">
+              <div v-if="chineseFontDropdownOpen" class="dropdown-menu">
                 <div class="dropdown-group">
                   <div class="dropdown-group-label">内置字体</div>
                   <div
-                    v-for="font in builtinBodyFonts"
+                    v-for="font in builtinChineseFonts"
                     :key="font.id"
                     class="dropdown-item"
-                    :class="{ selected: localConfig.bodyFont === font.id }"
-                    @click="selectBodyFont(font.id)"
+                    :class="{ selected: localConfig.chineseFont === font.id }"
+                    @click="selectChineseFont(font.id)"
                   >
                     {{ font.name }}
                   </div>
                 </div>
-                <div v-if="localConfig.bodyCustomFonts?.length > 0" class="dropdown-group">
+                <div v-if="localConfig.chineseCustomFonts?.length > 0" class="dropdown-group">
                   <div class="dropdown-group-label">自定义字体</div>
                   <div
-                    v-for="font in localConfig.bodyCustomFonts"
+                    v-for="font in localConfig.chineseCustomFonts"
                     :key="font.id"
                     class="dropdown-item custom-font-item"
-                    :class="{ selected: localConfig.bodyFont === font.id }"
+                    :class="{ selected: localConfig.chineseFont === font.id }"
                   >
-                    <span class="font-name-text" @click="selectBodyFont(font.id)">{{ font.name }}</span>
-                    <button class="dropdown-remove-btn" title="移除" @click.stop="removeCustomFont(font.id, 'body')">×</button>
+                    <span class="font-name-text" @click="selectChineseFont(font.id)">{{ font.name }}</span>
+                    <button class="dropdown-remove-btn" title="移除" @click.stop="removeCustomFont(font.id, 'chinese')">×</button>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+          <div class="settings-item">
+            <label>英文字体</label>
+            <div class="font-select-row">
+              <div class="custom-select" @click="toggleEnglishFontDropdown">
+                <span class="selected-font-name">{{ getFontDisplayName(localConfig.englishFont, 'english') }}</span>
+                <svg class="select-arrow" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <polyline points="6 9 12 15 18 9"/>
+                </svg>
+              </div>
+              <button class="add-font-btn" title="添加字体" @click="showFontPicker('english')">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <line x1="12" y1="5" x2="12" y2="19"/>
+                  <line x1="5" y1="12" x2="19" y2="12"/>
+                </svg>
+              </button>
+              <div v-if="englishFontDropdownOpen" class="dropdown-menu">
+                <div class="dropdown-group">
+                  <div class="dropdown-group-label">内置字体</div>
+                  <div
+                    v-for="font in builtinEnglishFonts"
+                    :key="font.id"
+                    class="dropdown-item"
+                    :class="{ selected: localConfig.englishFont === font.id }"
+                    @click="selectEnglishFont(font.id)"
+                  >
+                    {{ font.name }}
+                  </div>
+                </div>
+                <div v-if="localConfig.englishCustomFonts?.length > 0" class="dropdown-group">
+                  <div class="dropdown-group-label">自定义字体</div>
+                  <div
+                    v-for="font in localConfig.englishCustomFonts"
+                    :key="font.id"
+                    class="dropdown-item custom-font-item"
+                    :class="{ selected: localConfig.englishFont === font.id }"
+                  >
+                    <span class="font-name-text" @click="selectEnglishFont(font.id)">{{ font.name }}</span>
+                    <button class="dropdown-remove-btn" title="移除" @click.stop="removeCustomFont(font.id, 'english')">×</button>
                   </div>
                 </div>
               </div>
@@ -152,7 +195,7 @@
 <script setup lang="ts">
 import { ref, watch, onMounted } from 'vue'
 import type { FontConfig, CustomFont } from '../composables/useConfig'
-import { scanFonts as scanFontsDir, FONT_SIZE_OPTIONS } from '../composables/useConfig'
+import { scanFonts as scanFontsDir, FONT_SIZE_OPTIONS, BUILTIN_CHINESE_FONTS, BUILTIN_ENGLISH_FONTS, BUILTIN_CODE_FONTS } from '../composables/useConfig'
 
 const props = defineProps<{
   visible: boolean
@@ -167,8 +210,9 @@ const emit = defineEmits<{
 const localConfig = ref<FontConfig>({ ...props.config })
 const fontPickerVisible = ref(false)
 const availableFonts = ref<CustomFont[]>([])
-const pickerType = ref<'body' | 'code'>('body')
-const bodyFontDropdownOpen = ref(false)
+const pickerType = ref<'chinese' | 'english' | 'code'>('chinese')
+const chineseFontDropdownOpen = ref(false)
+const englishFontDropdownOpen = ref(false)
 const codeFontDropdownOpen = ref(false)
 const fontSizeDropdownOpen = ref(false)
 
@@ -176,31 +220,28 @@ const fontSizeDropdownOpen = ref(false)
 const fontSizeOptions = FONT_SIZE_OPTIONS
 
 // 内置字体列表
-const builtinBodyFonts = [
-  { id: 'SourceHanSans', name: '思源黑体' },
-  { id: 'MicrosoftYaHei', name: '微软雅黑' },
-  { id: 'DengXian', name: '等线' }
-]
-const builtinCodeFonts = [
-  { id: 'SourceCodePro', name: 'Source Code Pro' },
-  { id: 'Consolas', name: 'Consolas' },
-  { id: 'CourierNew', name: 'Courier New' }
-]
+const builtinChineseFonts = BUILTIN_CHINESE_FONTS.map(f => ({ id: f.id, name: f.name }))
+const builtinEnglishFonts = BUILTIN_ENGLISH_FONTS.map(f => ({ id: f.id, name: f.name }))
+const builtinCodeFonts = BUILTIN_CODE_FONTS.map(f => ({ id: f.id, name: f.name }))
 
 // 当 props.config 变化时更新本地配置
 watch(() => props.config, (newConfig) => {
   localConfig.value = {
     ...newConfig,
     bodyFontSize: newConfig.bodyFontSize || 16,
-    bodyCustomFonts: newConfig.bodyCustomFonts || [],
+    chineseCustomFonts: newConfig.chineseCustomFonts || [],
+    englishCustomFonts: newConfig.englishCustomFonts || [],
     codeCustomFonts: newConfig.codeCustomFonts || []
   }
 }, { immediate: true })
 
 // 初始化时确保所有字段存在
 onMounted(() => {
-  if (!localConfig.value.bodyCustomFonts) {
-    localConfig.value.bodyCustomFonts = []
+  if (!localConfig.value.chineseCustomFonts) {
+    localConfig.value.chineseCustomFonts = []
+  }
+  if (!localConfig.value.englishCustomFonts) {
+    localConfig.value.englishCustomFonts = []
   }
   if (!localConfig.value.codeCustomFonts) {
     localConfig.value.codeCustomFonts = []
@@ -214,28 +255,35 @@ function handleSave() {
   emit('save', {
     ...localConfig.value,
     bodyFontSize: localConfig.value.bodyFontSize || 16,
-    bodyCustomFonts: localConfig.value.bodyCustomFonts || [],
+    chineseCustomFonts: localConfig.value.chineseCustomFonts || [],
+    englishCustomFonts: localConfig.value.englishCustomFonts || [],
     codeCustomFonts: localConfig.value.codeCustomFonts || []
   })
 }
 
 // 移除自定义字体
-function removeCustomFont(fontId: string, type: 'body' | 'code') {
-  if (type === 'body') {
-    localConfig.value.bodyCustomFonts = (localConfig.value.bodyCustomFonts || []).filter(f => f.id !== fontId)
-    if (localConfig.value.bodyFont === fontId) {
-      localConfig.value.bodyFont = 'SourceHanSans'
+function removeCustomFont(fontId: string, type: 'chinese' | 'english' | 'code') {
+  if (type === 'chinese') {
+    localConfig.value.chineseCustomFonts = (localConfig.value.chineseCustomFonts || []).filter(f => f.id !== fontId)
+    if (localConfig.value.chineseFont === fontId) {
+      localConfig.value.chineseFont = 'DengXian'
     }
-    // 如果下拉框打开且没有自定义字体了，关闭它
-    if (localConfig.value.bodyCustomFonts?.length === 0) {
-      bodyFontDropdownOpen.value = false
+    if (localConfig.value.chineseCustomFonts?.length === 0) {
+      chineseFontDropdownOpen.value = false
+    }
+  } else if (type === 'english') {
+    localConfig.value.englishCustomFonts = (localConfig.value.englishCustomFonts || []).filter(f => f.id !== fontId)
+    if (localConfig.value.englishFont === fontId) {
+      localConfig.value.englishFont = 'Arial'
+    }
+    if (localConfig.value.englishCustomFonts?.length === 0) {
+      englishFontDropdownOpen.value = false
     }
   } else {
     localConfig.value.codeCustomFonts = (localConfig.value.codeCustomFonts || []).filter(f => f.id !== fontId)
     if (localConfig.value.codeFont === fontId) {
       localConfig.value.codeFont = 'SourceCodePro'
     }
-    // 如果下拉框打开且没有自定义字体了，关闭它
     if (localConfig.value.codeCustomFonts?.length === 0) {
       codeFontDropdownOpen.value = false
     }
@@ -243,7 +291,7 @@ function removeCustomFont(fontId: string, type: 'body' | 'code') {
 }
 
 // 显示字体选择框
-async function showFontPicker(type: 'body' | 'code') {
+async function showFontPicker(type: 'chinese' | 'english' | 'code') {
   pickerType.value = type
   try {
     const fonts = await scanFontsDir()
@@ -263,77 +311,81 @@ function closeFontPicker() {
 
 // 点击遮罩层
 function handleOverlayClick() {
-  // 先关闭下拉框
-  bodyFontDropdownOpen.value = false
+  chineseFontDropdownOpen.value = false
+  englishFontDropdownOpen.value = false
   codeFontDropdownOpen.value = false
   fontSizeDropdownOpen.value = false
-  // 关闭整个对话框
   emit('close')
 }
 
 // 点击对话框内部
 function handleDialogClick(event: MouseEvent) {
   const target = event.target as HTMLElement
-  // 如果点击的不是下拉框、下拉菜单或自定义选择框，关闭所有下拉框
   if (!target.closest('.dropdown-menu') && !target.closest('.custom-select')) {
-    bodyFontDropdownOpen.value = false
+    chineseFontDropdownOpen.value = false
+    englishFontDropdownOpen.value = false
     codeFontDropdownOpen.value = false
     fontSizeDropdownOpen.value = false
   }
 }
 
-// 检查字体是否已添加到正文列表
-function isFontInBodyList(fontId: string): boolean {
-  return (localConfig.value.bodyCustomFonts || []).some(f => f.id === fontId)
+// 检查字体是否已添加到列表
+function isFontInList(fontId: string, type: 'chinese' | 'english' | 'code'): boolean {
+  const customFonts = type === 'chinese' ? localConfig.value.chineseCustomFonts
+    : type === 'english' ? localConfig.value.englishCustomFonts
+    : localConfig.value.codeCustomFonts
+  return (customFonts || []).some(f => f.id === fontId)
 }
 
-// 检查字体是否已添加到代码列表
-function isFontInCodeList(fontId: string): boolean {
-  return (localConfig.value.codeCustomFonts || []).some(f => f.id === fontId)
-}
-
-// 获取字体在字体选择框中的状态文字
+// 获取字体状态文字
 function getFontStatus(fontId: string): string | null {
-  const inBody = isFontInBodyList(fontId)
-  const inCode = isFontInCodeList(fontId)
-  if (inBody && inCode) return '已添加(正文/代码)'
-  if (inBody) return '已添加(正文)'
-  if (inCode) return '已添加(代码)'
+  const inChinese = isFontInList(fontId, 'chinese')
+  const inEnglish = isFontInList(fontId, 'english')
+  const inCode = isFontInList(fontId, 'code')
+  const tags: string[] = []
+  if (inChinese) tags.push('中文')
+  if (inEnglish) tags.push('英文')
+  if (inCode) tags.push('代码')
+  if (tags.length > 0) return `已添加(${tags.join('/')})`
   return null
 }
 
 // 获取字体选择框项的样式类
 function getFontPickerItemClass(fontId: string): string {
-  const inBody = isFontInBodyList(fontId)
-  const inCode = isFontInCodeList(fontId)
-  // 当前选择类型的列表中已添加则标记为不可选
-  if (pickerType.value === 'body' && inBody) return 'already-added'
-  if (pickerType.value === 'code' && inCode) return 'already-added'
+  if (isFontInList(fontId, pickerType.value)) return 'already-added'
   return ''
 }
 
 // 选择字体
 function selectFont(font: CustomFont) {
-  if (pickerType.value === 'body') {
-    // 正文字体
-    if (!isFontInBodyList(font.id)) {
-      localConfig.value.bodyCustomFonts = [...(localConfig.value.bodyCustomFonts || []), font]
-    }
-    localConfig.value.bodyFont = font.id
+  if (!isFontInList(font.id, pickerType.value)) {
+    const customFontsKey = pickerType.value === 'chinese' ? 'chineseCustomFonts'
+      : pickerType.value === 'english' ? 'englishCustomFonts'
+      : 'codeCustomFonts'
+    const fontKey = pickerType.value === 'chinese' ? 'chineseFont'
+      : pickerType.value === 'english' ? 'englishFont'
+      : 'codeFont'
+
+    localConfig.value[customFontsKey] = [...(localConfig.value[customFontsKey] || []), font]
+    localConfig.value[fontKey] = font.id
   } else {
-    // 代码字体
-    if (!isFontInCodeList(font.id)) {
-      localConfig.value.codeCustomFonts = [...(localConfig.value.codeCustomFonts || []), font]
-    }
-    localConfig.value.codeFont = font.id
+    // 已在列表中，直接选择
+    const fontKey = pickerType.value === 'chinese' ? 'chineseFont'
+      : pickerType.value === 'english' ? 'englishFont'
+      : 'codeFont'
+    localConfig.value[fontKey] = font.id
   }
   closeFontPicker()
 }
 
 // 获取字体显示名称
-function getFontDisplayName(fontId: string, type: 'body' | 'code'): string {
-  const builtinFonts = type === 'body' ? builtinBodyFonts : builtinCodeFonts
-  const customFonts = type === 'body' ? localConfig.value.bodyCustomFonts : localConfig.value.codeCustomFonts
+function getFontDisplayName(fontId: string, type: 'chinese' | 'english' | 'code'): string {
+  const builtinFonts = type === 'chinese' ? builtinChineseFonts
+    : type === 'english' ? builtinEnglishFonts
+    : builtinCodeFonts
+  const customFonts = type === 'chinese' ? localConfig.value.chineseCustomFonts
+    : type === 'english' ? localConfig.value.englishCustomFonts
+    : localConfig.value.codeCustomFonts
 
   const builtin = builtinFonts.find(f => f.id === fontId)
   if (builtin) return builtin.name
@@ -344,49 +396,59 @@ function getFontDisplayName(fontId: string, type: 'body' | 'code'): string {
   return fontId
 }
 
-// 切换正文字体下拉框
-function toggleBodyFontDropdown() {
-  bodyFontDropdownOpen.value = !bodyFontDropdownOpen.value
+// 切换下拉框
+function toggleChineseFontDropdown() {
+  chineseFontDropdownOpen.value = !chineseFontDropdownOpen.value
+  englishFontDropdownOpen.value = false
   codeFontDropdownOpen.value = false
   fontSizeDropdownOpen.value = false
 }
 
-// 切换代码字体下拉框
+function toggleEnglishFontDropdown() {
+  englishFontDropdownOpen.value = !englishFontDropdownOpen.value
+  chineseFontDropdownOpen.value = false
+  codeFontDropdownOpen.value = false
+  fontSizeDropdownOpen.value = false
+}
+
 function toggleCodeFontDropdown() {
   codeFontDropdownOpen.value = !codeFontDropdownOpen.value
-  bodyFontDropdownOpen.value = false
+  chineseFontDropdownOpen.value = false
+  englishFontDropdownOpen.value = false
   fontSizeDropdownOpen.value = false
 }
 
-// 切换字号下拉框
 function toggleFontSizeDropdown() {
   fontSizeDropdownOpen.value = !fontSizeDropdownOpen.value
-  bodyFontDropdownOpen.value = false
+  chineseFontDropdownOpen.value = false
+  englishFontDropdownOpen.value = false
   codeFontDropdownOpen.value = false
 }
 
-// 选择字号
+// 选择字体
+function selectChineseFont(fontId: string) {
+  localConfig.value.chineseFont = fontId
+  chineseFontDropdownOpen.value = false
+}
+
+function selectEnglishFont(fontId: string) {
+  localConfig.value.englishFont = fontId
+  englishFontDropdownOpen.value = false
+}
+
+function selectCodeFont(fontId: string) {
+  localConfig.value.codeFont = fontId
+  codeFontDropdownOpen.value = false
+}
+
 function selectFontSize(size: number) {
   localConfig.value.bodyFontSize = size
   fontSizeDropdownOpen.value = false
 }
 
-// 获取字号显示标签
 function getFontSizeLabel(size: number): string {
   const option = fontSizeOptions.find(o => o.value === size)
   return option ? option.label : `${size}px`
-}
-
-// 选择正文字体
-function selectBodyFont(fontId: string) {
-  localConfig.value.bodyFont = fontId
-  bodyFontDropdownOpen.value = false
-}
-
-// 选择代码字体
-function selectCodeFont(fontId: string) {
-  localConfig.value.codeFont = fontId
-  codeFontDropdownOpen.value = false
 }
 </script>
 

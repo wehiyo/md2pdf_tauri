@@ -154,10 +154,12 @@ const currentMetadata = ref<Metadata>({})
 
 // 字体配置（用于 PDF 导出）
 const fontConfig = ref<FontConfig>({
-  bodyFont: 'SourceHanSans',
+  chineseFont: 'DengXian',
+  englishFont: 'Arial',
   codeFont: 'SourceCodePro',
   bodyFontSize: 16,
-  bodyCustomFonts: [],
+  chineseCustomFonts: [],
+  englishCustomFonts: [],
   codeCustomFonts: []
 })
 

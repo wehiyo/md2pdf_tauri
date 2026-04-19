@@ -8,7 +8,7 @@ import wavedrom from 'wavedrom'
 import JSON5 from 'json5'
 import type { Metadata } from './useMarkdown'
 import type { FontConfig } from './useConfig'
-import { BUILTIN_BODY_FONTS, BUILTIN_CODE_FONTS } from './useConfig'
+import { BUILTIN_CHINESE_FONTS, BUILTIN_CODE_FONTS } from './useConfig'
 import { useExportProgress } from './useExportProgress'
 import { useErrorHandling } from './useErrorHandling'
 
@@ -22,13 +22,24 @@ import highlightStyles from '../assets/github.min.css?raw'
 // 防止重复调用（模块级别）
 let isExporting = false
 
-// 字体名称映射
-const BODY_FONT_MAP: Record<string, string> = {
-  'SourceHanSans': "'SourceHanSans', 'Microsoft YaHei', sans-serif",
-  'MicrosoftYaHei': "'Microsoft YaHei', sans-serif",
-  'DengXian': "'DengXian', sans-serif"
+// 中文字体名称映射
+const CHINESE_FONT_MAP: Record<string, string> = {
+  'SourceHanSans': "'SourceHanSans'",
+  'MicrosoftYaHei': "'Microsoft YaHei'",
+  'DengXian': "'DengXian'"
 }
 
+// 英文字体名称映射
+const ENGLISH_FONT_MAP: Record<string, string> = {
+  'Arial': "'Arial'",
+  'TimesNewRoman': "'Times New Roman'",
+  'Georgia': "'Georgia'",
+  'Calibri': "'Calibri'",
+  'Verdana': "'Verdana'",
+  'Tahoma': "'Tahoma'"
+}
+
+// 代码字体名称映射
 const CODE_FONT_MAP: Record<string, string> = {
   'SourceCodePro': "'SourceCodePro', 'Consolas', monospace",
   'Consolas': "'Consolas', monospace",
@@ -36,8 +47,12 @@ const CODE_FONT_MAP: Record<string, string> = {
 }
 
 // 获取字体 CSS 字符串
-function getBodyFontCss(fontId: string): string {
-  return BODY_FONT_MAP[fontId] || `'${fontId}', sans-serif`
+function getChineseFontCss(fontId: string): string {
+  return CHINESE_FONT_MAP[fontId] || `'${fontId}'`
+}
+
+function getEnglishFontCss(fontId: string): string {
+  return ENGLISH_FONT_MAP[fontId] || `'${fontId}'`
 }
 
 function getCodeFontCss(fontId: string): string {
@@ -92,15 +107,24 @@ async function getFontFaceStyles(fontConfig?: FontConfig, htmlContent?: string):
     'SourceCodePro': 'SourceCodePro-Regular.ttf'
   }
 
-  // 检查正文字体是否需要加载
-  const bodyFontId = fontConfig.bodyFont || 'SourceHanSans'
-  const builtinBodyFont = BUILTIN_BODY_FONTS.find(f => f.id === bodyFontId)
-  if (builtinBodyFont?.needLoad && builtinFontFiles[bodyFontId]) {
-    fontsToLoad.push({ id: bodyFontId, filename: builtinFontFiles[bodyFontId] })
-  } else if (fontConfig.bodyCustomFonts) {
-    const customBodyFont = fontConfig.bodyCustomFonts.find(f => f.id === bodyFontId)
-    if (customBodyFont) {
-      fontsToLoad.push({ id: bodyFontId, filename: customBodyFont.filename })
+  // 检查中文字体是否需要加载
+  const chineseFontId = fontConfig.chineseFont || 'DengXian'
+  const builtinChineseFont = BUILTIN_CHINESE_FONTS.find(f => f.id === chineseFontId)
+  if (builtinChineseFont?.needLoad && builtinFontFiles[chineseFontId]) {
+    fontsToLoad.push({ id: chineseFontId, filename: builtinFontFiles[chineseFontId] })
+  } else if (fontConfig.chineseCustomFonts) {
+    const customChineseFont = fontConfig.chineseCustomFonts.find(f => f.id === chineseFontId)
+    if (customChineseFont) {
+      fontsToLoad.push({ id: chineseFontId, filename: customChineseFont.filename })
+    }
+  }
+
+  // 检查英文字体是否需要加载（自定义字体才需要）
+  const englishFontId = fontConfig.englishFont || 'Arial'
+  if (fontConfig.englishCustomFonts) {
+    const customEnglishFont = fontConfig.englishCustomFonts.find(f => f.id === englishFontId)
+    if (customEnglishFont) {
+      fontsToLoad.push({ id: englishFontId, filename: customEnglishFont.filename })
     }
   }
 
@@ -646,10 +670,14 @@ function escapeHtml(text: string): string {
 
 function getMarkdownStyles(fontConfig?: FontConfig): string {
   const bodyFontSize = fontConfig?.bodyFontSize || 16
-  const bodyFont = fontConfig?.bodyFont || 'SourceHanSans'
+  const chineseFont = fontConfig?.chineseFont || 'DengXian'
+  const englishFont = fontConfig?.englishFont || 'Arial'
   const codeFont = fontConfig?.codeFont || 'SourceCodePro'
 
-  const bodyFontCss = getBodyFontCss(bodyFont)
+  // 英文字体优先，中文字体fallback
+  const chineseFontCss = getChineseFontCss(chineseFont)
+  const englishFontCss = getEnglishFontCss(englishFont)
+  const bodyFontCss = `${englishFontCss}, ${chineseFontCss}, sans-serif`
   const codeFontCss = getCodeFontCss(codeFont)
 
   return `

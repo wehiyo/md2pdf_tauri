@@ -14,28 +14,42 @@ export interface CustomFont {
 }
 
 export interface FontConfig {
-  bodyFont: string           // 正文字体ID（内置或自定义）
-  codeFont: string           // 代码字体ID（内置或自定义）
-  bodyFontSize: number       // 正文字号（px），默认16
-  bodyCustomFonts: CustomFont[]  // 正文自定义字体列表
-  codeCustomFonts: CustomFont[]  // 代码自定义字体列表
+  chineseFont: string           // 中文字体ID（内置或自定义）
+  englishFont: string           // 英文字体ID（内置或自定义）
+  codeFont: string              // 代码字体ID（内置或自定义）
+  bodyFontSize: number          // 基础字号（px），默认16
+  chineseCustomFonts: CustomFont[]  // 中文自定义字体列表
+  englishCustomFonts: CustomFont[]  // 英文自定义字体列表
+  codeCustomFonts: CustomFont[]     // 代码自定义字体列表
 }
 
 const DEFAULT_CONFIG: FontConfig = {
-  bodyFont: 'SourceHanSans',
+  chineseFont: 'DengXian',
+  englishFont: 'Arial',
   codeFont: 'SourceCodePro',
   bodyFontSize: 16,
-  bodyCustomFonts: [],
+  chineseCustomFonts: [],
+  englishCustomFonts: [],
   codeCustomFonts: []
 }
 
 const CONFIG_FILE_NAME = 'config.json'
 
-// 内置正文字体
-export const BUILTIN_BODY_FONTS = [
-  { id: 'SourceHanSans', name: '思源黑体', needLoad: true },
+// 内置中文字体
+export const BUILTIN_CHINESE_FONTS = [
+  { id: 'DengXian', name: '等线', needLoad: false },
   { id: 'MicrosoftYaHei', name: '微软雅黑', needLoad: false },
-  { id: 'DengXian', name: '等线', needLoad: false }
+  { id: 'SourceHanSans', name: '思源黑体', needLoad: true }
+]
+
+// 内置英文字体（Windows自带）
+export const BUILTIN_ENGLISH_FONTS = [
+  { id: 'Arial', name: 'Arial', needLoad: false },
+  { id: 'TimesNewRoman', name: 'Times New Roman', needLoad: false },
+  { id: 'Georgia', name: 'Georgia', needLoad: false },
+  { id: 'Calibri', name: 'Calibri', needLoad: false },
+  { id: 'Verdana', name: 'Verdana', needLoad: false },
+  { id: 'Tahoma', name: 'Tahoma', needLoad: false }
 ]
 
 // 内置代码字体
@@ -91,7 +105,8 @@ export async function loadConfig(): Promise<FontConfig> {
         ...DEFAULT_CONFIG,
         ...config,
         bodyFontSize: config.bodyFontSize || DEFAULT_CONFIG.bodyFontSize,
-        bodyCustomFonts: config.bodyCustomFonts || [],
+        chineseCustomFonts: config.chineseCustomFonts || [],
+        englishCustomFonts: config.englishCustomFonts || [],
         codeCustomFonts: config.codeCustomFonts || []
       }
     }
@@ -159,9 +174,11 @@ export async function scanFonts(): Promise<CustomFont[]> {
 function isValidConfig(config: any): boolean {
   return (
     config &&
-    typeof config.bodyFont === 'string' &&
+    typeof config.chineseFont === 'string' &&
+    typeof config.englishFont === 'string' &&
     typeof config.codeFont === 'string' &&
-    Array.isArray(config.bodyCustomFonts || []) &&
+    Array.isArray(config.chineseCustomFonts || []) &&
+    Array.isArray(config.englishCustomFonts || []) &&
     Array.isArray(config.codeCustomFonts || [])
   )
 }
@@ -170,10 +187,16 @@ function isValidConfig(config: any): boolean {
  * 获取字体信息
  */
 export function getFontInfo(fontId: string, customFonts: CustomFont[]): { name: string; needLoad: boolean; filename?: string } | null {
-  // 检查内置正文字体
-  const builtinBody = BUILTIN_BODY_FONTS.find(f => f.id === fontId)
-  if (builtinBody) {
-    return { name: builtinBody.name, needLoad: builtinBody.needLoad, filename: builtinBody.needLoad ? 'SourceHanSansSC-Regular.ttf' : undefined }
+  // 检查内置中文字体
+  const builtinChinese = BUILTIN_CHINESE_FONTS.find(f => f.id === fontId)
+  if (builtinChinese) {
+    return { name: builtinChinese.name, needLoad: builtinChinese.needLoad, filename: builtinChinese.needLoad ? 'SourceHanSansSC-Regular.ttf' : undefined }
+  }
+
+  // 检查内置英文字体
+  const builtinEnglish = BUILTIN_ENGLISH_FONTS.find(f => f.id === fontId)
+  if (builtinEnglish) {
+    return { name: builtinEnglish.name, needLoad: builtinEnglish.needLoad }
   }
 
   // 检查内置代码字体

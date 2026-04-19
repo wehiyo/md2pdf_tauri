@@ -125,10 +125,12 @@ const currentSearchText = ref('')
 // 字体设置对话框状态
 const showSettings = ref(false)
 const fontConfig = ref<FontConfig>({
-  bodyFont: 'SourceHanSans',
+  chineseFont: 'DengXian',
+  englishFont: 'Arial',
   codeFont: 'SourceCodePro',
   bodyFontSize: 16,
-  bodyCustomFonts: [],
+  chineseCustomFonts: [],
+  englishCustomFonts: [],
   codeCustomFonts: []
 })
 
