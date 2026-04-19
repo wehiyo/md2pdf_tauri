@@ -233,6 +233,14 @@ watch(() => props.visible, async (newVal) => {
   overflow-y: auto;
   padding: 16px;
   background-color: #ffffff;
+  display: flex;
+  justify-content: center;
+}
+
+/* 预览区内容宽度与 PDF 页面宽度一致 */
+.preview-content .markdown-body {
+  max-width: 160mm;
+  width: 100%;
 }
 
 .header-title {

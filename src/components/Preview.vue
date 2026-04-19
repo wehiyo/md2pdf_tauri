@@ -583,7 +583,7 @@ onUpdated(async () => {
   display: flex;
   flex-direction: column;
   height: 100%;
-  background-color: #ffffff;
+  background-color: var(--preview-bg-color);
 }
 
 .preview-body {
@@ -596,7 +596,7 @@ onUpdated(async () => {
 .preview-content {
   flex: 1;
   overflow: auto;
-  max-width: 900px;
+  max-width: var(--preview-width);
   padding: 2rem;
   width: 100%;
 }

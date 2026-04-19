@@ -155,4 +155,10 @@ export async function loadFonts(config: FontConfig): Promise<void> {
   document.documentElement.style.setProperty('--body-font', bodyCss)
   document.documentElement.style.setProperty('--code-font', codeCss)
   document.documentElement.style.setProperty('--body-font-size', `${config.bodyFontSize || 16}px`)
+
+  // 设置排版 CSS 变量
+  document.documentElement.style.setProperty('--line-height', (config.lineHeight || 1.6).toString())
+  document.documentElement.style.setProperty('--paragraph-spacing', `${config.paragraphSpacing || 1}em`)
+  document.documentElement.style.setProperty('--preview-width', `${config.previewWidth || 900}px`)
+  document.documentElement.style.setProperty('--preview-bg-color', config.previewBackgroundColor || '#ffffff')
 }

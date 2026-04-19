@@ -2,8 +2,25 @@
   <Teleport to="body">
     <div v-if="visible" class="settings-overlay" @click.self="handleOverlayClick">
       <div class="settings-dialog" @click="handleDialogClick">
-        <div class="settings-header">字体设置</div>
-        <div class="settings-body">
+        <div class="settings-tabs">
+          <button
+            class="tab-btn"
+            :class="{ active: activeTab === 'font' }"
+            @click="activeTab = 'font'"
+          >
+            字体设置
+          </button>
+          <button
+            class="tab-btn"
+            :class="{ active: activeTab === 'layout' }"
+            @click="activeTab = 'layout'"
+          >
+            排版设置
+          </button>
+        </div>
+
+        <!-- 字体设置 Tab -->
+        <div v-if="activeTab === 'font'" class="settings-body">
           <div class="settings-item">
             <label>中文字体</label>
             <div class="font-select-row">
@@ -156,6 +173,93 @@
             </div>
           </div>
         </div>
+
+        <!-- 排版设置 Tab -->
+        <div v-if="activeTab === 'layout'" class="settings-body">
+          <div class="settings-item">
+            <label>正文行间距</label>
+            <div class="font-select-row">
+              <div class="custom-select" @click="toggleLineHeightDropdown">
+                <span class="selected-font-name">{{ getLineHeightLabel(localConfig.lineHeight) }}</span>
+                <svg class="select-arrow" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <polyline points="6 9 12 15 18 9"/>
+                </svg>
+              </div>
+              <div v-if="lineHeightDropdownOpen" class="dropdown-menu">
+                <div
+                  v-for="option in lineHeightOptions"
+                  :key="option.value"
+                  class="dropdown-item"
+                  :class="{ selected: localConfig.lineHeight === option.value }"
+                  @click="selectLineHeight(option.value)"
+                >
+                  {{ option.label }}
+                </div>
+              </div>
+            </div>
+          </div>
+          <div class="settings-item">
+            <label>段落间距</label>
+            <div class="font-select-row">
+              <div class="custom-select" @click="toggleParagraphSpacingDropdown">
+                <span class="selected-font-name">{{ getParagraphSpacingLabel(localConfig.paragraphSpacing) }}</span>
+                <svg class="select-arrow" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <polyline points="6 9 12 15 18 9"/>
+                </svg>
+              </div>
+              <div v-if="paragraphSpacingDropdownOpen" class="dropdown-menu">
+                <div
+                  v-for="option in paragraphSpacingOptions"
+                  :key="option.value"
+                  class="dropdown-item"
+                  :class="{ selected: localConfig.paragraphSpacing === option.value }"
+                  @click="selectParagraphSpacing(option.value)"
+                >
+                  {{ option.label }}
+                </div>
+              </div>
+            </div>
+          </div>
+          <div class="settings-item">
+            <label>预览宽度</label>
+            <div class="font-select-row">
+              <div class="custom-select" @click="togglePreviewWidthDropdown">
+                <span class="selected-font-name">{{ getPreviewWidthLabel(localConfig.previewWidth) }}</span>
+                <svg class="select-arrow" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <polyline points="6 9 12 15 18 9"/>
+                </svg>
+              </div>
+              <div v-if="previewWidthDropdownOpen" class="dropdown-menu">
+                <div
+                  v-for="option in previewWidthOptions"
+                  :key="option.value"
+                  class="dropdown-item"
+                  :class="{ selected: localConfig.previewWidth === option.value }"
+                  @click="selectPreviewWidth(option.value)"
+                >
+                  {{ option.label }}
+                </div>
+              </div>
+            </div>
+          </div>
+          <div class="settings-item">
+            <label>预览背景色</label>
+            <div class="color-select-row">
+              <div
+                v-for="color in previewBgColorOptions"
+                :key="color.value"
+                class="color-option"
+                :class="{ selected: localConfig.previewBackgroundColor === color.value }"
+                :style="{ backgroundColor: color.value }"
+                :title="color.label"
+                @click="selectPreviewBackgroundColor(color.value)"
+              >
+                <span v-if="localConfig.previewBackgroundColor === color.value" class="check-mark">✓</span>
+              </div>
+            </div>
+          </div>
+        </div>
+
         <div class="settings-footer">
           <button class="save-btn" @click="handleSave">保存</button>
           <button class="cancel-btn" @click="emit('close')">取消</button>
@@ -195,7 +299,17 @@
 <script setup lang="ts">
 import { ref, watch, onMounted } from 'vue'
 import type { FontConfig, CustomFont } from '../composables/useConfig'
-import { scanFonts as scanFontsDir, FONT_SIZE_OPTIONS, BUILTIN_CHINESE_FONTS, BUILTIN_ENGLISH_FONTS, BUILTIN_CODE_FONTS } from '../composables/useConfig'
+import {
+  scanFonts as scanFontsDir,
+  FONT_SIZE_OPTIONS,
+  BUILTIN_CHINESE_FONTS,
+  BUILTIN_ENGLISH_FONTS,
+  BUILTIN_CODE_FONTS,
+  LINE_HEIGHT_OPTIONS,
+  PARAGRAPH_SPACING_OPTIONS,
+  PREVIEW_WIDTH_OPTIONS,
+  PREVIEW_BACKGROUND_COLORS
+} from '../composables/useConfig'
 
 const props = defineProps<{
   visible: boolean
@@ -208,6 +322,7 @@ const emit = defineEmits<{
 }>()
 
 const localConfig = ref<FontConfig>({ ...props.config })
+const activeTab = ref<'font' | 'layout'>('font')
 const fontPickerVisible = ref(false)
 const availableFonts = ref<CustomFont[]>([])
 const pickerType = ref<'chinese' | 'english' | 'code'>('chinese')
@@ -215,9 +330,16 @@ const chineseFontDropdownOpen = ref(false)
 const englishFontDropdownOpen = ref(false)
 const codeFontDropdownOpen = ref(false)
 const fontSizeDropdownOpen = ref(false)
+const lineHeightDropdownOpen = ref(false)
+const paragraphSpacingDropdownOpen = ref(false)
+const previewWidthDropdownOpen = ref(false)
 
-// 字号选项
+// 选项常量
 const fontSizeOptions = FONT_SIZE_OPTIONS
+const lineHeightOptions = LINE_HEIGHT_OPTIONS
+const paragraphSpacingOptions = PARAGRAPH_SPACING_OPTIONS
+const previewWidthOptions = PREVIEW_WIDTH_OPTIONS
+const previewBgColorOptions = PREVIEW_BACKGROUND_COLORS
 
 // 内置字体列表
 const builtinChineseFonts = BUILTIN_CHINESE_FONTS.map(f => ({ id: f.id, name: f.name }))
@@ -231,7 +353,11 @@ watch(() => props.config, (newConfig) => {
     bodyFontSize: newConfig.bodyFontSize || 16,
     chineseCustomFonts: newConfig.chineseCustomFonts || [],
     englishCustomFonts: newConfig.englishCustomFonts || [],
-    codeCustomFonts: newConfig.codeCustomFonts || []
+    codeCustomFonts: newConfig.codeCustomFonts || [],
+    lineHeight: newConfig.lineHeight || 1.6,
+    paragraphSpacing: newConfig.paragraphSpacing || 1,
+    previewWidth: newConfig.previewWidth || 900,
+    previewBackgroundColor: newConfig.previewBackgroundColor || '#ffffff'
   }
 }, { immediate: true })
 
@@ -249,6 +375,18 @@ onMounted(() => {
   if (!localConfig.value.bodyFontSize) {
     localConfig.value.bodyFontSize = 16
   }
+  if (!localConfig.value.lineHeight) {
+    localConfig.value.lineHeight = 1.6
+  }
+  if (!localConfig.value.paragraphSpacing) {
+    localConfig.value.paragraphSpacing = 1
+  }
+  if (!localConfig.value.previewWidth) {
+    localConfig.value.previewWidth = 900
+  }
+  if (!localConfig.value.previewBackgroundColor) {
+    localConfig.value.previewBackgroundColor = '#ffffff'
+  }
 })
 
 function handleSave() {
@@ -257,7 +395,11 @@ function handleSave() {
     bodyFontSize: localConfig.value.bodyFontSize || 16,
     chineseCustomFonts: localConfig.value.chineseCustomFonts || [],
     englishCustomFonts: localConfig.value.englishCustomFonts || [],
-    codeCustomFonts: localConfig.value.codeCustomFonts || []
+    codeCustomFonts: localConfig.value.codeCustomFonts || [],
+    lineHeight: localConfig.value.lineHeight || 1.6,
+    paragraphSpacing: localConfig.value.paragraphSpacing || 1,
+    previewWidth: localConfig.value.previewWidth || 900,
+    previewBackgroundColor: localConfig.value.previewBackgroundColor || '#ffffff'
   })
 }
 
@@ -311,10 +453,7 @@ function closeFontPicker() {
 
 // 点击遮罩层
 function handleOverlayClick() {
-  chineseFontDropdownOpen.value = false
-  englishFontDropdownOpen.value = false
-  codeFontDropdownOpen.value = false
-  fontSizeDropdownOpen.value = false
+  closeAllDropdowns()
   emit('close')
 }
 
@@ -322,11 +461,19 @@ function handleOverlayClick() {
 function handleDialogClick(event: MouseEvent) {
   const target = event.target as HTMLElement
   if (!target.closest('.dropdown-menu') && !target.closest('.custom-select')) {
-    chineseFontDropdownOpen.value = false
-    englishFontDropdownOpen.value = false
-    codeFontDropdownOpen.value = false
-    fontSizeDropdownOpen.value = false
+    closeAllDropdowns()
   }
+}
+
+// 关闭所有下拉框
+function closeAllDropdowns() {
+  chineseFontDropdownOpen.value = false
+  englishFontDropdownOpen.value = false
+  codeFontDropdownOpen.value = false
+  fontSizeDropdownOpen.value = false
+  lineHeightDropdownOpen.value = false
+  paragraphSpacingDropdownOpen.value = false
+  previewWidthDropdownOpen.value = false
 }
 
 // 检查字体是否已添加到列表
@@ -369,7 +516,6 @@ function selectFont(font: CustomFont) {
     localConfig.value[customFontsKey] = [...(localConfig.value[customFontsKey] || []), font]
     localConfig.value[fontKey] = font.id
   } else {
-    // 已在列表中，直接选择
     const fontKey = pickerType.value === 'chinese' ? 'chineseFont'
       : pickerType.value === 'english' ? 'englishFont'
       : 'codeFont'
@@ -399,30 +545,47 @@ function getFontDisplayName(fontId: string, type: 'chinese' | 'english' | 'code'
 // 切换下拉框
 function toggleChineseFontDropdown() {
   chineseFontDropdownOpen.value = !chineseFontDropdownOpen.value
-  englishFontDropdownOpen.value = false
-  codeFontDropdownOpen.value = false
-  fontSizeDropdownOpen.value = false
+  closeOtherDropdowns('chineseFont')
 }
 
 function toggleEnglishFontDropdown() {
   englishFontDropdownOpen.value = !englishFontDropdownOpen.value
-  chineseFontDropdownOpen.value = false
-  codeFontDropdownOpen.value = false
-  fontSizeDropdownOpen.value = false
+  closeOtherDropdowns('englishFont')
 }
 
 function toggleCodeFontDropdown() {
   codeFontDropdownOpen.value = !codeFontDropdownOpen.value
-  chineseFontDropdownOpen.value = false
-  englishFontDropdownOpen.value = false
-  fontSizeDropdownOpen.value = false
+  closeOtherDropdowns('codeFont')
 }
 
 function toggleFontSizeDropdown() {
   fontSizeDropdownOpen.value = !fontSizeDropdownOpen.value
-  chineseFontDropdownOpen.value = false
-  englishFontDropdownOpen.value = false
-  codeFontDropdownOpen.value = false
+  closeOtherDropdowns('fontSize')
+}
+
+function toggleLineHeightDropdown() {
+  lineHeightDropdownOpen.value = !lineHeightDropdownOpen.value
+  closeOtherDropdowns('lineHeight')
+}
+
+function toggleParagraphSpacingDropdown() {
+  paragraphSpacingDropdownOpen.value = !paragraphSpacingDropdownOpen.value
+  closeOtherDropdowns('paragraphSpacing')
+}
+
+function togglePreviewWidthDropdown() {
+  previewWidthDropdownOpen.value = !previewWidthDropdownOpen.value
+  closeOtherDropdowns('previewWidth')
+}
+
+function closeOtherDropdowns(except: string) {
+  if (except !== 'chineseFont') chineseFontDropdownOpen.value = false
+  if (except !== 'englishFont') englishFontDropdownOpen.value = false
+  if (except !== 'codeFont') codeFontDropdownOpen.value = false
+  if (except !== 'fontSize') fontSizeDropdownOpen.value = false
+  if (except !== 'lineHeight') lineHeightDropdownOpen.value = false
+  if (except !== 'paragraphSpacing') paragraphSpacingDropdownOpen.value = false
+  if (except !== 'previewWidth') previewWidthDropdownOpen.value = false
 }
 
 // 选择字体
@@ -446,9 +609,44 @@ function selectFontSize(size: number) {
   fontSizeDropdownOpen.value = false
 }
 
+function selectLineHeight(value: number) {
+  localConfig.value.lineHeight = value
+  lineHeightDropdownOpen.value = false
+}
+
+function selectParagraphSpacing(value: number) {
+  localConfig.value.paragraphSpacing = value
+  paragraphSpacingDropdownOpen.value = false
+}
+
+function selectPreviewWidth(value: number) {
+  localConfig.value.previewWidth = value
+  previewWidthDropdownOpen.value = false
+}
+
+function selectPreviewBackgroundColor(value: string) {
+  localConfig.value.previewBackgroundColor = value
+}
+
+// 获取选项标签
 function getFontSizeLabel(size: number): string {
   const option = fontSizeOptions.find(o => o.value === size)
   return option ? option.label : `${size}px`
+}
+
+function getLineHeightLabel(value: number): string {
+  const option = lineHeightOptions.find(o => o.value === value)
+  return option ? option.label : `${value}`
+}
+
+function getParagraphSpacingLabel(value: number): string {
+  const option = paragraphSpacingOptions.find(o => o.value === value)
+  return option ? option.label : `${value}em`
+}
+
+function getPreviewWidthLabel(value: number): string {
+  const option = previewWidthOptions.find(o => o.value === value)
+  return option ? option.label : `${value}px`
 }
 </script>
 
@@ -475,11 +673,40 @@ function getFontSizeLabel(size: number): string {
   box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.25);
 }
 
-.settings-header {
-  font-size: 18px;
-  font-weight: 600;
-  color: #1e293b;
+.settings-tabs {
+  display: flex;
+  border-bottom: 1px solid #e2e8f0;
   margin-bottom: 20px;
+}
+
+.tab-btn {
+  padding: 12px 24px;
+  border: none;
+  background: transparent;
+  cursor: pointer;
+  font-size: 14px;
+  color: #64748b;
+  position: relative;
+  transition: color 0.2s;
+}
+
+.tab-btn:hover {
+  color: #3b82f6;
+}
+
+.tab-btn.active {
+  color: #3b82f6;
+  font-weight: 600;
+}
+
+.tab-btn.active::after {
+  content: '';
+  position: absolute;
+  bottom: -1px;
+  left: 0;
+  right: 0;
+  height: 2px;
+  background-color: #3b82f6;
 }
 
 .settings-body {
@@ -504,6 +731,37 @@ function getFontSizeLabel(size: number): string {
   display: flex;
   gap: 8px;
   position: relative;
+}
+
+.color-select-row {
+  display: flex;
+  gap: 12px;
+}
+
+.color-option {
+  width: 32px;
+  height: 32px;
+  border-radius: 6px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 2px solid transparent;
+  transition: border-color 0.2s;
+}
+
+.color-option:hover {
+  border-color: #cbd5e1;
+}
+
+.color-option.selected {
+  border-color: #3b82f6;
+}
+
+.check-mark {
+  color: #3b82f6;
+  font-size: 16px;
+  font-weight: 600;
 }
 
 .custom-select {

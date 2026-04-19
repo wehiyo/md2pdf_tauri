@@ -21,6 +21,11 @@ export interface FontConfig {
   chineseCustomFonts: CustomFont[]  // 中文自定义字体列表
   englishCustomFonts: CustomFont[]  // 英文自定义字体列表
   codeCustomFonts: CustomFont[]     // 代码自定义字体列表
+  // 排版设置
+  lineHeight: number            // 正文行间距，默认 1.6
+  paragraphSpacing: number      // 段落间距（em），默认 1
+  previewWidth: number          // 预览宽度（px），默认 900
+  previewBackgroundColor: string  // 预览背景色，默认 '#ffffff'
 }
 
 const DEFAULT_CONFIG: FontConfig = {
@@ -30,7 +35,11 @@ const DEFAULT_CONFIG: FontConfig = {
   bodyFontSize: 16,
   chineseCustomFonts: [],
   englishCustomFonts: [],
-  codeCustomFonts: []
+  codeCustomFonts: [],
+  lineHeight: 1.6,
+  paragraphSpacing: 1,
+  previewWidth: 900,
+  previewBackgroundColor: '#ffffff'
 }
 
 const CONFIG_FILE_NAME = 'config.json'
@@ -72,6 +81,44 @@ export const FONT_SIZE_OPTIONS = [
   { value: 22, label: '22px（较大）' }
 ]
 
+// 行间距选项
+export const LINE_HEIGHT_OPTIONS = [
+  { value: 1.4, label: '1.4（紧凑）' },
+  { value: 1.5, label: '1.5（较紧凑）' },
+  { value: 1.6, label: '1.6（标准）' },
+  { value: 1.7, label: '1.7（较宽松）' },
+  { value: 1.8, label: '1.8（宽松）' },
+  { value: 2.0, label: '2.0（很宽松）' }
+]
+
+// 段落间距选项（em）
+export const PARAGRAPH_SPACING_OPTIONS = [
+  { value: 0.5, label: '0.5em（紧凑）' },
+  { value: 0.75, label: '0.75em（较紧凑）' },
+  { value: 1, label: '1em（标准）' },
+  { value: 1.25, label: '1.25em（较宽松）' },
+  { value: 1.5, label: '1.5em（宽松）' }
+]
+
+// 预览宽度选项（px）
+export const PREVIEW_WIDTH_OPTIONS = [
+  { value: 600, label: '600px（窄）' },
+  { value: 800, label: '800px（较窄）' },
+  { value: 900, label: '900px（标准）' },
+  { value: 1000, label: '1000px（较宽）' },
+  { value: 1200, label: '1200px（宽）' }
+]
+
+// 预览背景色选项
+export const PREVIEW_BACKGROUND_COLORS = [
+  { value: '#ffffff', label: '白色' },
+  { value: '#f8f9fa', label: '浅灰' },
+  { value: '#F4ECDA', label: '暖黄' },
+  { value: '#D8CBB2', label: '褐色' },
+  { value: '#ecfdf5', label: '淡绿' },
+  { value: '#eff6ff', label: '淡蓝' }
+]
+
 let cachedConfig: FontConfig | null = null
 
 /**
@@ -110,7 +157,11 @@ export async function loadConfig(): Promise<FontConfig> {
         bodyFontSize: config.bodyFontSize || DEFAULT_CONFIG.bodyFontSize,
         chineseCustomFonts: config.chineseCustomFonts || [],
         englishCustomFonts: config.englishCustomFonts || [],
-        codeCustomFonts: config.codeCustomFonts || []
+        codeCustomFonts: config.codeCustomFonts || [],
+        lineHeight: config.lineHeight || DEFAULT_CONFIG.lineHeight,
+        paragraphSpacing: config.paragraphSpacing || DEFAULT_CONFIG.paragraphSpacing,
+        previewWidth: config.previewWidth || DEFAULT_CONFIG.previewWidth,
+        previewBackgroundColor: config.previewBackgroundColor || DEFAULT_CONFIG.previewBackgroundColor
       }
     }
   } catch (e) {
