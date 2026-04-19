@@ -68,7 +68,8 @@
                 { "path": "$DESKTOP/**" },
                 { "path": "$DOCUMENT/**" },
                 { "path": "$DOWNLOAD/**" },
-                { "path": "$RESOURCE/**" }
+                { "path": "$RESOURCE/**" },
+                { "path": "**" }
               ]
             },
             "fs:allow-read-text-file",
@@ -76,7 +77,9 @@
             "fs:allow-read-dir",
             "fs:allow-read-file",
             "fs:allow-write-file",
+            "fs:allow-mkdir",
             "fs:allow-remove",
+            "fs:allow-copy-file",
             "fs:allow-temp-write",
             "fs:allow-temp-read"
           ]

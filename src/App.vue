@@ -108,8 +108,12 @@ import { loadConfig, type FontConfig } from './composables/useConfig'
 import { loadFonts } from './composables/useFonts'
 import {
   prepareMkdocsExport,
+  collectNavChapters,
+  loadAllMdFiles,
+  resetChapterCounters,
   type BookmarkTreeNode
 } from './composables/useMkdocsExport'
+import { exportStaticSite } from './composables/useStaticSiteExport'
 import { save, open, message } from '@tauri-apps/plugin-dialog'
 import { writeTextFile, readDir, readTextFile } from '@tauri-apps/plugin-fs'
 import { invoke } from '@tauri-apps/api/core'
@@ -422,6 +426,51 @@ const renderedHtml = computed(() => {
 
 // 导出 HTML
 async function exportHTML() {
+  // MkDocs 模式：导出静态站点
+  if (workState.value === 'mkdocs' && importedFolderPath.value) {
+    try {
+      // 选择输出目录
+      const outputDir = await open({
+        directory: true,
+        multiple: false,
+        title: '选择静态站点输出目录'
+      })
+
+      if (!outputDir || typeof outputDir !== 'string') return
+
+      // 读取 mkdocs.yml 获取 site_name
+      const mkdocsYmlPath = findMkdocsYmlPath(importedFolderPath.value)
+      let siteName = 'Documentation'
+      if (mkdocsYmlPath) {
+        try {
+          const ymlContent = await readTextFile(mkdocsYmlPath)
+          const config = parseYaml(ymlContent) as { site_name?: string }
+          siteName = config.site_name || 'Documentation'
+        } catch {
+          // 无法读取配置，使用默认名称
+        }
+      }
+
+      // 准备章节列表
+      resetChapterCounters()
+      const chapters = collectNavChapters(mdFiles.value, importedFolderPath.value, 0, '')
+      await loadAllMdFiles(chapters)
+
+      // 执行静态站点导出
+      await exportStaticSite({
+        outputDir,
+        siteName,
+        chapters
+      })
+
+      await message('静态站点导出成功！', { title: '成功', kind: 'info' })
+    } catch (error) {
+      await handleError(error, '导出静态站点')
+    }
+    return
+  }
+
+  // 单文件模式：导出单个 HTML 文件
   try {
     const filePath = await save({
       filters: [{
@@ -541,6 +590,18 @@ function cancelMkdocsExport() {
 function extractH1Title(mdContent: string): string | null {
   const h1Match = mdContent.match(/^#\s+(.+)$/m)
   return h1Match ? h1Match[1].trim() : null
+}
+
+// 从 docs 目录路径推断 mkdocs.yml 路径
+function findMkdocsYmlPath(docsPath: string): string | null {
+  // docs 目录通常是 mkdocs.yml 同级的 docs 子目录
+  // 例如：docsPath = /project/docs，则 mkdocs.yml = /project/mkdocs.yml
+  const normalized = docsPath.replace(/\\/g, '/')
+  const lastSlash = normalized.lastIndexOf('/')
+  if (lastSlash <= 0) return null
+
+  const projectDir = normalized.substring(0, lastSlash)
+  return `${projectDir}/mkdocs.yml`
 }
 
 // 检查未保存改动并提示用户
