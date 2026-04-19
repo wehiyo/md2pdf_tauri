@@ -47,6 +47,7 @@ export const BUILTIN_CODE_FONTS = [
 
 // 可选字号列表（px）
 export const FONT_SIZE_OPTIONS = [
+  { value: 12, label: '12px（最小）' },
   { value: 14, label: '14px（小）' },
   { value: 16, label: '16px（标准）' },
   { value: 18, label: '18px（中）' },
