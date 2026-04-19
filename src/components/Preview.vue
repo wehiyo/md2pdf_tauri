@@ -131,7 +131,11 @@ const fontConfig = ref<FontConfig>({
   bodyFontSize: 16,
   chineseCustomFonts: [],
   englishCustomFonts: [],
-  codeCustomFonts: []
+  codeCustomFonts: [],
+  lineHeight: 1.6,
+  paragraphSpacing: 1,
+  previewWidth: 900,
+  previewBackgroundColor: '#ffffff'
 })
 
 // 处理设置保存
