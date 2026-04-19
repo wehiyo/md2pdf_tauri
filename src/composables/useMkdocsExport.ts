@@ -475,7 +475,6 @@ export function renderChapterContent(
  * 同时为每个章节设置 htmlId（用于书签跳转）
  */
 export function combineChaptersToHtml(chapters: NavChapter[]): string {
-  console.log('[combineChaptersToHtml] 开始合并，章节数:', chapters.length)
   const htmlParts: string[] = []
 
   const { parse, renderContentSkipH1 } = useMarkdown()
@@ -485,7 +484,6 @@ export function combineChaptersToHtml(chapters: NavChapter[]): string {
 
   for (let i = 0; i < chapters.length; i++) {
     const chapter = chapters[i]
-    console.log(`[combineChaptersToHtml] 处理章节 ${i}:`, chapter.title, 'filePath:', chapter.filePath, 'chapterNumber:', chapter.chapterNumber)
 
     // nav 第 1 层章节（从第二个开始）添加分页
     if (chapter.navLevel === 0 && i > 0) {
@@ -507,17 +505,14 @@ export function combineChaptersToHtml(chapters: NavChapter[]): string {
 
     // 如果有文件路径和内容，渲染内容
     if (!chapter.filePath || !chapter.content) {
-      console.log(`[combineChaptersToHtml] 章节 ${i}: 无文件路径或内容，仅显示标题`)
       continue
     }
 
     // 解析 frontmatter 提取 body
     const { body } = parse(chapter.content)
-    console.log(`[combineChaptersToHtml] 章节 ${i} body 长度:`, body.length)
 
     // 渲染内容（跳过 h1，使用调整后的编号）
     const renderedHtml = renderContentSkipH1(body, chapter.numberPrefix, chapter.navLevel)
-    console.log(`[combineChaptersToHtml] 章节 ${i} renderedHtml 长度:`, renderedHtml.length)
 
     // 处理图片路径（转换为 asset URL）
     const fileDir = getFileDir(chapter.filePath)
@@ -527,7 +522,6 @@ export function combineChaptersToHtml(chapters: NavChapter[]): string {
   }
 
   const result = htmlParts.join('\n')
-  console.log('[combineChaptersToHtml] 最终 HTML 长度:', result.length)
   return result
 }
 
@@ -580,32 +574,22 @@ export async function prepareMkdocsExport(
   combinedHtml: string
   pdfBookmarks: Array<{ title: string; level: number; id: string }>
 }> {
-  console.log('[MkDocs导出] prepareMkdocsExport 开始')
-  console.log('[MkDocs导出] nav:', nav)
-  console.log('[MkDocs导出] basePath:', basePath)
-
   // 重置计数器
   resetChapterCounters()
   resetGlobalHeadingIndex()  // 重置 useMarkdown.ts 的计数器
 
   // 收集章节
   const chapters = collectNavChapters(nav, basePath, 0, '')
-  console.log('[MkDocs导出] 收集到章节:', chapters.length)
-  console.log('[MkDocs导出] 章节详情:', chapters)
 
   // 加载文件内容
   await loadAllMdFiles(chapters)
-  console.log('[MkDocs导出] 加载文件后章节:', chapters.filter(c => c.content))
 
   // 先重新编号标题，生成书签树（从 globalHeadingIndex=0 开始）
   const bookmarkTree = renumberHeadings(chapters)
-  console.log('[MkDocs导出] 书签树:', bookmarkTree)
 
   // 重置 useMarkdown.ts 的计数器，然后渲染 HTML（从相同的 globalHeadingIndex=0 开始）
   resetGlobalHeadingIndex()
   const combinedHtml = combineChaptersToHtml(chapters)
-  console.log('[MkDocs导出] combinedHtml 长度:', combinedHtml.length)
-  console.log('[MkDocs导出] combinedHtml 前200字符:', combinedHtml.substring(0, 200))
 
   // 提取 PDF 书签
   const pdfBookmarks = extractPdfBookmarks(chapters)

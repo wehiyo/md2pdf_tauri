@@ -67,7 +67,6 @@ fn get_font_path(app: AppHandle, filename: String) -> Result<String, String> {
     };
 
     let absolute_path = path.to_string_lossy().to_string();
-    println!("字体路径: {}", absolute_path);
     Ok(absolute_path)
 }
 
@@ -87,16 +86,12 @@ fn get_font_base64(app: AppHandle, filename: String) -> Result<String, String> {
             .join(&filename)
     };
 
-    println!("读取字体文件(base64): {}", path.to_string_lossy());
-
     let bytes = fs::read(&path)
         .map_err(|e| format!("读取字体文件失败: {}", e))?;
 
     // 使用标准 base64 编码
     use base64::{Engine as _, engine::general_purpose::STANDARD};
     let base64_str = STANDARD.encode(&bytes);
-
-    println!("字体 base64 长度: {} bytes (原始: {} bytes)", base64_str.len(), bytes.len());
 
     Ok(base64_str)
 }
@@ -125,12 +120,9 @@ fn scan_fonts_dir(app: AppHandle) -> Result<Vec<(String, String, String)>, Strin
             .join("assets/fonts")
     };
 
-    println!("扫描字体目录: {}", fonts_dir.to_string_lossy());
-
     let mut fonts: Vec<(String, String, String)> = Vec::new();
 
     if !fonts_dir.exists() {
-        println!("字体目录不存在: {}", fonts_dir.to_string_lossy());
         return Ok(fonts);
     }
 
@@ -142,7 +134,6 @@ fn scan_fonts_dir(app: AppHandle) -> Result<Vec<(String, String, String)>, Strin
             let path = entry.path();
             if path.is_file() {
                 let filename = entry.file_name().to_string_lossy().to_string();
-                println!("发现文件: {}", filename);
 
                 // 只处理字体文件
                 if filename.ends_with(".ttf") || filename.ends_with(".otf")
@@ -150,8 +141,9 @@ fn scan_fonts_dir(app: AppHandle) -> Result<Vec<(String, String, String)>, Strin
 
                     // 跳过内置字体
                     if filename == "SourceHanSansSC-Regular.ttf"
-                       || filename == "SourceCodePro-Regular.ttf" {
-                        println!("跳过内置字体: {}", filename);
+                       || filename == "SourceHanSansSC-Bold.ttf"
+                       || filename == "SourceCodePro-Regular.ttf"
+                       || filename == "SourceHanSerifSC-Regular.ttf" {
                         continue;
                     }
 
@@ -162,15 +154,46 @@ fn scan_fonts_dir(app: AppHandle) -> Result<Vec<(String, String, String)>, Strin
                         .replace(".woff", "")
                         .replace(".woff2", "");
 
-                    println!("添加字体: id={}, name={}, filename={}", id, id, filename);
-                    fonts.push((id.clone(), id, filename));
+                    // 尝试从字体文件提取真实名称
+                    let name = extract_font_name(&path).unwrap_or_else(|| id.clone());
+
+                    fonts.push((id, name, filename));
                 }
             }
         }
     }
 
-    println!("扫描结果: {} 个字体", fonts.len());
     Ok(fonts)
+}
+
+/// 从字体文件提取字体家族名称
+fn extract_font_name(path: &std::path::Path) -> Option<String> {
+    let bytes = std::fs::read(path).ok()?;
+
+    // 解析字体文件（使用 Face 而非 Font）
+    let face = ttf_parser::Face::parse(&bytes, 0).ok()?;
+
+    // 获取字体名称字符串（name_id = 4 = FULL_NAME）
+    // 优先使用 Windows 平台的 UTF-16 编码
+    for name_record in face.names() {
+        if name_record.name_id == 4 && name_record.platform_id == ttf_parser::PlatformId::Windows {
+            // 使用 ttf_parser 提供的字符串转换，返回 Option<String>
+            if let Some(name_str) = name_record.to_string() {
+                return Some(name_str);
+            }
+        }
+    }
+
+    // 如果没有找到 FULL_NAME，尝试 FAMILY_NAME (name_id = 1)
+    for name_record in face.names() {
+        if name_record.name_id == 1 && name_record.platform_id == ttf_parser::PlatformId::Windows {
+            if let Some(name_str) = name_record.to_string() {
+                return Some(name_str);
+            }
+        }
+    }
+
+    None
 }
 
 /// 关闭 splash 窗口并显示主窗口

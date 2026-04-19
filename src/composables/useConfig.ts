@@ -39,7 +39,10 @@ const CONFIG_FILE_NAME = 'config.json'
 export const BUILTIN_CHINESE_FONTS = [
   { id: 'DengXian', name: '等线', needLoad: false },
   { id: 'MicrosoftYaHei', name: '微软雅黑', needLoad: false },
-  { id: 'SourceHanSans', name: '思源黑体', needLoad: true }
+  { id: 'SimSun', name: '新宋体', needLoad: false },
+  { id: 'FangSong', name: '仿宋', needLoad: false },
+  { id: 'SourceHanSans', name: '思源黑体', needLoad: true },
+  { id: 'SourceHanSerif', name: '思源宋体', needLoad: true }
 ]
 
 // 内置英文字体（Windows自带）
@@ -152,10 +155,7 @@ export async function saveConfig(config: FontConfig): Promise<void> {
  */
 export async function scanFonts(): Promise<CustomFont[]> {
   try {
-    // 通过 Rust 命令扫描字体目录
-    console.log('调用 scan_fonts_dir 命令...')
     const fonts = await invoke<[string, string, string][]>('scan_fonts_dir')
-    console.log('scan_fonts_dir 返回:', fonts)
 
     return fonts.map(([id, name, filename]) => ({
       id,
@@ -190,7 +190,11 @@ export function getFontInfo(fontId: string, customFonts: CustomFont[]): { name: 
   // 检查内置中文字体
   const builtinChinese = BUILTIN_CHINESE_FONTS.find(f => f.id === fontId)
   if (builtinChinese) {
-    return { name: builtinChinese.name, needLoad: builtinChinese.needLoad, filename: builtinChinese.needLoad ? 'SourceHanSansSC-Regular.ttf' : undefined }
+    const fontFiles: Record<string, string> = {
+      'SourceHanSans': 'SourceHanSansSC-Regular.ttf',
+      'SourceHanSerif': 'SourceHanSerifSC-Regular.ttf'
+    }
+    return { name: builtinChinese.name, needLoad: builtinChinese.needLoad, filename: builtinChinese.needLoad ? fontFiles[fontId] : undefined }
   }
 
   // 检查内置英文字体

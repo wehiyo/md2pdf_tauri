@@ -16,7 +16,6 @@ async function loadSingleFont(fontId: string, filename: string): Promise<void> {
 
   // 检查是否已注入
   if (document.getElementById(styleId)) {
-    console.log('字体已存在，跳过:', fontId)
     return
   }
 
@@ -41,14 +40,6 @@ async function loadSingleFont(fontId: string, filename: string): Promise<void> {
     }
   `
   document.head.appendChild(style)
-
-  // 存储调试信息到 window 对象（方便 release 版本调试）
-  if (!(window as any).__fontDebug) {
-    (window as any).__fontDebug = []
-  }
-  (window as any).__fontDebug.push({ fontId, filename, absolutePath, fontUrl })
-
-  console.log('字体已注入:', fontId, '路径:', absolutePath, 'URL:', fontUrl)
 }
 
 /**
@@ -65,6 +56,9 @@ export async function loadFonts(config: FontConfig): Promise<void> {
   for (const font of BUILTIN_CHINESE_FONTS) {
     if (font.needLoad && font.id === 'SourceHanSans') {
       await loadSingleFont('SourceHanSans', 'SourceHanSansSC-Regular.ttf')
+    }
+    if (font.needLoad && font.id === 'SourceHanSerif') {
+      await loadSingleFont('SourceHanSerif', 'SourceHanSerifSC-Regular.ttf')
     }
   }
 
@@ -100,26 +94,30 @@ export async function loadFonts(config: FontConfig): Promise<void> {
   let bodyCss = "'Arial', 'Microsoft YaHei', sans-serif"
   let codeCss = "'Consolas', monospace"
 
-  // 构建中文字体CSS
-  let chineseCss = "'Microsoft YaHei', sans-serif"
+  // 构建中文字体CSS（不含 generic fallback，后面统一添加）
+  let chineseFontName = "'Microsoft YaHei'"
   if (chineseFontInfo) {
     if (chineseFontInfo.needLoad) {
-      chineseCss = `'${config.chineseFont}', 'Microsoft YaHei', sans-serif`
+      chineseFontName = `'${config.chineseFont}'`
     } else {
+      // Windows 内置字体 CSS 名称映射
       const nameMap: Record<string, string> = {
         'MicrosoftYaHei': "'Microsoft YaHei'",
         'DengXian': "'DengXian'",
-        'SourceHanSans': "'SourceHanSans'"
+        'SimSun': "'SimSun'",
+        'FangSong': "'FangSong'",
+        'SourceHanSans': "'SourceHanSans'",
+        'SourceHanSerif': "'SourceHanSerif'"
       }
-      chineseCss = `${nameMap[config.chineseFont] || `'${chineseFontInfo.name}'`}, sans-serif`
+      chineseFontName = nameMap[config.chineseFont] || `'${chineseFontInfo.name}'`
     }
   }
 
-  // 构建英文字体CSS
-  let englishCss = "'Arial', sans-serif"
+  // 构建英文字体CSS（不含 generic fallback）
+  let englishFontName = "'Arial'"
   if (englishFontInfo) {
     if (englishFontInfo.needLoad) {
-      englishCss = `'${config.englishFont}', sans-serif`
+      englishFontName = `'${config.englishFont}'`
     } else {
       const nameMap: Record<string, string> = {
         'Arial': "'Arial'",
@@ -129,36 +127,32 @@ export async function loadFonts(config: FontConfig): Promise<void> {
         'Verdana': "'Verdana'",
         'Tahoma': "'Tahoma'"
       }
-      englishCss = `${nameMap[config.englishFont] || `'${englishFontInfo.name}'`}, sans-serif`
+      englishFontName = nameMap[config.englishFont] || `'${englishFontInfo.name}'`
     }
   }
 
-  // 组合：英文字体优先，中文字体fallback
-  bodyCss = `${englishCss}, ${chineseCss}`
+  // 组合：英文字体优先，中文字体fallback，最后是 generic fallback
+  bodyCss = `${englishFontName}, ${chineseFontName}, sans-serif`
 
+  // 构建代码字体CSS（不含 generic fallback）
+  let codeFontName = "'Consolas'"
   if (codeFontInfo) {
     if (codeFontInfo.needLoad) {
-      codeCss = `'${config.codeFont}', 'Consolas', monospace`
+      codeFontName = `'${config.codeFont}'`
     } else {
       const nameMap: Record<string, string> = {
         'Consolas': "'Consolas'",
         'CourierNew': "'Courier New'"
       }
-      codeCss = `${nameMap[config.codeFont] || `'${codeFontInfo.name}'`}, monospace`
+      codeFontName = nameMap[config.codeFont] || `'${codeFontInfo.name}'`
     }
   }
+
+  // 组合：代码字体 + generic fallback
+  codeCss = `${codeFontName}, monospace`
 
   // 设置 CSS 变量
   document.documentElement.style.setProperty('--body-font', bodyCss)
   document.documentElement.style.setProperty('--code-font', codeCss)
   document.documentElement.style.setProperty('--body-font-size', `${config.bodyFontSize || 16}px`)
-
-  console.log('字体已加载:', {
-    chinese: config.chineseFont,
-    english: config.englishFont,
-    code: config.codeFont,
-    bodyFontSize: config.bodyFontSize || 16,
-    bodyCss,
-    codeCss
-  })
 }

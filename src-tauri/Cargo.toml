@@ -30,6 +30,9 @@ pdf-extract = "0.10.0"
 # 字体子集化支持
 fontcull = "2.0.1"
 
+# 字体名称解析
+ttf-parser = "0.24"
+
 # 文件编码支持（GB18030 等）
 encoding_rs = "0.8"
 

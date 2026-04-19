@@ -25,8 +25,11 @@ let isExporting = false
 // 中文字体名称映射
 const CHINESE_FONT_MAP: Record<string, string> = {
   'SourceHanSans': "'SourceHanSans'",
+  'SourceHanSerif': "'SourceHanSerif'",
   'MicrosoftYaHei': "'Microsoft YaHei'",
-  'DengXian': "'DengXian'"
+  'DengXian': "'DengXian'",
+  'SimSun': "'SimSun'",
+  'FangSong': "'FangSong'"
 }
 
 // 英文字体名称映射
@@ -104,6 +107,7 @@ async function getFontFaceStyles(fontConfig?: FontConfig, htmlContent?: string):
   // 内置字体文件名映射
   const builtinFontFiles: Record<string, string> = {
     'SourceHanSans': 'SourceHanSansSC-Regular.ttf',
+    'SourceHanSerif': 'SourceHanSerifSC-Regular.ttf',
     'SourceCodePro': 'SourceCodePro-Regular.ttf'
   }
 
@@ -499,15 +503,11 @@ async function addPageNumbers(
     try {
       // 收集所有需要显示的文字（标题 + 密级 + "密级："）
       const allText = headerTitle + securityLevel + '密级：'
-      console.log('准备子集化字体，文字:', allText)
       const chineseFontBytes = await loadChineseFontSubset(allText)
-      console.log('子集化字体结果:', chineseFontBytes ? `${chineseFontBytes.length} bytes` : 'null')
       if (chineseFontBytes) {
         // 使用 Rust 子集化的字体，直接嵌入（已包含所需字符）
         headerFont = await pdfDoc.embedFont(chineseFontBytes)
-        console.log('字体嵌入成功')
       } else {
-        console.log('字体子集化返回 null，禁用页眉')
         canShowHeader = false
       }
     } catch (e) {
