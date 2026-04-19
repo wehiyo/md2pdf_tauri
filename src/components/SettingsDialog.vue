@@ -48,28 +48,6 @@
             </div>
           </div>
           <div class="settings-item">
-            <label>正文字号</label>
-            <div class="font-select-row">
-              <div class="custom-select" @click="toggleFontSizeDropdown">
-                <span class="selected-font-name">{{ getFontSizeLabel(localConfig.bodyFontSize) }}</span>
-                <svg class="select-arrow" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                  <polyline points="6 9 12 15 18 9"/>
-                </svg>
-              </div>
-              <div v-if="fontSizeDropdownOpen" class="dropdown-menu">
-                <div
-                  v-for="size in fontSizeOptions"
-                  :key="size.value"
-                  class="dropdown-item"
-                  :class="{ selected: localConfig.bodyFontSize === size.value }"
-                  @click="selectFontSize(size.value)"
-                >
-                  {{ size.label }}
-                </div>
-              </div>
-            </div>
-          </div>
-          <div class="settings-item">
             <label>代码字体</label>
             <div class="font-select-row">
               <div class="custom-select" @click="toggleCodeFontDropdown">
@@ -108,6 +86,28 @@
                     <span class="font-name-text" @click="selectCodeFont(font.id)">{{ font.name }}</span>
                     <button class="dropdown-remove-btn" title="移除" @click.stop="removeCustomFont(font.id, 'code')">×</button>
                   </div>
+                </div>
+              </div>
+            </div>
+          </div>
+          <div class="settings-item">
+            <label>基础字号</label>
+            <div class="font-select-row">
+              <div class="custom-select" @click="toggleFontSizeDropdown">
+                <span class="selected-font-name">{{ getFontSizeLabel(localConfig.bodyFontSize) }}</span>
+                <svg class="select-arrow" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <polyline points="6 9 12 15 18 9"/>
+                </svg>
+              </div>
+              <div v-if="fontSizeDropdownOpen" class="dropdown-menu">
+                <div
+                  v-for="size in fontSizeOptions"
+                  :key="size.value"
+                  class="dropdown-item"
+                  :class="{ selected: localConfig.bodyFontSize === size.value }"
+                  @click="selectFontSize(size.value)"
+                >
+                  {{ size.label }}
                 </div>
               </div>
             </div>
