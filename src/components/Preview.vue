@@ -101,6 +101,7 @@ const emit = defineEmits<{
   'search': [text: string, mode: 'current' | 'global', mdFiles?: MdFile[]]
   'search-jump': [direction: 'prev' | 'next']
   'search-clear': []
+  'font-config-change': [config: FontConfig]
 }>()
 
 // MdFile 类型定义
@@ -126,6 +127,7 @@ const showSettings = ref(false)
 const fontConfig = ref<FontConfig>({
   bodyFont: 'SourceHanSans',
   codeFont: 'SourceCodePro',
+  bodyFontSize: 16,
   bodyCustomFonts: [],
   codeCustomFonts: []
 })
@@ -136,6 +138,7 @@ async function handleSettingsSave(config: FontConfig) {
   await saveConfig(config)
   await loadFonts(config)
   showSettings.value = false
+  emit('font-config-change', config)
 }
 
 // 暴露滚动容器和搜索相关方法

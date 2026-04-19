@@ -3,6 +3,7 @@
   line-height: 1.6;
   color: #1f2937;
   font-family: var(--body-font);
+  font-size: var(--body-font-size);
 }
 
 /* 代码字体通过动态注入 */
@@ -240,6 +241,7 @@
   border-spacing: 0;
   overflow: auto;
   display: block;
+  font-size: 0.85em;
 }
 
 .markdown-body table th {

@@ -109,9 +109,15 @@ pub async fn print_to_pdf_with_bookmarks(
     }
 }
 
-/// 创建隐藏的打印窗口
+/// 创建隐藏的打印窗口（复用已存在的窗口）
 #[cfg(windows)]
 fn create_print_window(app: &AppHandle) -> Result<WebviewWindow, String> {
+    // 检查是否已存在打印窗口，复用它
+    if let Some(existing_window) = app.get_webview_window("print-window") {
+        println!("复用已存在的打印窗口");
+        return Ok(existing_window);
+    }
+
     let blank_url = Url::parse("about:blank").expect("URL should be valid");
 
     // A4 尺寸 @ 96 DPI: 210mm × 297mm ≈ 794px × 1123px
@@ -125,6 +131,7 @@ fn create_print_window(app: &AppHandle) -> Result<WebviewWindow, String> {
     .build()
     .map_err(|e| format!("创建打印窗口失败: {}", e))?;
 
+    println!("创建新的打印窗口");
     Ok(print_window)
 }
 

@@ -55,6 +55,7 @@
         @search="handleSearch"
         @search-jump="handleSearchJump"
         @search-clear="handleSearchClear"
+        @font-config-change="handleFontConfigChange"
       />
     </div>
     <ExportProgress />
@@ -103,6 +104,8 @@ import type { Metadata } from './composables/useMarkdown'
 import { usePDF } from './composables/usePDF'
 import { useScrollSync } from './composables/useScrollSync'
 import { useErrorHandling } from './composables/useErrorHandling'
+import { loadConfig, type FontConfig } from './composables/useConfig'
+import { loadFonts } from './composables/useFonts'
 import {
   prepareMkdocsExport,
   type BookmarkTreeNode
@@ -148,6 +151,15 @@ const currentFileDir = ref<string | null>(null)
 const currentFilePath = ref<string | null>(null)
 const savedContent = ref(defaultContent) // 记录已保存的内容
 const currentMetadata = ref<Metadata>({})
+
+// 字体配置（用于 PDF 导出）
+const fontConfig = ref<FontConfig>({
+  bodyFont: 'SourceHanSans',
+  codeFont: 'SourceCodePro',
+  bodyFontSize: 16,
+  bodyCustomFonts: [],
+  codeCustomFonts: []
+})
 
 // 保存确认对话框状态
 const showSaveConfirmDialog = ref(false)
@@ -498,7 +510,7 @@ async function exportPDF() {
     const previewElement = document.querySelector('.preview-content')
     const previewContent = previewElement?.innerHTML || renderedHtml.value
 
-    await exportToPDF(previewContent, currentMetadata.value)
+    await exportToPDF(previewContent, currentMetadata.value, fontConfig.value)
   }
 }
 
@@ -508,7 +520,7 @@ async function confirmMkdocsExport() {
 
   try {
     // 使用组合后的 HTML 导出 PDF
-    await exportToPDF(mkdocsCombinedHtml.value, currentMetadata.value)
+    await exportToPDF(mkdocsCombinedHtml.value, currentMetadata.value, fontConfig.value)
   } catch (error) {
     await handleError(error, 'MkDocs 组合导出')
   }
@@ -1130,6 +1142,11 @@ function handleSearchClear() {
   // Preview 组件内部处理
 }
 
+// 处理字体配置变化
+function handleFontConfigChange(config: FontConfig) {
+  fontConfig.value = config
+}
+
 // 选择搜索结果，跳转到对应文件
 async function handleSearchResultSelect(path: string) {
   // 检查未保存改动
@@ -1256,6 +1273,15 @@ onMounted(async () => {
 
   // 初始化窗口标题
   updateWindowTitle()
+
+  // 加载字体配置
+  try {
+    const config = await loadConfig()
+    fontConfig.value = config
+    await loadFonts(config)
+  } catch {
+    // 使用默认配置
+  }
 
   // 关闭 splash 窗口并显示主窗口
   try {

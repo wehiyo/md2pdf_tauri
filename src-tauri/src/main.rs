@@ -11,7 +11,7 @@ use print::{print_to_pdf, print_to_pdf_with_bookmarks, check_print_support, prin
 use plantuml::render_plantuml;
 use bookmark::inject_bookmarks;
 use pdf_extract::{extract_pdf_markers, extract_pdf_markers_from_bytes};
-use font_subset::subset_chinese_font;
+use font_subset::{subset_chinese_font, subset_font_to_base64};
 use std::fs;
 use encoding_rs::{UTF_8, GB18030};
 use tauri::{Emitter, Manager, AppHandle};
@@ -69,6 +69,36 @@ fn get_font_path(app: AppHandle, filename: String) -> Result<String, String> {
     let absolute_path = path.to_string_lossy().to_string();
     println!("字体路径: {}", absolute_path);
     Ok(absolute_path)
+}
+
+/// 读取字体文件并返回 base64 编码（用于 PDF 导出）
+#[tauri::command]
+fn get_font_base64(app: AppHandle, filename: String) -> Result<String, String> {
+    let is_dev = cfg!(debug_assertions);
+
+    let path = if is_dev {
+        let cwd = std::env::current_dir()
+            .map_err(|e| format!("获取当前目录失败: {}", e))?;
+        cwd.join("assets/fonts").join(&filename)
+    } else {
+        app.path().resource_dir()
+            .map_err(|e| format!("获取资源目录失败: {}", e))?
+            .join("assets/fonts")
+            .join(&filename)
+    };
+
+    println!("读取字体文件(base64): {}", path.to_string_lossy());
+
+    let bytes = fs::read(&path)
+        .map_err(|e| format!("读取字体文件失败: {}", e))?;
+
+    // 使用标准 base64 编码
+    use base64::{Engine as _, engine::general_purpose::STANDARD};
+    let base64_str = STANDARD.encode(&bytes);
+
+    println!("字体 base64 长度: {} bytes (原始: {} bytes)", base64_str.len(), bytes.len());
+
+    Ok(base64_str)
 }
 
 /// 获取配置目录路径（供前端调用）
@@ -178,8 +208,10 @@ fn main() {
             get_resource_dir,
             get_config_dir,
             get_font_path,
+            get_font_base64,
             scan_fonts_dir,
             subset_chinese_font,
+            subset_font_to_base64,
             close_splash_window
         ])
         .on_window_event(|window, event| {

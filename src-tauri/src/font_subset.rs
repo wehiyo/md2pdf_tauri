@@ -5,6 +5,74 @@
 use std::collections::HashSet;
 use fontcull::{subset_font_data, FontFormat};
 use tauri::{AppHandle, Manager};
+use base64::{Engine as _, engine::general_purpose::STANDARD};
+
+/// 对指定字体进行子集化并返回 base64 编码
+///
+/// # Arguments
+/// * `app` - Tauri AppHandle
+/// * `filename` - 字体文件名（如 "LXGWWenKaiGB-Regular.ttf"）
+/// * `text` - 需要保留的字符文本
+///
+/// # Returns
+/// 子集化后的字体数据（base64 编码）
+#[tauri::command]
+pub async fn subset_font_to_base64(
+    app: AppHandle,
+    filename: String,
+    text: String,
+) -> Result<String, String> {
+    // 获取字体文件路径
+    let font_path = get_custom_font_path(&app, &filename)?;
+
+    println!("子集化字体: {} (路径: {})", filename, font_path);
+
+    // 读取字体文件
+    let font_bytes = std::fs::read(&font_path)
+        .map_err(|e| format!("读取字体失败: {}", e))?;
+
+    // 检查字体格式
+    let format = FontFormat::detect(&font_bytes);
+    println!("字体格式: {:?}", format);
+
+    // 构建需要保留的字符集合
+    let chars: HashSet<char> = text.chars().collect();
+    println!("子集化字符: {} 个", chars.len());
+
+    // 执行子集化（空数组表示使用默认 OpenType 特性）
+    let subset_bytes = subset_font_data(&font_bytes, &chars, &[])
+        .map_err(|e| format!("子集化失败: {}", e))?;
+
+    println!("子集化成功: {} bytes (原始: {} bytes)", subset_bytes.len(), font_bytes.len());
+
+    // 返回 base64 编码
+    let base64_str = STANDARD.encode(&subset_bytes);
+    Ok(base64_str)
+}
+
+/// 获取自定义字体文件路径
+fn get_custom_font_path(app: &AppHandle, filename: &str) -> Result<String, String> {
+    let is_dev = cfg!(debug_assertions);
+
+    let path = if is_dev {
+        // 开发模式：当前工作目录是 src-tauri
+        let cwd = std::env::current_dir()
+            .map_err(|e| format!("获取当前目录失败: {}", e))?;
+        cwd.join("assets/fonts").join(filename)
+    } else {
+        // 生产模式：resource_dir/assets/fonts/
+        app.path().resource_dir()
+            .map_err(|e| format!("获取资源目录失败: {}", e))?
+            .join("assets/fonts")
+            .join(filename)
+    };
+
+    if !path.exists() {
+        return Err(format!("字体文件不存在: {}", path.to_string_lossy()));
+    }
+
+    Ok(path.to_string_lossy().to_string())
+}
 
 /// 对中文字体进行子集化
 ///

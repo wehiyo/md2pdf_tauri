@@ -7,6 +7,8 @@ import mermaid from 'mermaid'
 import wavedrom from 'wavedrom'
 import JSON5 from 'json5'
 import type { Metadata } from './useMarkdown'
+import type { FontConfig } from './useConfig'
+import { BUILTIN_BODY_FONTS, BUILTIN_CODE_FONTS } from './useConfig'
 import { useExportProgress } from './useExportProgress'
 import { useErrorHandling } from './useErrorHandling'
 
@@ -20,14 +22,145 @@ import highlightStyles from '../assets/github.min.css?raw'
 // 防止重复调用（模块级别）
 let isExporting = false
 
+// 字体名称映射
+const BODY_FONT_MAP: Record<string, string> = {
+  'SourceHanSans': "'SourceHanSans', 'Microsoft YaHei', sans-serif",
+  'MicrosoftYaHei': "'Microsoft YaHei', sans-serif",
+  'DengXian': "'DengXian', sans-serif"
+}
+
+const CODE_FONT_MAP: Record<string, string> = {
+  'SourceCodePro': "'SourceCodePro', 'Consolas', monospace",
+  'Consolas': "'Consolas', monospace",
+  'CourierNew': "'Courier New', monospace"
+}
+
+// 获取字体 CSS 字符串
+function getBodyFontCss(fontId: string): string {
+  return BODY_FONT_MAP[fontId] || `'${fontId}', sans-serif`
+}
+
+function getCodeFontCss(fontId: string): string {
+  return CODE_FONT_MAP[fontId] || `'${fontId}', monospace`
+}
+
+/**
+ * 从 HTML 内容中提取纯文本（用于字体子集化）
+ */
+function extractTextFromHtml(html: string): string {
+  // 移除 HTML 标签，只保留文本内容
+  let text = html
+    // 移除 script 和 style 标签及其内容
+    .replace(/<script[^>]*>.*?<\/script>/gi, '')
+    .replace(/<style[^>]*>.*?<\/style>/gi, '')
+    // 移除 HTML 标签
+    .replace(/<[^>]+>/g, '')
+    // 解码常见 HTML 实体
+    .replace(/&nbsp;/g, ' ')
+    .replace(/&lt;/g, '<')
+    .replace(/&gt;/g, '>')
+    .replace(/&amp;/g, '&')
+    .replace(/&quot;/g, '"')
+    .replace(/&#039;/g, "'")
+    // 移除多余空白
+    .replace(/\s+/g, ' ')
+
+  // 限制字符数量（避免子集化过大）
+  // 取前 5000 个字符通常足够覆盖文档中的大部分字符
+  if (text.length > 5000) {
+    text = text.substring(0, 5000)
+  }
+
+  return text
+}
+
+/**
+ * 生成字体 @font-face CSS（用于 PDF 渲染）
+ * 使用子集化字体 base64 data URL，大幅减小体积
+ */
+async function getFontFaceStyles(fontConfig?: FontConfig, htmlContent?: string): Promise<string> {
+  if (!fontConfig) return ''
+
+  const fontStyles: string[] = []
+
+  // 需要加载的字体列表
+  const fontsToLoad: { id: string; filename: string }[] = []
+
+  // 内置字体文件名映射
+  const builtinFontFiles: Record<string, string> = {
+    'SourceHanSans': 'SourceHanSansSC-Regular.ttf',
+    'SourceCodePro': 'SourceCodePro-Regular.ttf'
+  }
+
+  // 检查正文字体是否需要加载
+  const bodyFontId = fontConfig.bodyFont || 'SourceHanSans'
+  const builtinBodyFont = BUILTIN_BODY_FONTS.find(f => f.id === bodyFontId)
+  if (builtinBodyFont?.needLoad && builtinFontFiles[bodyFontId]) {
+    fontsToLoad.push({ id: bodyFontId, filename: builtinFontFiles[bodyFontId] })
+  } else if (fontConfig.bodyCustomFonts) {
+    const customBodyFont = fontConfig.bodyCustomFonts.find(f => f.id === bodyFontId)
+    if (customBodyFont) {
+      fontsToLoad.push({ id: bodyFontId, filename: customBodyFont.filename })
+    }
+  }
+
+  // 检查代码字体是否需要加载
+  const codeFontId = fontConfig.codeFont || 'SourceCodePro'
+  const builtinCodeFont = BUILTIN_CODE_FONTS.find(f => f.id === codeFontId)
+  if (builtinCodeFont?.needLoad && builtinFontFiles[codeFontId]) {
+    fontsToLoad.push({ id: codeFontId, filename: builtinFontFiles[codeFontId] })
+  } else if (fontConfig.codeCustomFonts) {
+    const customCodeFont = fontConfig.codeCustomFonts.find(f => f.id === codeFontId)
+    if (customCodeFont) {
+      fontsToLoad.push({ id: codeFontId, filename: customCodeFont.filename })
+    }
+  }
+
+  // 提取 HTML 中的文本用于子集化
+  const textForSubset = htmlContent ? extractTextFromHtml(htmlContent) : ''
+
+  // 加载每个字体，使用子集化后的 base64
+  for (const font of fontsToLoad) {
+    try {
+      let base64: string
+
+      if (textForSubset.length > 0) {
+        // 子集化字体（只包含文档中使用的字符）
+        base64 = await invoke<string>('subset_font_to_base64', {
+          filename: font.filename,
+          text: textForSubset
+        })
+      } else {
+        // 无文本内容时，加载完整字体
+        base64 = await invoke<string>('get_font_base64', { filename: font.filename })
+      }
+
+      const fontUrl = `data:font/truetype;base64,${base64}`
+
+      fontStyles.push(`
+    @font-face {
+      font-family: '${font.id}';
+      src: url('${fontUrl}') format('truetype');
+      font-weight: normal;
+      font-style: normal;
+      font-display: swap;
+    }`)
+    } catch (error) {
+      console.error('PDF字体加载失败:', font.id, error)
+    }
+  }
+
+  return fontStyles.join('\n')
+}
+
 export function usePDF() {
   const { startExport, updateStep, endExport } = useExportProgress()
   const { handleError, handleWarning } = useErrorHandling()
 
   /**
-   * 导出 HTML 为 PDF
+ * 导出 HTML 为 PDF
    */
-  async function exportToPDF(htmlContent: string, metadata: Metadata = {}): Promise<void> {
+  async function exportToPDF(htmlContent: string, metadata: Metadata = {}, fontConfig?: FontConfig): Promise<void> {
     if (isExporting) {
       return
     }
@@ -49,7 +182,7 @@ export function usePDF() {
       const headings = extractHeadings(contentWithoutToc)
 
       // 生成 PDF
-      await generatePDF(contentWithoutToc, headings, metadata)
+      await generatePDF(contentWithoutToc, headings, metadata, fontConfig)
 
     } catch (error) {
       await handleError(error, '导出 PDF')
@@ -157,7 +290,8 @@ export function usePDF() {
   async function generatePDF(
     contentWithoutToc: string,
     headings: Array<{ level: number; text: string; id: string }>,
-    metadata: Metadata
+    metadata: Metadata,
+    fontConfig?: FontConfig
   ): Promise<void> {
     // 优先使用 metadata.title，否则从 headings 中提取第一个 h1 标题
     const firstH1 = headings.find(h => h.level === 1)
@@ -200,10 +334,13 @@ export function usePDF() {
     }
     const metaHtml = metaItems.length > 0 ? `<div class="meta">${metaItems.join('')}</div>` : ''
 
-    // Step 6: 创建 HTML 文档
-    const fullHtml = getFullHtml(title, metaHtml, contentWithPageBreaks)
+    // Step 6: 获取字体 CSS（用于 PDF 渲染环境）
+    const fontFaceStyles = await getFontFaceStyles(fontConfig, contentWithPageBreaks)
 
-    // Step 7: 调用 Rust command 打印 PDF 并提取标记位置（使用内存流优化）
+    // Step 7: 创建 HTML 文档
+    const fullHtml = getFullHtml(title, metaHtml, contentWithPageBreaks, fontConfig, fontFaceStyles)
+
+    // Step 8: 调用 Rust command 打印 PDF 并提取标记位置（使用内存流优化）
     // 进度会通过 Tauri 事件推送，前端监听 export-progress 事件
     try {
       const printResult = await invoke<{
@@ -507,9 +644,16 @@ function escapeHtml(text: string): string {
   return text.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#039;')
 }
 
-function getMarkdownStyles(): string {
+function getMarkdownStyles(fontConfig?: FontConfig): string {
+  const bodyFontSize = fontConfig?.bodyFontSize || 16
+  const bodyFont = fontConfig?.bodyFont || 'SourceHanSans'
+  const codeFont = fontConfig?.codeFont || 'SourceCodePro'
+
+  const bodyFontCss = getBodyFontCss(bodyFont)
+  const codeFontCss = getCodeFontCss(codeFont)
+
   return `
-.markdown-body { line-height: 1.6; color: #1f2937; }
+.markdown-body { line-height: 1.6; color: #1f2937; font-size: ${bodyFontSize}px; font-family: ${bodyFontCss}; }
 .markdown-body h1, .markdown-body h2, .markdown-body h3, .markdown-body h4 { margin-top: 1.5em; margin-bottom: 0.75em; font-weight: 600; line-height: 1.25; color: #111827; }
 .markdown-body h1 { font-size: 2em; border-bottom: 2px solid #e5e7eb; padding-bottom: 0.3em; }
 .markdown-body h2 { font-size: 1.5em; border-bottom: 1px solid #e5e7eb; padding-bottom: 0.3em; }
@@ -520,8 +664,8 @@ function getMarkdownStyles(): string {
 .markdown-body a:hover { text-decoration: underline; }
 .markdown-body strong { font-weight: 600; }
 .markdown-body em { font-style: italic; }
-.markdown-body code { padding: 0.2em 0.4em; margin: 0; font-size: 85%; background-color: #f3f4f6; border-radius: 3px; font-family: Consolas, 'Courier New', Menlo, monospace; }
-.markdown-body pre { margin-top: 0; margin-bottom: 1em; padding: 1em; overflow: auto; font-size: 85%; line-height: 1.45; background-color: #f3f4f6; border-radius: 6px; }
+.markdown-body code { padding: 0.2em 0.4em; margin: 0; font-size: 85%; background-color: #f3f4f6; border-radius: 3px; font-family: ${codeFontCss}; }
+.markdown-body pre { margin-top: 0; margin-bottom: 1em; padding: 1em; overflow: auto; font-size: 85%; line-height: 1.45; background-color: #f3f4f6; border-radius: 6px; font-family: ${codeFontCss}; }
 .markdown-body pre code { padding: 0; background-color: transparent; border-radius: 0; font-size: 100%; white-space: pre; word-break: normal; word-wrap: normal; display: block; }
 .markdown-body .code-lines-container { display: table; width: 100%; border-collapse: collapse; }
 .markdown-body .code-lines-container.line-num-width-1 .line-number { width: 1.5em; }
@@ -530,7 +674,6 @@ function getMarkdownStyles(): string {
 .markdown-body .code-lines-container.line-num-width-4 .line-number { width: 4.5em; }
 .markdown-body .code-lines-container.line-num-width-5 .line-number { width: 5.5em; }
 .markdown-body .code-line { display: table-row; }
-.markdown-body .code-line .line-number { display: table-cell; text-align: right; padding-right: 0.75em; border-right: 1px solid #e5e7eb; color: #9ca3af; font-family: Consolas, 'Courier New', Menlo, monospace; font-size: 85%; line-height: 1.45; user-select: none; -webkit-user-select: none; white-space: pre; }
 .markdown-body .code-line .line-number::before { content: attr(data-num); }
 .markdown-body .code-line .code-line-content { display: table-cell; padding-left: 0.75em; white-space: pre; }
 .markdown-body blockquote { margin: 0 0 1em; padding: 0 1em; color: #6b7280; border-left: 0.25em solid #e5e7eb; }
@@ -538,7 +681,7 @@ function getMarkdownStyles(): string {
 .markdown-body ul { list-style-type: disc; }
 .markdown-body ol { list-style-type: decimal; }
 .markdown-body li { margin-bottom: 0.25em; }
-.markdown-body table { margin-top: 0; margin-bottom: 1em; width: 100%; border-collapse: collapse; border-spacing: 0; }
+.markdown-body table { margin-top: 0; margin-bottom: 1em; width: 100%; border-collapse: collapse; border-spacing: 0; font-size: 0.85em; }
 .markdown-body table th { font-weight: 600; }
 .markdown-body table th, .markdown-body table td { padding: 0.5em 1em; border: 1px solid #d1d5db; }
 .markdown-body table tr { background-color: #fff; border-top: 1px solid #e5e7eb; }
@@ -611,14 +754,16 @@ function getMarkdownStyles(): string {
 /**
  * 生成完整的 HTML 文档
  */
-function getFullHtml(title: string, metaHtml: string, content: string): string {
-  return `<!DOCTYPE html>
+function getFullHtml(title: string, metaHtml: string, content: string, fontConfig?: FontConfig, fontFaceStyles?: string): string {
+  const html = `<!DOCTYPE html>
 <html>
 <head>
   <meta charset="UTF-8">
   <title>${escapeHtml(title)}</title>
   <style>
-    ${getMarkdownStyles()}
+    /* 字体加载（PDF渲染环境需要） */
+    ${fontFaceStyles || ''}
+    ${getMarkdownStyles(fontConfig)}
     ${katexStyles}
     ${highlightStyles}
 
@@ -663,5 +808,7 @@ function getFullHtml(title: string, metaHtml: string, content: string): string {
   </div>
 </body>
 </html>`
+
+  return html
 }
 

@@ -48,6 +48,28 @@
             </div>
           </div>
           <div class="settings-item">
+            <label>正文字号</label>
+            <div class="font-select-row">
+              <div class="custom-select" @click="toggleFontSizeDropdown">
+                <span class="selected-font-name">{{ getFontSizeLabel(localConfig.bodyFontSize) }}</span>
+                <svg class="select-arrow" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <polyline points="6 9 12 15 18 9"/>
+                </svg>
+              </div>
+              <div v-if="fontSizeDropdownOpen" class="dropdown-menu">
+                <div
+                  v-for="size in fontSizeOptions"
+                  :key="size.value"
+                  class="dropdown-item"
+                  :class="{ selected: localConfig.bodyFontSize === size.value }"
+                  @click="selectFontSize(size.value)"
+                >
+                  {{ size.label }}
+                </div>
+              </div>
+            </div>
+          </div>
+          <div class="settings-item">
             <label>代码字体</label>
             <div class="font-select-row">
               <div class="custom-select" @click="toggleCodeFontDropdown">
@@ -130,7 +152,7 @@
 <script setup lang="ts">
 import { ref, watch, onMounted } from 'vue'
 import type { FontConfig, CustomFont } from '../composables/useConfig'
-import { scanFonts as scanFontsDir } from '../composables/useConfig'
+import { scanFonts as scanFontsDir, FONT_SIZE_OPTIONS } from '../composables/useConfig'
 
 const props = defineProps<{
   visible: boolean
@@ -148,6 +170,10 @@ const availableFonts = ref<CustomFont[]>([])
 const pickerType = ref<'body' | 'code'>('body')
 const bodyFontDropdownOpen = ref(false)
 const codeFontDropdownOpen = ref(false)
+const fontSizeDropdownOpen = ref(false)
+
+// 字号选项
+const fontSizeOptions = FONT_SIZE_OPTIONS
 
 // 内置字体列表
 const builtinBodyFonts = [
@@ -163,10 +189,15 @@ const builtinCodeFonts = [
 
 // 当 props.config 变化时更新本地配置
 watch(() => props.config, (newConfig) => {
-  localConfig.value = { ...newConfig, bodyCustomFonts: newConfig.bodyCustomFonts || [], codeCustomFonts: newConfig.codeCustomFonts || [] }
+  localConfig.value = {
+    ...newConfig,
+    bodyFontSize: newConfig.bodyFontSize || 16,
+    bodyCustomFonts: newConfig.bodyCustomFonts || [],
+    codeCustomFonts: newConfig.codeCustomFonts || []
+  }
 }, { immediate: true })
 
-// 初始化时确保两个数组存在
+// 初始化时确保所有字段存在
 onMounted(() => {
   if (!localConfig.value.bodyCustomFonts) {
     localConfig.value.bodyCustomFonts = []
@@ -174,10 +205,18 @@ onMounted(() => {
   if (!localConfig.value.codeCustomFonts) {
     localConfig.value.codeCustomFonts = []
   }
+  if (!localConfig.value.bodyFontSize) {
+    localConfig.value.bodyFontSize = 16
+  }
 })
 
 function handleSave() {
-  emit('save', { ...localConfig.value, bodyCustomFonts: localConfig.value.bodyCustomFonts || [], codeCustomFonts: localConfig.value.codeCustomFonts || [] })
+  emit('save', {
+    ...localConfig.value,
+    bodyFontSize: localConfig.value.bodyFontSize || 16,
+    bodyCustomFonts: localConfig.value.bodyCustomFonts || [],
+    codeCustomFonts: localConfig.value.codeCustomFonts || []
+  })
 }
 
 // 移除自定义字体
@@ -227,6 +266,7 @@ function handleOverlayClick() {
   // 先关闭下拉框
   bodyFontDropdownOpen.value = false
   codeFontDropdownOpen.value = false
+  fontSizeDropdownOpen.value = false
   // 关闭整个对话框
   emit('close')
 }
@@ -238,6 +278,7 @@ function handleDialogClick(event: MouseEvent) {
   if (!target.closest('.dropdown-menu') && !target.closest('.custom-select')) {
     bodyFontDropdownOpen.value = false
     codeFontDropdownOpen.value = false
+    fontSizeDropdownOpen.value = false
   }
 }
 
@@ -307,12 +348,33 @@ function getFontDisplayName(fontId: string, type: 'body' | 'code'): string {
 function toggleBodyFontDropdown() {
   bodyFontDropdownOpen.value = !bodyFontDropdownOpen.value
   codeFontDropdownOpen.value = false
+  fontSizeDropdownOpen.value = false
 }
 
 // 切换代码字体下拉框
 function toggleCodeFontDropdown() {
   codeFontDropdownOpen.value = !codeFontDropdownOpen.value
   bodyFontDropdownOpen.value = false
+  fontSizeDropdownOpen.value = false
+}
+
+// 切换字号下拉框
+function toggleFontSizeDropdown() {
+  fontSizeDropdownOpen.value = !fontSizeDropdownOpen.value
+  bodyFontDropdownOpen.value = false
+  codeFontDropdownOpen.value = false
+}
+
+// 选择字号
+function selectFontSize(size: number) {
+  localConfig.value.bodyFontSize = size
+  fontSizeDropdownOpen.value = false
+}
+
+// 获取字号显示标签
+function getFontSizeLabel(size: number): string {
+  const option = fontSizeOptions.find(o => o.value === size)
+  return option ? option.label : `${size}px`
 }
 
 // 选择正文字体

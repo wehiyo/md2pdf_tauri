@@ -118,10 +118,12 @@ export async function loadFonts(config: FontConfig): Promise<void> {
   // 设置 CSS 变量
   document.documentElement.style.setProperty('--body-font', bodyCss)
   document.documentElement.style.setProperty('--code-font', codeCss)
+  document.documentElement.style.setProperty('--body-font-size', `${config.bodyFontSize || 16}px`)
 
   console.log('字体已加载:', {
     body: config.bodyFont,
     code: config.codeFont,
+    bodyFontSize: config.bodyFontSize || 16,
     bodyCss,
     codeCss,
     bodyCustomFonts: config.bodyCustomFonts,

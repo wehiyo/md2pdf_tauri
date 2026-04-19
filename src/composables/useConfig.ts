@@ -16,6 +16,7 @@ export interface CustomFont {
 export interface FontConfig {
   bodyFont: string           // 正文字体ID（内置或自定义）
   codeFont: string           // 代码字体ID（内置或自定义）
+  bodyFontSize: number       // 正文字号（px），默认16
   bodyCustomFonts: CustomFont[]  // 正文自定义字体列表
   codeCustomFonts: CustomFont[]  // 代码自定义字体列表
 }
@@ -23,6 +24,7 @@ export interface FontConfig {
 const DEFAULT_CONFIG: FontConfig = {
   bodyFont: 'SourceHanSans',
   codeFont: 'SourceCodePro',
+  bodyFontSize: 16,
   bodyCustomFonts: [],
   codeCustomFonts: []
 }
@@ -41,6 +43,15 @@ export const BUILTIN_CODE_FONTS = [
   { id: 'SourceCodePro', name: 'Source Code Pro', needLoad: true },
   { id: 'Consolas', name: 'Consolas', needLoad: false },
   { id: 'CourierNew', name: 'Courier New', needLoad: false }
+]
+
+// 可选字号列表（px）
+export const FONT_SIZE_OPTIONS = [
+  { value: 14, label: '14px（小）' },
+  { value: 16, label: '16px（标准）' },
+  { value: 18, label: '18px（中）' },
+  { value: 20, label: '20px（大）' },
+  { value: 22, label: '22px（较大）' }
 ]
 
 let cachedConfig: FontConfig | null = null
@@ -78,6 +89,7 @@ export async function loadConfig(): Promise<FontConfig> {
       cachedConfig = {
         ...DEFAULT_CONFIG,
         ...config,
+        bodyFontSize: config.bodyFontSize || DEFAULT_CONFIG.bodyFontSize,
         bodyCustomFonts: config.bodyCustomFonts || [],
         codeCustomFonts: config.codeCustomFonts || []
       }

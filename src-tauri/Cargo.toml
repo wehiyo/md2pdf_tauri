@@ -33,6 +33,9 @@ fontcull = "2.0.1"
 # 文件编码支持（GB18030 等）
 encoding_rs = "0.8"
 
+# Base64 编码支持
+base64 = "0.22"
+
 # WebView2 PDF 打印支持
 [target.'cfg(windows)'.dependencies]
 webview2-com = "0.38"
