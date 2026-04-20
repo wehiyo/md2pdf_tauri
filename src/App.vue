@@ -983,7 +983,8 @@ async function openFileFromTree(path: string) {
       const anchor = pendingAnchor.value
       pendingAnchor.value = null
       await nextTick()
-      setTimeout(() => scrollToAnchor(anchor), 200)
+      // 增加延迟时间，等待图表渲染完成
+      setTimeout(() => scrollToAnchor(anchor), 500)
     } else {
       // 没有锚点跳转，重置滚动位置到顶部
       await nextTick()
@@ -1162,7 +1163,8 @@ async function openFileFromTreeNoHistory(path: string) {
       const anchor = pendingAnchor.value
       pendingAnchor.value = null
       await nextTick()
-      setTimeout(() => scrollToAnchor(anchor), 200)
+      // 增加延迟时间，等待图表渲染完成
+      setTimeout(() => scrollToAnchor(anchor), 500)
     } else {
       // 没有锚点跳转，重置滚动位置到顶部
       await nextTick()
@@ -1185,9 +1187,33 @@ function scrollToAnchor(anchor: string) {
   const previewContainer = previewRef.value.getScrollContainer()
   if (!previewContainer) return
 
-  const targetElement = previewContainer.querySelector(`#${CSS.escape(anchor)}`)
+  // 尝试多种方式查找锚点元素
+  // 1. 直接使用 CSS.escape（处理点号等特殊字符）
+  let targetElement = previewContainer.querySelector(`#${CSS.escape(anchor)}`)
+
+  // 2. 如果找不到，尝试使用属性选择器（更可靠）
+  if (!targetElement) {
+    targetElement = previewContainer.querySelector(`[id="${anchor}"]`)
+  }
+
+  // 3. 如果还是找不到，尝试解码后查找（处理编码的中文）
+  if (!targetElement) {
+    try {
+      const decodedAnchor = decodeURIComponent(anchor)
+      targetElement = previewContainer.querySelector(`#${CSS.escape(decodedAnchor)}`)
+      if (!targetElement) {
+        targetElement = previewContainer.querySelector(`[id="${decodedAnchor}"]`)
+      }
+    } catch {
+      // URL 解码失败，忽略
+    }
+  }
+
   if (targetElement) {
     targetElement.scrollIntoView({ behavior: 'smooth', block: 'start' })
+    console.log('跳转到锚点:', anchor)
+  } else {
+    console.warn('未找到锚点:', anchor)
   }
 }
 
