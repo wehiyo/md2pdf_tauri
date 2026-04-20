@@ -48,18 +48,23 @@ defineExpose({
    * @param lineNumber 行号（从 0 开始）
    */
   scrollToLine: (lineNumber: number) => {
-    const cmEditor = containerRef.value?.querySelector('.cm-editor')
-    if (!cmEditor) return
+    // md-editor-v3 v6.x 通过 getEditorView 暴露 CodeMirror EditorView
+    // TypeScript 类型定义可能不完整，使用类型断言
+    const editorInstance = mdEditorRef.value as any
+    const view = editorInstance?.getEditorView?.()
+    if (!view) return
 
-    // 使用 CodeMirror 的 scrollIntoView API
-    const view = (mdEditorRef.value as any)?.editor?.view
-    if (view) {
-      // 获取行信息并滚动
-      const lineInfo = view.state.doc.line(Math.min(lineNumber + 1, view.state.doc.lines))
-      view.dispatch({
-        effects: view.scrollIntoView(lineInfo.from, { y: 'start', yMargin: 0 })
-      })
-    }
+    // 确保行号在有效范围内（CodeMirror 行号从 1 开始）
+    const targetLine = Math.min(lineNumber + 1, view.state.doc.lines)
+    if (targetLine < 1) return
+
+    // 获取行信息
+    const lineInfo = view.state.doc.line(targetLine)
+
+    // 使用 CodeMirror 的 scrollIntoView 效果
+    view.dispatch({
+      effects: view.scrollIntoView(lineInfo.from, { y: 'start' })
+    })
   }
 })
 
