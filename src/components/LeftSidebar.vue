@@ -18,18 +18,35 @@
     <div class="sidebar-content">
       <!-- 文件 Tab -->
       <div v-show="activeTab === 'files'" class="tab-panel files-panel">
-        <!-- 单文件模式 -->
-        <div v-if="workState === 'file'" class="single-file-card">
-          <div class="file-info">
-            <svg class="file-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-              <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
-              <polyline points="14 2 14 8 20 8"/>
-              <line x1="16" y1="13" x2="8" y2="13"/>
-              <line x1="16" y1="17" x2="8" y2="17"/>
-            </svg>
-            <div class="file-details">
-              <div class="file-name">{{ currentFileName }}</div>
-              <div class="file-path" :title="currentFile ?? ''">{{ currentFileShortPath }}</div>
+        <!-- 多文件模式：显示打开的文件列表 -->
+        <div class="opened-files-view">
+          <div class="opened-files-header">
+            <span class="header-title">打开的文件</span>
+          </div>
+          <div class="opened-files-list">
+            <div
+              v-for="(file, index) in openedFiles"
+              :key="index"
+              class="opened-file-item"
+              :class="{ active: index === currentFileIndex, unsaved: file.content !== file.savedContent }"
+              :title="file.path ?? '未保存'"
+              @click="$emit('switch-file', index)"
+            >
+              <svg class="file-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+                <polyline points="14 2 14 8 20 8"/>
+              </svg>
+              <span class="file-name">{{ file.name }}</span>
+              <span v-if="file.content !== file.savedContent" class="unsaved-mark">*</span>
+              <button class="close-btn" title="关闭" @click.stop="$emit('close-file', index)">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <line x1="18" y1="6" x2="6" y2="18"/>
+                  <line x1="6" y1="6" x2="18" y2="18"/>
+                </svg>
+              </button>
+            </div>
+            <div v-if="openedFiles.length === 0" class="empty-message">
+              暂无打开的文件
             </div>
           </div>
           <button class="open-file-btn" @click="$emit('open-file')">
@@ -38,12 +55,12 @@
               <polyline points="17 8 12 3 7 8"/>
               <line x1="12" y1="3" x2="12" y2="15"/>
             </svg>
-            打开其他文件
+            打开文件
           </button>
         </div>
 
         <!-- 文件夹/MkDocs 模式 -->
-        <div v-else class="folder-view">
+        <div v-if="workState !== 'file'" class="folder-view">
           <div class="folder-header">
             <span class="folder-name">{{ folderName }}</span>
           </div>
@@ -138,6 +155,14 @@ interface GlobalSearchResult {
   context?: string
 }
 
+interface OpenedFile {
+  path: string | null
+  content: string
+  savedContent: string
+  dir: string | null
+  name: string
+}
+
 const props = defineProps<{
   workState: 'file' | 'folder' | 'mkdocs'
   folderPath: string
@@ -145,6 +170,8 @@ const props = defineProps<{
   currentFile: string | null
   hasMultipleFiles: boolean
   globalSearchResults: GlobalSearchResult[]
+  openedFiles: OpenedFile[]
+  currentFileIndex: number
 }>()
 
 const emit = defineEmits<{
@@ -155,6 +182,8 @@ const emit = defineEmits<{
   'select-search-result': [path: string]
   'open-file': []
   'update-width': [width: number]
+  'switch-file': [index: number]
+  'close-file': [index: number]
 }>()
 
 // 状态
@@ -167,24 +196,6 @@ const hasSearched = ref(false)
 const sidebarWidth = ref(240)
 
 // 计算属性
-const currentFileName = computed(() => {
-  if (!props.currentFile) return '未打开文件'
-  const lastSep = Math.max(props.currentFile.lastIndexOf('/'), props.currentFile.lastIndexOf('\\'))
-  return lastSep > 0 ? props.currentFile.substring(lastSep + 1) : props.currentFile
-})
-
-const currentFileShortPath = computed(() => {
-  if (!props.currentFile) return ''
-  const lastSep = Math.max(props.currentFile.lastIndexOf('/'), props.currentFile.lastIndexOf('\\'))
-  const dirPath = lastSep > 0 ? props.currentFile.substring(0, lastSep) : ''
-  // 只显示最后两层目录
-  const dirParts = dirPath.split(/[\/\\]/)
-  if (dirParts.length > 2) {
-    return '...' + dirParts.slice(-2).join('/') + '/' + currentFileName.value
-  }
-  return dirPath ? dirPath + '/' + currentFileName.value : currentFileName.value
-})
-
 const folderName = computed(() => {
   if (!props.folderPath) return '文件列表'
   const lastSep = Math.max(props.folderPath.lastIndexOf('/'), props.folderPath.lastIndexOf('\\'))
@@ -297,7 +308,137 @@ defineExpose({
   height: 100%;
 }
 
-/* 文件 Tab - 单文件模式 */
+/* 文件 Tab - 多文件模式 */
+.opened-files-view {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+}
+
+.opened-files-header {
+  padding: 8px 12px;
+  background-color: #e2e8f0;
+  border-bottom: 1px solid #cbd5e1;
+}
+
+.header-title {
+  font-size: 12px;
+  font-weight: 600;
+  color: #374151;
+}
+
+.opened-files-list {
+  flex: 1;
+  overflow-y: auto;
+  padding: 4px 0;
+}
+
+.opened-file-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  cursor: pointer;
+  transition: background-color 0.2s;
+  position: relative;
+}
+
+.opened-file-item:hover {
+  background-color: #f1f5f9;
+}
+
+.opened-file-item.active {
+  background-color: #dbeafe;
+}
+
+.opened-file-item .file-icon {
+  width: 16px;
+  height: 16px;
+  color: #6b7280;
+  flex-shrink: 0;
+}
+
+.opened-file-item .file-name {
+  flex: 1;
+  font-size: 12px;
+  color: #374151;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.opened-file-item.active .file-name {
+  color: #2563eb;
+  font-weight: 500;
+}
+
+.opened-file-item.unsaved .file-name {
+  font-weight: 500;
+}
+
+.unsaved-mark {
+  font-size: 14px;
+  color: #f59e0b;
+  font-weight: bold;
+  margin-left: 2px;
+}
+
+.close-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  border: none;
+  border-radius: 4px;
+  background-color: transparent;
+  color: #9ca3af;
+  cursor: pointer;
+  transition: all 0.2s;
+  opacity: 0;
+}
+
+.opened-file-item:hover .close-btn {
+  opacity: 1;
+}
+
+.close-btn:hover {
+  background-color: #fee2e2;
+  color: #dc2626;
+}
+
+.close-btn svg {
+  width: 12px;
+  height: 12px;
+}
+
+.open-file-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  margin: 12px;
+  padding: 8px 16px;
+  border: 1px solid #e2e8f0;
+  border-radius: 6px;
+  background-color: #ffffff;
+  color: #374151;
+  font-size: 12px;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.open-file-btn:hover {
+  background-color: #f1f5f9;
+  border-color: #cbd5e1;
+}
+
+.open-file-btn svg {
+  width: 14px;
+  height: 14px;
+}
+
+/* 文件 Tab - 单文件模式（已废弃，保留样式以防回退） */
 .single-file-card {
   padding: 16px;
 }
@@ -339,33 +480,6 @@ defineExpose({
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-}
-
-.open-file-btn {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 8px;
-  margin-top: 12px;
-  padding: 8px 16px;
-  border: 1px solid #e2e8f0;
-  border-radius: 6px;
-  background-color: #ffffff;
-  color: #374151;
-  font-size: 12px;
-  cursor: pointer;
-  transition: all 0.2s;
-  width: 100%;
-}
-
-.open-file-btn:hover {
-  background-color: #f1f5f9;
-  border-color: #cbd5e1;
-}
-
-.open-file-btn svg {
-  width: 14px;
-  height: 14px;
 }
 
 /* 文件 Tab - 文件夹模式 */
@@ -598,6 +712,45 @@ defineExpose({
 
 :root.dark .open-file-btn:hover {
   background-color: #3d3d3d;
+}
+
+/* 多文件列表深色主题 */
+:root.dark .opened-files-header {
+  background-color: #252526;
+  border-bottom-color: #333333;
+}
+
+:root.dark .header-title {
+  color: #e5e5e5;
+}
+
+:root.dark .opened-file-item:hover {
+  background-color: #2d2d2d;
+}
+
+:root.dark .opened-file-item.active {
+  background-color: #1e3a5f;
+}
+
+:root.dark .opened-file-item .file-icon {
+  color: #8b8b8b;
+}
+
+:root.dark .opened-file-item .file-name {
+  color: #e5e5e5;
+}
+
+:root.dark .opened-file-item.active .file-name {
+  color: #4fc1ff;
+}
+
+:root.dark .unsaved-mark {
+  color: #f59e0b;
+}
+
+:root.dark .close-btn:hover {
+  background-color: #3d1f1f;
+  color: #f87171;
 }
 
 :root.dark .folder-header {

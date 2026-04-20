@@ -7,8 +7,10 @@
         :folder-path="importedFolderPath || ''"
         :files="mdFiles"
         :current-file="currentFilePath"
-        :has-multiple-files="mdFiles.length > 0"
+        :has-multiple-files="mdFiles.length > 0 || openedFiles.length > 1"
         :global-search-results="globalSearchResults"
+        :opened-files="openedFiles"
+        :current-file-index="currentFileIndex"
         :style="{ width: sidebarWidth + 'px' }"
         @select-file="openFileFromTree"
         @search="handleSearch"
@@ -16,6 +18,8 @@
         @search-clear="handleSearchClear"
         @select-search-result="handleSearchResultSelect"
         @open-file="openFile"
+        @switch-file="handleSwitchFile"
+        @close-file="handleCloseFile"
       />
       <div
         class="splitter sidebar-splitter"
@@ -158,6 +162,17 @@ const currentFilePath = ref<string | null>(null)
 const savedContent = ref(defaultContent) // 记录已保存的内容
 const currentMetadata = ref<Metadata>({})
 
+// 多文件打开：打开的文件列表
+interface OpenedFile {
+  path: string | null      // 文件路径（新建文件时为 null）
+  content: string          // 文件内容
+  savedContent: string     // 已保存的内容（用于检测修改）
+  dir: string | null       // 文件目录
+  name: string             // 文件名
+}
+const openedFiles = ref<OpenedFile[]>([])
+const currentFileIndex = ref<number>(-1)  // 当前激活的文件索引，-1 表示无文件
+
 // 字体配置（用于 PDF 导出）
 const fontConfig = ref<FontConfig>({
   chineseFont: 'DengXian',
@@ -218,18 +233,24 @@ interface GlobalSearchResult {
 }
 const globalSearchResults = ref<GlobalSearchResult[]>([])
 
-// 检测是否有未保存的改动
-const hasUnsavedChanges = computed(() => content.value !== savedContent.value)
+// 检测是否有未保存的改动（基于当前打开的文件）
+const hasUnsavedChanges = computed(() => {
+  if (currentFileIndex.value < 0 || openedFiles.value.length === 0) return false
+  const currentFile = openedFiles.value[currentFileIndex.value]
+  return currentFile ? currentFile.content !== currentFile.savedContent : false
+})
 
 // 计算窗口标题
 const windowTitle = computed(() => {
-  if (!currentFilePath.value) {
-    return hasUnsavedChanges.value ? 'MarkRefine*' : 'MarkRefine'
+  if (currentFileIndex.value < 0 || openedFiles.value.length === 0) {
+    return 'MarkRefine'
   }
-  // 提取文件名
-  const lastSep = Math.max(currentFilePath.value.lastIndexOf('/'), currentFilePath.value.lastIndexOf('\\'))
-  const fileName = lastSep > 0 ? currentFilePath.value.substring(lastSep + 1) : currentFilePath.value
-  return hasUnsavedChanges.value ? `${fileName}* - MarkRefine` : `${fileName} - MarkRefine`
+  const currentFile = openedFiles.value[currentFileIndex.value]
+  if (!currentFile) return 'MarkRefine'
+
+  const fileName = currentFile.name
+  const unsaved = currentFile.content !== currentFile.savedContent
+  return unsaved ? `${fileName}* - MarkRefine` : `${fileName} - MarkRefine`
 })
 
 // 更新窗口标题
@@ -649,16 +670,121 @@ function handleSaveConfirmCancel() {
   }
 }
 
+// ===== 多文件打开辅助函数 =====
+
+// 从路径提取文件名
+function getFileName(path: string | null): string {
+  if (!path) return '未命名'
+  const lastSep = Math.max(path.lastIndexOf('/'), path.lastIndexOf('\\'))
+  return lastSep >= 0 ? path.substring(lastSep + 1) : path
+}
+
+// 查找文件在列表中的索引
+function findFileIndex(path: string): number {
+  return openedFiles.value.findIndex(f => f.path === path)
+}
+
+// 添加文件到列表
+function addFileToList(path: string, content: string): number {
+  const lastSep = Math.max(path.lastIndexOf('/'), path.lastIndexOf('\\'))
+  const dir = lastSep > 0 ? path.substring(0, lastSep) : null
+  const name = getFileName(path)
+
+  openedFiles.value.push({
+    path,
+    content,
+    savedContent: content,
+    dir,
+    name
+  })
+  return openedFiles.value.length - 1
+}
+
+// 切换到指定文件（更新编辑器内容）
+function switchToFile(index: number) {
+  if (index < 0 || index >= openedFiles.value.length) return
+  if (index === currentFileIndex.value) return
+
+  currentFileIndex.value = index
+  const file = openedFiles.value[index]
+  content.value = file.content
+  savedContent.value = file.savedContent
+  currentFileDir.value = file.dir
+  currentFilePath.value = file.path
+  workState.value = 'file'
+}
+
+// 关闭指定文件
+async function closeFile(index: number) {
+  if (index < 0 || index >= openedFiles.value.length) return
+
+  const file = openedFiles.value[index]
+
+  // 如果关闭的是当前文件，先检查未保存改动
+  if (index === currentFileIndex.value && file.content !== file.savedContent) {
+    const result = await checkUnsavedChanges()
+    if (result === 'cancel') return
+    if (result === 'save') {
+      await saveFile()
+    }
+  }
+
+  // 从列表移除
+  openedFiles.value.splice(index, 1)
+
+  // 调整当前索引
+  if (openedFiles.value.length === 0) {
+    // 无文件，重置状态
+    currentFileIndex.value = -1
+    content.value = ''
+    savedContent.value = ''
+    currentFilePath.value = null
+    currentFileDir.value = null
+  } else if (currentFileIndex.value >= openedFiles.value.length) {
+    // 当前索引超出范围，切换到最后一个
+    switchToFile(openedFiles.value.length - 1)
+  } else if (currentFileIndex.value > index) {
+    // 当前索引在被关闭文件之后，需要减1
+    currentFileIndex.value--
+  } else if (currentFileIndex.value === index) {
+    // 关闭的是当前文件，切换到相邻文件
+    const newIndex = Math.min(index, openedFiles.value.length - 1)
+    switchToFile(newIndex)
+  }
+}
+
+// 监听编辑器内容变化，同步到 openedFiles
+watch(content, (newContent) => {
+  if (currentFileIndex.value >= 0 && currentFileIndex.value < openedFiles.value.length) {
+    openedFiles.value[currentFileIndex.value].content = newContent
+  }
+})
+
+// ===== 文件操作函数 =====
+
 // 新建文件
 async function newFile() {
   // 检查未保存改动
   const result = await checkUnsavedChanges()
   if (result === 'cancel') return
   if (result === 'save') {
-    const saved = await saveFile()
-    if (!saved) return  // 保存失败（用户取消），不继续新建
+    await saveFile()
+    if (!hasUnsavedChanges.value) return  // 保存失败（用户取消），不继续新建
   }
 
+  // 创建空白文件项
+  const newFileItem: OpenedFile = {
+    path: null,
+    content: '',
+    savedContent: '',
+    dir: null,
+    name: '未命名'
+  }
+  openedFiles.value.push(newFileItem)
+
+  // 切换到新文件
+  const newIndex = openedFiles.value.length - 1
+  currentFileIndex.value = newIndex
   content.value = ''
   savedContent.value = ''
   currentFileDir.value = null
@@ -670,45 +796,53 @@ async function newFile() {
   navigationIndex.value = -1
 }
 
-// 打开文件
+// 打开文件（支持多选）
 async function openFile() {
-  // 检查未保存改动
-  const result = await checkUnsavedChanges()
-  if (result === 'cancel') return
-  if (result === 'save') {
-    const saved = await saveFile()
-    if (!saved) return  // 保存失败（用户取消），不继续打开
-  }
-
   try {
     const selected = await open({
-      multiple: false,
+      multiple: true,
       filters: [{
         name: 'Markdown',
         extensions: ['md', 'markdown', 'txt']
       }]
     })
 
-    if (selected && typeof selected === 'string') {
-      workState.value = 'file'
+    if (!selected) return
+
+    // 处理多选结果（selected 可能是字符串或数组）
+    const paths: string[] = Array.isArray(selected) ? selected : [selected]
+
+    for (const path of paths) {
+      // 如果文件已在列表中，跳过
+      const existingIndex = findFileIndex(path)
+      if (existingIndex >= 0) continue
 
       // 使用支持 GB18030 编码的读取命令
-      const [text, encoding] = await invoke<[string, string]>('read_file_with_encoding', { path: selected })
-      // 规范化换行符，与编辑器内部处理保持一致
+      const [text, encoding] = await invoke<[string, string]>('read_file_with_encoding', { path: path })
       const normalizedText = text.replace(/\r\n/g, '\n')
-      content.value = normalizedText
-      savedContent.value = normalizedText
 
-      // 从文件路径提取目录（使用字符串操作，不导入 Tauri API）
-      const lastSep = Math.max(selected.lastIndexOf('/'), selected.lastIndexOf('\\'))
-      currentFileDir.value = lastSep > 0 ? selected.substring(0, lastSep) : null
-      currentFilePath.value = selected
-      console.log('Opened file:', selected, 'Encoding:', encoding)
-      console.log('File directory:', currentFileDir.value)
-
-      // 记录导航历史（打开文件时初始化历史栈）
-      pushNavigationState(selected)
+      // 添加到文件列表
+      addFileToList(path, normalizedText)
+      console.log('Opened file:', path, 'Encoding:', encoding)
     }
+
+    // 切换到最后打开的文件
+    const lastIndex = openedFiles.value.length - 1
+
+    // 如果当前文件有未保存改动，先提示保存
+    if (currentFileIndex.value >= 0) {
+      const currentFile = openedFiles.value[currentFileIndex.value]
+      if (currentFile && currentFile.content !== currentFile.savedContent) {
+        const result = await checkUnsavedChanges()
+        if (result === 'cancel') return
+        if (result === 'save') {
+          await saveFile()
+        }
+      }
+    }
+
+    switchToFile(lastIndex)
+    pushNavigationState(paths[paths.length - 1])
   } catch (error) {
     await handleError(error, '打开文件')
   }
@@ -716,10 +850,16 @@ async function openFile() {
 
 // 保存文件，返回是否保存成功
 async function saveFile(): Promise<boolean> {
+  if (currentFileIndex.value < 0 || openedFiles.value.length === 0) return false
+
   try {
+    const currentFile = openedFiles.value[currentFileIndex.value]
+
     // 如果已有文件路径，直接保存
-    if (currentFilePath.value) {
-      await writeTextFile(currentFilePath.value, content.value)
+    if (currentFile.path) {
+      await writeTextFile(currentFile.path, content.value)
+      // 更新 openedFiles 中的 savedContent
+      openedFiles.value[currentFileIndex.value].savedContent = content.value
       savedContent.value = content.value
       return true
     }
@@ -734,11 +874,15 @@ async function saveFile(): Promise<boolean> {
 
     if (filePath) {
       await writeTextFile(filePath, content.value)
+      // 更新 openedFiles 中的信息
+      const lastSep = Math.max(filePath.lastIndexOf('/'), filePath.lastIndexOf('\\'))
+      openedFiles.value[currentFileIndex.value].path = filePath
+      openedFiles.value[currentFileIndex.value].savedContent = content.value
+      openedFiles.value[currentFileIndex.value].dir = lastSep > 0 ? filePath.substring(0, lastSep) : null
+      openedFiles.value[currentFileIndex.value].name = getFileName(filePath)
+
       savedContent.value = content.value
       currentFilePath.value = filePath
-
-      // 更新文件目录
-      const lastSep = Math.max(filePath.lastIndexOf('/'), filePath.lastIndexOf('\\'))
       currentFileDir.value = lastSep > 0 ? filePath.substring(0, lastSep) : null
 
       return true
@@ -1281,8 +1425,8 @@ async function handleSearchResultSelect(path: string) {
   const result = await checkUnsavedChanges()
   if (result === 'cancel') return
   if (result === 'save') {
-    const saved = await saveFile()
-    if (!saved) return
+    await saveFile()
+    if (!hasUnsavedChanges.value) return
   }
 
   // 打开选中的文件
@@ -1299,6 +1443,28 @@ async function handleSearchResultSelect(path: string) {
       }
     }
   }, 300)
+}
+
+// 处理切换文件（从 LeftSidebar 触发）
+async function handleSwitchFile(index: number) {
+  // 检查当前文件是否有未保存改动
+  if (currentFileIndex.value >= 0 && currentFileIndex.value < openedFiles.value.length) {
+    const currentFile = openedFiles.value[currentFileIndex.value]
+    if (currentFile.content !== currentFile.savedContent) {
+      const result = await checkUnsavedChanges()
+      if (result === 'cancel') return
+      if (result === 'save') {
+        await saveFile()
+      }
+    }
+  }
+
+  switchToFile(index)
+}
+
+// 处理关闭文件（从 LeftSidebar 触发）
+async function handleCloseFile(index: number) {
+  await closeFile(index)
 }
 
 // 递归搜索所有文件
