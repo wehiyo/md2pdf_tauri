@@ -326,6 +326,140 @@ md.block.ruler.before('heading', 'heading_deflist', function heading_deflist(sta
   defMd.use(deflist)
   defMd.use(emoji)
 
+  // 禁用缩进代码块语法（与主 md 实例一致）
+  defMd.block.ruler.disable('code')
+
+  // 添加 admonition 支持（复制主实例的解析规则）
+  defMd.block.ruler.before('fence', 'admonition_block', function admonition_block(state, startLine, endLine, silent) {
+    const pos = state.bMarks[startLine] + state.tShift[startLine]
+    const max = state.eMarks[startLine]
+
+    // 检查是否以 !!! 开头
+    if (pos + 3 > max || state.src.substring(pos, pos + 3) !== '!!!') {
+      return false
+    }
+
+    // 解析类型和标题
+    const params = state.src.substring(pos + 3, max).trim()
+    if (!params) {
+      return false
+    }
+
+    // 提取类型（第一个单词）
+    const typeMatch = params.match(/^(\w+)/)
+    if (!typeMatch) {
+      return false
+    }
+    const admonitionType = typeMatch[1].toLowerCase()
+
+    // 检查类型是否有效
+    if (!ADMONITION_TYPES.includes(admonitionType)) {
+      return false
+    }
+
+    // 解析标题：支持引号括起来的多词标题
+    let admonitionTitle = ''
+    let showTitle = true
+
+    const remaining = params.substring(typeMatch[0].length).trim()
+
+    if (remaining) {
+      const quotedTitleMatch = remaining.match(/^"([^"]*)"|^'([^']*)'/)
+      if (quotedTitleMatch) {
+        const quotedTitle = quotedTitleMatch[1] !== undefined ? quotedTitleMatch[1] : quotedTitleMatch[2]
+        if (quotedTitle === '') {
+          showTitle = false
+        } else {
+          admonitionTitle = quotedTitle
+        }
+      } else {
+        admonitionTitle = remaining
+      }
+    } else {
+      admonitionTitle = admonitionType
+    }
+
+    // 收集内容
+    let nextLine = startLine + 1
+    const contentLines: string[] = []
+    const minIndent = 4
+    let hasIndentedContent = false
+    let autoClosed = false
+
+    while (nextLine < endLine) {
+      const linePos = state.bMarks[nextLine] + state.tShift[nextLine]
+      const lineMax = state.eMarks[nextLine]
+      const lineIndent = state.sCount[nextLine]
+
+      const lineText = state.src.substring(linePos, lineMax).trim()
+      if (lineText === '!!!') {
+        autoClosed = true
+        nextLine++
+        break
+      }
+
+      if (linePos >= lineMax) {
+        if (hasIndentedContent) {
+          contentLines.push('')
+        }
+        nextLine++
+        continue
+      }
+
+      if (lineIndent >= minIndent) {
+        hasIndentedContent = true
+        const lineContent = state.src.substring(linePos, lineMax)
+        contentLines.push(lineContent)
+        nextLine++
+      } else if (!hasIndentedContent) {
+        contentLines.push(lineText)
+        nextLine++
+      } else {
+        break
+      }
+    }
+
+    if (contentLines.length === 0 && !autoClosed) {
+      return false
+    }
+
+    if (!silent) {
+      const openToken = state.push('admonition_open', 'div', 1)
+      openToken.attrPush(['class', `admonition ${admonitionType}`])
+      openToken.map = [startLine, nextLine]
+
+      if (showTitle) {
+        const titleOpenToken = state.push('admonition_title_open', 'p', 1)
+        titleOpenToken.attrPush(['class', 'admonition-title'])
+        titleOpenToken.map = [startLine, startLine]
+
+        const titleContentToken = state.push('inline', '', 0)
+        titleContentToken.content = admonitionTitle
+        titleContentToken.children = []
+
+        state.push('admonition_title_close', 'p', -1)
+      }
+
+      const content = contentLines.join('\n')
+      if (content.trim()) {
+        const contentToken = state.push('admonition_content', 'div', 0)
+        contentToken.content = content
+      }
+
+      const closeToken = state.push('admonition_close', 'div', -1)
+      closeToken.map = [startLine, nextLine]
+    }
+
+    state.line = nextLine
+    return true
+  })
+
+  // 渲染 admonition 内容（递归渲染）
+  defMd.renderer.rules.admonition_content = (tokens, idx) => {
+    const content = tokens[idx].content
+    return defMd.render(content)
+  }
+
   // 解析定义内容并渲染
   const defHtml = defMd.render(defText)
 
