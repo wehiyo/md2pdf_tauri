@@ -44,12 +44,10 @@ defineExpose({
     return containerRef.value?.querySelector('.cm-scroller') as HTMLElement | null
   },
   /**
-   * 滚动到指定行号
+   * 滚动到指定行号（不使用 dispatch，避免触发工具栏消失）
    * @param lineNumber 行号（从 0 开始）
    */
   scrollToLine: (lineNumber: number) => {
-    // md-editor-v3 v6.x 通过 getEditorView 暴露 CodeMirror EditorView
-    // TypeScript 类型定义可能不完整，使用类型断言
     const editorInstance = mdEditorRef.value as any
     const view = editorInstance?.getEditorView?.()
     if (!view) return
@@ -61,9 +59,31 @@ defineExpose({
     // 获取行信息
     const lineInfo = view.state.doc.line(targetLine)
 
-    // 使用 CodeMirror 的 scrollIntoView 效果
-    view.dispatch({
-      effects: view.scrollIntoView(lineInfo.from, { y: 'start' })
+    // 获取滚动容器
+    const scroller = view.scrollDOM
+    if (!scroller) return
+
+    // 获取 viewState 用于测量位置
+    const viewState = (view as any).viewState
+
+    // 第一次：估算位置并滚动，触发 CodeMirror 渲染目标区域
+    const estimatedBlock = viewState?.lineBlockAt(lineInfo.from)
+    if (estimatedBlock) {
+      scroller.scrollTop = estimatedBlock.top - 10
+    }
+
+    // 第二次：等待渲染完成后，获取准确位置并修正滚动
+    requestAnimationFrame(() => {
+      requestAnimationFrame(() => {
+        // 双重 raf 确保 CodeMirror 完成渲染和测量
+        const accurateBlock = viewState?.lineBlockAt(lineInfo.from)
+        if (accurateBlock) {
+          // 只有位置有明显偏差时才修正
+          if (Math.abs(accurateBlock.top - (estimatedBlock?.top || 0)) > 5) {
+            scroller.scrollTop = accurateBlock.top - 10
+          }
+        }
+      })
     })
   }
 })
