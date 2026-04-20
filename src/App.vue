@@ -1,19 +1,25 @@
 <template>
   <div class="app-container">
     <div class="main-content" :style="mainContentStyle">
-      <FileTree
-        v-if="showFileTree"
+      <LeftSidebar
+        ref="sidebarRef"
+        :work-state="workState"
         :folder-path="importedFolderPath || ''"
         :files="mdFiles"
         :current-file="currentFilePath"
-        :style="{ width: fileTreeWidth + 'px' }"
-        @select="openFileFromTree"
-        @close="showFileTree = false"
+        :has-multiple-files="mdFiles.length > 0"
+        :global-search-results="globalSearchResults"
+        :style="{ width: sidebarWidth + 'px' }"
+        @select-file="openFileFromTree"
+        @search="handleSearch"
+        @search-jump="handleSearchJump"
+        @search-clear="handleSearchClear"
+        @select-search-result="handleSearchResultSelect"
+        @open-file="openFile"
       />
       <div
-        v-if="showFileTree"
-        class="splitter file-tree-splitter"
-        @mousedown="startFileTreeResize"
+        class="splitter sidebar-splitter"
+        @mousedown="startSidebarResize"
       />
       <Editor
         ref="editorRef"
@@ -39,7 +45,6 @@
         :preview-only-mode="previewOnlyMode"
         :can-navigate-back="canNavigateBack"
         :can-navigate-forward="canNavigateForward"
-        :has-multiple-files="mdFiles.length > 0"
         :md-files="mdFiles"
         class="preview-pane"
         :style="previewPaneStyle"
@@ -52,9 +57,6 @@
         @navigate-to-anchor="navigateToAnchor"
         @navigate-back="navigateBack"
         @navigate-forward="navigateForward"
-        @search="handleSearch"
-        @search-jump="handleSearchJump"
-        @search-clear="handleSearchClear"
         @font-config-change="handleFontConfigChange"
       />
     </div>
@@ -65,13 +67,6 @@
       :combined-html="mkdocsCombinedHtml"
       @confirm="confirmMkdocsExport"
       @cancel="cancelMkdocsExport"
-    />
-    <SearchResultDialog
-      :visible="showSearchResults"
-      :search-text="globalSearchText"
-      :results="globalSearchResults"
-      @close="showSearchResults = false"
-      @select="handleSearchResultSelect"
     />
 
     <!-- 保存确认对话框 -->
@@ -95,10 +90,9 @@
 import { ref, computed, onMounted, onUnmounted, nextTick, watch } from 'vue'
 import Editor from './components/Editor.vue'
 import Preview from './components/Preview.vue'
-import FileTree from './components/FileTree.vue'
+import LeftSidebar from './components/LeftSidebar.vue'
 import ExportProgress from './components/ExportProgress.vue'
 import MkdocsPreviewDialog from './components/MkdocsPreviewDialog.vue'
-import SearchResultDialog from './components/SearchResultDialog.vue'
 import { useMarkdown } from './composables/useMarkdown'
 import type { Metadata } from './composables/useMarkdown'
 import { usePDF } from './composables/usePDF'
@@ -179,10 +173,14 @@ const { exportToPDF } = usePDF()
 const { handleError } = useErrorHandling()
 const editorRef = ref<InstanceType<typeof Editor>>()
 const previewRef = ref<InstanceType<typeof Preview>>()
+const sidebarRef = ref<InstanceType<typeof LeftSidebar>>()
 
-// 文件树相关状态
-const showFileTree = ref(false)
+// 左侧边栏相关状态
 const importedFolderPath = ref<string | null>(null)
+const sidebarWidth = ref(240) // 左侧边栏宽度（像素）
+const MIN_SIDEBAR_WIDTH = 180
+const MAX_SIDEBAR_WIDTH = 350
+
 interface MdFile {
   name: string
   path?: string  // 文件节点才有路径
@@ -190,9 +188,6 @@ interface MdFile {
   isFolder?: boolean  // 是否为目录节点
 }
 const mdFiles = ref<MdFile[]>([])
-const fileTreeWidth = ref(200) // 文件树宽度（像素）
-const MIN_FILE_TREE_WIDTH = 150
-const MAX_FILE_TREE_WIDTH = 400
 
 // 工作状态：'file' = 通过按钮打开文件, 'folder' = 导入文件夹, 'mkdocs' = 导入 Mkdocs
 type WorkState = 'file' | 'folder' | 'mkdocs'
@@ -204,8 +199,7 @@ const mkdocsBookmarkTree = ref<BookmarkTreeNode[]>([])
 const mkdocsCombinedHtml = ref('')
 const mkdocsChapters = ref<any[]>([])
 
-// 全局搜索结果对话框状态
-const showSearchResults = ref(false)
+// 全局搜索结果（传递给 LeftSidebar 显示）
 const globalSearchText = ref('')
 interface GlobalSearchResult {
   path: string
@@ -325,37 +319,37 @@ function stopResize() {
   document.body.style.userSelect = ''
 }
 
-// 文件树分割器拖动
-let isFileTreeResizing = false
-let fileTreeResizeStartX = 0
-let fileTreeResizeStartWidth = 0
+// 左侧边栏分割器拖动
+let isSidebarResizing = false
+let sidebarResizeStartX = 0
+let sidebarResizeStartWidth = 0
 
-function startFileTreeResize(event: MouseEvent) {
+function startSidebarResize(event: MouseEvent) {
   event.preventDefault()
-  isFileTreeResizing = true
-  fileTreeResizeStartX = event.clientX
-  fileTreeResizeStartWidth = fileTreeWidth.value
-  document.addEventListener('mousemove', handleFileTreeResize)
-  document.addEventListener('mouseup', stopFileTreeResize)
+  isSidebarResizing = true
+  sidebarResizeStartX = event.clientX
+  sidebarResizeStartWidth = sidebarWidth.value
+  document.addEventListener('mousemove', handleSidebarResize)
+  document.addEventListener('mouseup', stopSidebarResize)
   document.body.style.cursor = 'col-resize'
   document.body.style.userSelect = 'none'
 }
 
-function handleFileTreeResize(event: MouseEvent) {
-  if (!isFileTreeResizing) return
+function handleSidebarResize(event: MouseEvent) {
+  if (!isSidebarResizing) return
 
   const zoom = zoomLevel.value / 100
   // 计算鼠标移动的距离，考虑 zoom 缩放
-  const deltaX = (event.clientX - fileTreeResizeStartX) / zoom
-  const newWidth = fileTreeResizeStartWidth + deltaX
+  const deltaX = (event.clientX - sidebarResizeStartX) / zoom
+  const newWidth = sidebarResizeStartWidth + deltaX
 
-  fileTreeWidth.value = Math.min(MAX_FILE_TREE_WIDTH, Math.max(MIN_FILE_TREE_WIDTH, newWidth))
+  sidebarWidth.value = Math.min(MAX_SIDEBAR_WIDTH, Math.max(MIN_SIDEBAR_WIDTH, newWidth))
 }
 
-function stopFileTreeResize() {
-  isFileTreeResizing = false
-  document.removeEventListener('mousemove', handleFileTreeResize)
-  document.removeEventListener('mouseup', stopFileTreeResize)
+function stopSidebarResize() {
+  isSidebarResizing = false
+  document.removeEventListener('mousemove', handleSidebarResize)
+  document.removeEventListener('mouseup', stopSidebarResize)
   document.body.style.cursor = ''
   document.body.style.userSelect = ''
 }
@@ -686,10 +680,6 @@ async function openFile() {
     })
 
     if (selected && typeof selected === 'string') {
-      // 如果从文件夹或 Mkdocs 状态切换到文件状态，关闭文件树
-      if (workState.value === 'folder' || workState.value === 'mkdocs') {
-        showFileTree.value = false
-      }
       workState.value = 'file'
 
       // 使用支持 GB18030 编码的读取命令
@@ -777,7 +767,6 @@ async function importFolder() {
       // 递归读取文件夹结构
       mdFiles.value = await readFolderRecursive(selected)
 
-      showFileTree.value = true
       workState.value = 'folder'
       console.log('导入文件夹:', selected, '文件数:', countMdFiles(mdFiles.value))
 
@@ -905,7 +894,6 @@ async function importMkdocs() {
         mdFiles.value = []
       }
 
-      showFileTree.value = true
       workState.value = 'mkdocs'
       console.log('导入 Mkdocs:', selected, 'docs_dir:', docsPath, '文件数:', mdFiles.value.length)
 
@@ -1218,21 +1206,39 @@ function scrollToAnchor(anchor: string) {
 }
 
 // 搜索处理
-async function handleSearch(text: string, mode: 'current' | 'global', files?: MdFile[]) {
-  if (mode === 'global' && files && files.length > 0) {
+async function handleSearch(text: string, mode: 'current' | 'global') {
+  if (mode === 'global') {
     // 全局搜索 - 搜索所有文件
     globalSearchText.value = text
-    globalSearchResults.value = await searchInAllFiles(text, files)
-    showSearchResults.value = true
+    globalSearchResults.value = await searchInAllFiles(text, mdFiles.value)
+  } else {
+    // 当前文件搜索 - 在 Preview 中高亮
+    if (previewRef.value) {
+      const highlights = previewRef.value.highlightSearchResults(text)
+      if (highlights.length > 0) {
+        previewRef.value.jumpToSearchResult(0)
+        sidebarRef.value?.updateResults(highlights.length, 0)
+      } else {
+        sidebarRef.value?.updateResults(0, -1)
+      }
+    }
   }
 }
 
-function handleSearchJump(_direction: 'prev' | 'next') {
-  // Preview 组件内部处理
+function handleSearchJump(direction: 'prev' | 'next') {
+  // 通过 Preview 组件处理，然后更新 LeftSidebar 显示
+  if (previewRef.value) {
+    previewRef.value.jumpToSearchResult(direction === 'prev' ? -1 : 1)
+  }
 }
 
 function handleSearchClear() {
-  // Preview 组件内部处理
+  // 清除 Preview 中的高亮
+  if (previewRef.value) {
+    previewRef.value.clearSearchHighlights()
+  }
+  globalSearchText.value = ''
+  globalSearchResults.value = []
 }
 
 // 处理字体配置变化

@@ -6,7 +6,6 @@
       :show-toc="showToc"
       :can-navigate-back="canNavigateBack"
       :can-navigate-forward="canNavigateForward"
-      :has-multiple-files="hasMultipleFiles"
       @preview-only="emit('preview-only')"
       @toggle-toc="toggleToc"
       @import-folder="emit('import-folder')"
@@ -16,9 +15,6 @@
       @navigate-back="emit('navigate-back')"
       @navigate-forward="emit('navigate-forward')"
       @open-settings="showSettings = true"
-      @search="handleSearch"
-      @search-jump="handleSearchJump"
-      @search-clear="handleSearchClear"
     />
     <div class="preview-body">
       <div class="preview-content-wrapper">
@@ -84,7 +80,6 @@ const props = defineProps<{
   previewOnlyMode?: boolean
   canNavigateBack?: boolean
   canNavigateForward?: boolean
-  hasMultipleFiles?: boolean
   mdFiles?: MdFile[]
 }>()
 
@@ -98,9 +93,6 @@ const emit = defineEmits<{
   'navigate-to-anchor': [anchor: string]
   'navigate-back': []
   'navigate-forward': []
-  'search': [text: string, mode: 'current' | 'global', mdFiles?: MdFile[]]
-  'search-jump': [direction: 'prev' | 'next']
-  'search-clear': []
   'font-config-change': [config: FontConfig]
 }>()
 
@@ -113,7 +105,6 @@ interface MdFile {
 }
 
 const previewRef = ref<HTMLDivElement>()
-const toolbarRef = ref<InstanceType<typeof PreviewToolbar>>()
 const showToc = ref(false)
 const tocItems = ref<TocItem[]>([])
 
@@ -155,40 +146,6 @@ defineExpose({
   jumpToSearchResult
 })
 
-// 搜索处理
-function handleSearch(text: string, mode: 'current' | 'global') {
-  if (mode === 'current') {
-    // 当前文件搜索
-    const highlights = highlightSearchResults(text)
-    if (highlights.length > 0) {
-      jumpToSearchResult(0)
-    }
-  } else {
-    // 全局搜索 - 传递给 App.vue 处理
-    emit('search', text, mode, props.mdFiles)
-  }
-}
-
-function handleSearchJump(direction: 'prev' | 'next') {
-  if (searchHighlights.value.length === 0) return
-
-  if (direction === 'prev') {
-    currentSearchIndex.value = (currentSearchIndex.value - 1 + searchHighlights.value.length) % searchHighlights.value.length
-  } else {
-    currentSearchIndex.value = (currentSearchIndex.value + 1) % searchHighlights.value.length
-  }
-
-  jumpToSearchResult(currentSearchIndex.value)
-  toolbarRef.value?.updateSearchResults(searchHighlights.value.length, currentSearchIndex.value)
-}
-
-function handleSearchClear() {
-  clearSearchHighlights()
-  currentSearchText.value = ''
-  searchHighlights.value = []
-  currentSearchIndex.value = 0
-}
-
 // 高亮搜索结果
 function highlightSearchResults(text: string): HTMLElement[] {
   if (!previewRef.value || !text) return []
@@ -218,13 +175,11 @@ function highlightSearchResults(text: string): HTMLElement[] {
 
   searchHighlights.value = highlights
 
-  // 更新搜索索引和工具栏显示
+  // 更新搜索索引
   if (highlights.length > 0) {
     currentSearchIndex.value = 0
-    toolbarRef.value?.updateSearchResults(highlights.length, 0)
   } else {
     currentSearchIndex.value = -1
-    toolbarRef.value?.updateSearchResults(0, -1)
   }
 
   return highlights
