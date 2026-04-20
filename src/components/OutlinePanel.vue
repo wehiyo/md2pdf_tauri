@@ -133,7 +133,8 @@ defineExpose({
 .outline-header {
   display: flex;
   align-items: center;
-  padding: 12px 16px;
+  padding: 0 16px;
+  height: 36px;
   border-bottom: 1px solid #e2e8f0;
   background-color: #e2e8f0;
   font-weight: 600;
