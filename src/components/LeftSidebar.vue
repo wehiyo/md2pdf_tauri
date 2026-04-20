@@ -80,12 +80,12 @@
               <line x1="21" y1="21" x2="16.65" y2="16.65"/>
             </svg>
           </button>
+        </div>
+        <div class="search-nav">
           <select v-if="hasMultipleFiles" v-model="searchMode" class="search-mode-select">
             <option value="current">当前文件</option>
             <option value="global">全局搜索</option>
           </select>
-        </div>
-        <div class="search-nav">
           <span v-if="totalResults > 0" class="search-count">{{ currentIndex + 1 }}/{{ totalResults }}</span>
           <span v-else-if="searchText && hasSearched" class="search-count">无结果</span>
           <button class="nav-btn" title="上一个" :disabled="totalResults === 0" @click="$emit('search-jump', 'prev')">
@@ -450,16 +450,6 @@ defineExpose({
   height: 14px;
 }
 
-.search-mode-select {
-  height: 28px;
-  padding: 4px 8px;
-  border: 1px solid #e2e8f0;
-  border-radius: 4px;
-  font-size: 12px;
-  outline: none;
-  cursor: pointer;
-}
-
 .search-nav {
   display: flex;
   align-items: center;
@@ -467,10 +457,21 @@ defineExpose({
   margin-top: 8px;
 }
 
+.search-mode-select {
+  height: 24px;
+  padding: 2px 6px;
+  border: 1px solid #e2e8f0;
+  border-radius: 4px;
+  font-size: 11px;
+  outline: none;
+  cursor: pointer;
+}
+
 .search-count {
   flex: 1;
   font-size: 12px;
   color: #6b7280;
+  text-align: center;
 }
 
 .nav-btn {
