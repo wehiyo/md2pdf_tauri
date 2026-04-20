@@ -1116,6 +1116,9 @@ const headingCounters = { h2: 0, h3: 0, h4: 0 }
 // 标题 ID 映射：原始 slug -> 带编号的 ID（用于链接跳转）
 const headingIdMap = new Map<string, string>()
 
+// 标题行号映射：标题 ID -> 源文本行号（用于编辑器定位）
+const headingLineMap = new Map<string, number>()
+
 // MkDocs 组合导出时的外部编号上下文（模块级别）
 let externalNumberPrefix = ''
 let externalNavLevel = 0
@@ -1257,6 +1260,11 @@ md.renderer.rules.heading_open = (tokens, idx) => {
       headingIdMap.set(baseSlug, numberedId)
     }
 
+    // 存储行号映射：标题 ID -> 源文本行号（用于编辑器定位）
+    // token.map 包含 [startLine, endLine]，行号从 0 开始
+    const line = token.map ? token.map[0] : 0
+    headingLineMap.set(numberedId, line)
+
     // 渲染开标签
     const numberSpan = number ? `<span class="heading-number">${number}</span>` : ''
     return `<${level} id="${numberedId}">${numberSpan}`
@@ -1293,6 +1301,7 @@ export function useMarkdown() {
     headingCounters.h3 = 0
     headingCounters.h4 = 0
     headingIdMap.clear()
+    headingLineMap.clear()
 
     try {
       let html = md.render(body)
@@ -1484,12 +1493,22 @@ export function useMarkdown() {
     return renderWithNumberPrefix(bodyWithoutH1, numberPrefix, navLevel)
   }
 
+  /**
+   * 获取标题对应的源文本行号
+   * @param id 标题 ID（带编号的）
+   * @returns 行号（从 0 开始），若不存在返回 undefined
+   */
+  function getHeadingLine(id: string): number | undefined {
+    return headingLineMap.get(id)
+  }
+
   return {
     parse,
     renderBody,
     render,
     renderWithNumberPrefix,
     renderContentSkipH1,
+    getHeadingLine,
     md  // 导出 md 实例供外部解析使用
   }
 }

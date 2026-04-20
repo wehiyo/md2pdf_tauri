@@ -37,11 +37,29 @@ const emit = defineEmits<{
 const containerRef = ref<HTMLElement>()
 const mdEditorRef = ref<InstanceType<typeof MdEditor>>()
 
-// 暴露滚动容器
+// 暴露滚动容器和滚动方法
 defineExpose({
   getScrollContainer: () => {
     // CodeMirror 滚动容器
     return containerRef.value?.querySelector('.cm-scroller') as HTMLElement | null
+  },
+  /**
+   * 滚动到指定行号
+   * @param lineNumber 行号（从 0 开始）
+   */
+  scrollToLine: (lineNumber: number) => {
+    const cmEditor = containerRef.value?.querySelector('.cm-editor')
+    if (!cmEditor) return
+
+    // 使用 CodeMirror 的 scrollIntoView API
+    const view = (mdEditorRef.value as any)?.editor?.view
+    if (view) {
+      // 获取行信息并滚动
+      const lineInfo = view.state.doc.line(Math.min(lineNumber + 1, view.state.doc.lines))
+      view.dispatch({
+        effects: view.scrollIntoView(lineInfo.from, { y: 'start', yMargin: 0 })
+      })
+    }
   }
 })
 

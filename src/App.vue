@@ -176,7 +176,7 @@ const fontConfig = ref<FontConfig>({
 // 保存确认对话框状态
 const showSaveConfirmDialog = ref(false)
 let saveConfirmResolver: ((result: 'save' | 'discard' | 'cancel' | 'none') => void) | null = null
-const { render } = useMarkdown()
+const { render, getHeadingLine } = useMarkdown()
 const { exportToPDF } = usePDF()
 const { handleError } = useErrorHandling()
 const editorRef = ref<InstanceType<typeof Editor>>()
@@ -1258,36 +1258,21 @@ function handleFontConfigChange(config: FontConfig) {
 
 // 处理大纲点击，同步滚动编辑器和预览区
 function handleOutlineScroll(id: string) {
-  if (!previewElement.value || !editorScrollContainer.value) return
+  // 获取标题对应的源文本行号
+  const lineNumber = getHeadingLine(id)
 
-  // 找到对应的标题元素
-  const element = previewElement.value.querySelector(`#${CSS.escape(id)}`)
-  if (!element) return
+  // 滚动编辑器到对应行（使用 CodeMirror API）
+  if (lineNumber !== undefined && editorRef.value) {
+    editorRef.value.scrollToLine(lineNumber)
+  }
 
-  // 滚动预览区到标题位置
-  element.scrollIntoView({ behavior: 'smooth', block: 'start' })
-
-  // 计算预览区滚动比例并同步到编辑器
-  setTimeout(() => {
-    if (!previewScrollContainer.value || !editorScrollContainer.value) return
-
-    const previewScrollHeight = previewScrollContainer.value.scrollHeight
-    const previewClientHeight = previewScrollContainer.value.clientHeight
-    const previewMaxScroll = previewScrollHeight - previewClientHeight
-
-    if (previewMaxScroll <= 0) return
-
-    const scrollRatio = previewScrollContainer.value.scrollTop / previewMaxScroll
-
-    // 同步编辑器滚动
-    const editorScrollHeight = editorScrollContainer.value.scrollHeight
-    const editorClientHeight = editorScrollContainer.value.clientHeight
-    const editorMaxScroll = editorScrollHeight - editorClientHeight
-
-    if (editorMaxScroll <= 0) return
-
-    editorScrollContainer.value.scrollTop = scrollRatio * editorMaxScroll
-  }, 350) // 等待 smooth 滚动完成
+  // 滚动预览区（仅在预览可见时）
+  if (previewElement.value) {
+    const element = previewElement.value.querySelector(`#${CSS.escape(id)}`)
+    if (element) {
+      element.scrollIntoView({ behavior: 'smooth', block: 'start' })
+    }
+  }
 }
 
 // 选择搜索结果，跳转到对应文件
