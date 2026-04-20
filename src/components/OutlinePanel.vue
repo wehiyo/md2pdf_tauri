@@ -35,6 +35,10 @@ const props = defineProps<{
   previewRef: HTMLElement | null
 }>()
 
+const emit = defineEmits<{
+  'scroll-to-heading': [id: string]
+}>()
+
 const outlineItems = ref<OutlineItem[]>([])
 let previewElement: HTMLElement | null = null
 
@@ -76,12 +80,7 @@ function removeNumbering(text: string): string {
 
 // 滚动到指定标题
 function scrollToHeading(id: string) {
-  if (!previewElement) return
-
-  const element = previewElement.querySelector(`#${CSS.escape(id)}`)
-  if (element) {
-    element.scrollIntoView({ behavior: 'smooth', block: 'start' })
-  }
+  emit('scroll-to-heading', id)
 }
 
 // 更新 Preview 引用并提取大纲

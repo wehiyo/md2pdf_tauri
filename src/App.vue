@@ -64,6 +64,7 @@
         ref="outlineRef"
         :preview-ref="previewElement"
         class="outline-pane"
+        @scroll-to-heading="handleOutlineScroll"
       />
     </div>
     <ExportProgress />
@@ -1253,6 +1254,40 @@ function handleSearchClear() {
 // 处理字体配置变化
 function handleFontConfigChange(config: FontConfig) {
   fontConfig.value = config
+}
+
+// 处理大纲点击，同步滚动编辑器和预览区
+function handleOutlineScroll(id: string) {
+  if (!previewElement.value || !editorScrollContainer.value) return
+
+  // 找到对应的标题元素
+  const element = previewElement.value.querySelector(`#${CSS.escape(id)}`)
+  if (!element) return
+
+  // 滚动预览区到标题位置
+  element.scrollIntoView({ behavior: 'smooth', block: 'start' })
+
+  // 计算预览区滚动比例并同步到编辑器
+  setTimeout(() => {
+    if (!previewScrollContainer.value || !editorScrollContainer.value) return
+
+    const previewScrollHeight = previewScrollContainer.value.scrollHeight
+    const previewClientHeight = previewScrollContainer.value.clientHeight
+    const previewMaxScroll = previewScrollHeight - previewClientHeight
+
+    if (previewMaxScroll <= 0) return
+
+    const scrollRatio = previewScrollContainer.value.scrollTop / previewMaxScroll
+
+    // 同步编辑器滚动
+    const editorScrollHeight = editorScrollContainer.value.scrollHeight
+    const editorClientHeight = editorScrollContainer.value.clientHeight
+    const editorMaxScroll = editorScrollHeight - editorClientHeight
+
+    if (editorMaxScroll <= 0) return
+
+    editorScrollContainer.value.scrollTop = scrollRatio * editorMaxScroll
+  }, 350) // 等待 smooth 滚动完成
 }
 
 // 选择搜索结果，跳转到对应文件
