@@ -32,14 +32,6 @@
         </svg>
         <span>仅预览</span>
       </button>
-      <button class="toolbar-btn" :class="{ active: showToc }" title="目录" @click="$emit('toggle-toc')">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-          <line x1="3" y1="6" x2="21" y2="6"/>
-          <line x1="3" y1="12" x2="15" y2="12"/>
-          <line x1="3" y1="18" x2="18" y2="18"/>
-        </svg>
-        <span>目录</span>
-      </button>
       <div class="dropdown">
         <button class="toolbar-btn dropdown-trigger" @click="toggleImportDropdown">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -121,7 +113,6 @@ import { ref, onMounted, onUnmounted } from 'vue'
 
 const emit = defineEmits<{
   'preview-only': []
-  'toggle-toc': []
   'import-folder': []
   'import-mkdocs': []
   'export-html': []
@@ -133,7 +124,6 @@ const emit = defineEmits<{
 
 defineProps<{
   previewOnlyMode?: boolean
-  showToc?: boolean
   canNavigateBack?: boolean
   canNavigateForward?: boolean
 }>()

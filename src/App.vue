@@ -59,6 +59,12 @@
         @navigate-forward="navigateForward"
         @font-config-change="handleFontConfigChange"
       />
+      <div class="splitter outline-splitter" />
+      <OutlinePanel
+        ref="outlineRef"
+        :preview-ref="previewElement"
+        class="outline-pane"
+      />
     </div>
     <ExportProgress />
     <MkdocsPreviewDialog
@@ -91,6 +97,7 @@ import { ref, computed, onMounted, onUnmounted, nextTick, watch } from 'vue'
 import Editor from './components/Editor.vue'
 import Preview from './components/Preview.vue'
 import LeftSidebar from './components/LeftSidebar.vue'
+import OutlinePanel from './components/OutlinePanel.vue'
 import ExportProgress from './components/ExportProgress.vue'
 import MkdocsPreviewDialog from './components/MkdocsPreviewDialog.vue'
 import { useMarkdown } from './composables/useMarkdown'
@@ -174,6 +181,8 @@ const { handleError } = useErrorHandling()
 const editorRef = ref<InstanceType<typeof Editor>>()
 const previewRef = ref<InstanceType<typeof Preview>>()
 const sidebarRef = ref<InstanceType<typeof LeftSidebar>>()
+const outlineRef = ref<InstanceType<typeof OutlinePanel>>()
+const previewElement = ref<HTMLElement | null>(null)
 
 // 左侧边栏相关状态
 const importedFolderPath = ref<string | null>(null)
@@ -1395,6 +1404,19 @@ watch(windowTitle, () => {
   updateWindowTitle()
 })
 
+// 监听 HTML 渲染完成，更新大纲面板
+watch(renderedHtml, async () => {
+  await nextTick()
+  // 获取 Preview 组件的 DOM 元素并更新大纲
+  if (previewRef.value) {
+    const element = previewRef.value.getPreviewRef()
+    previewElement.value = element
+    if (outlineRef.value && element) {
+      outlineRef.value.updatePreviewRef(element)
+    }
+  }
+})
+
 onUnmounted(() => {
   window.removeEventListener('wheel', handleWheel)
   // 清理关闭事件监听
@@ -1420,7 +1442,8 @@ onUnmounted(() => {
 }
 
 .editor-pane,
-.preview-pane {
+.preview-pane,
+.outline-pane {
   min-width: 0;
   flex-shrink: 0;
 }
@@ -1428,6 +1451,10 @@ onUnmounted(() => {
 .editor-pane {
   overflow: hidden;
   border-right: none;
+}
+
+.outline-pane {
+  flex-shrink: 0;
 }
 
 /* 分割器样式 */

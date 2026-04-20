@@ -1,13 +1,10 @@
 <template>
   <div class="preview-container">
     <PreviewToolbar
-      ref="toolbarRef"
       :preview-only-mode="previewOnlyMode"
-      :show-toc="showToc"
       :can-navigate-back="canNavigateBack"
       :can-navigate-forward="canNavigateForward"
       @preview-only="emit('preview-only')"
-      @toggle-toc="toggleToc"
       @import-folder="emit('import-folder')"
       @import-mkdocs="emit('import-mkdocs')"
       @export-html="emit('export-html')"
@@ -24,27 +21,6 @@
           v-html="html"
           @click.stop="handleLinkClick"
         />
-      </div>
-      <div v-if="showToc" class="toc-panel">
-        <div class="toc-header">
-          <span>目录</span>
-          <button class="toc-close" @click="showToc = false">×</button>
-        </div>
-        <div class="toc-content">
-          <div
-            v-for="item in tocItems"
-            :key="item.id"
-            class="toc-item"
-            :class="'toc-level-' + item.level"
-            :title="item.text"
-            @click="scrollToHeading(item.id)"
-          >
-            {{ item.text }}
-          </div>
-          <div v-if="tocItems.length === 0" class="toc-empty">
-            暂无标题
-          </div>
-        </div>
       </div>
     </div>
     <SettingsDialog
@@ -67,12 +43,6 @@ import PreviewToolbar from './PreviewToolbar.vue'
 import SettingsDialog from './SettingsDialog.vue'
 import { loadConfig, saveConfig, type FontConfig } from '../composables/useConfig'
 import { loadFonts } from '../composables/useFonts'
-
-interface TocItem {
-  id: string
-  text: string
-  level: number
-}
 
 const props = defineProps<{
   html: string
@@ -105,8 +75,6 @@ interface MdFile {
 }
 
 const previewRef = ref<HTMLDivElement>()
-const showToc = ref(false)
-const tocItems = ref<TocItem[]>([])
 
 // 搜索相关状态
 const searchHighlights = ref<HTMLElement[]>([])
@@ -138,9 +106,10 @@ async function handleSettingsSave(config: FontConfig) {
   emit('font-config-change', config)
 }
 
-// 暴露滚动容器和搜索相关方法
+// 暴露滚动容器、previewRef 和搜索相关方法
 defineExpose({
   getScrollContainer: (): HTMLElement | null => previewRef.value ?? null,
+  getPreviewRef: (): HTMLElement | null => previewRef.value ?? null,
   highlightSearchResults,
   clearSearchHighlights,
   jumpToSearchResult
@@ -243,44 +212,6 @@ function jumpToSearchResult(index: number) {
       mark.classList.remove('search-highlight-current')
     }
   })
-}
-
-// 切换目录显示
-function toggleToc() {
-  showToc.value = !showToc.value
-  if (showToc.value) {
-    extractToc()
-  }
-}
-
-// 从预览区提取目录
-function extractToc() {
-  if (!previewRef.value) return
-
-  const headings = previewRef.value.querySelectorAll('h1, h2, h3, h4')
-  const items: TocItem[] = []
-
-  headings.forEach(heading => {
-    const id = heading.id
-    const text = heading.textContent || ''
-    const level = parseInt(heading.tagName.charAt(1))
-
-    if (id && level >= 1 && level <= 4) {
-      items.push({ id, text, level })
-    }
-  })
-
-  tocItems.value = items
-}
-
-// 滚动到指定标题
-function scrollToHeading(id: string) {
-  if (!previewRef.value) return
-
-  const element = previewRef.value.querySelector(`#${CSS.escape(id)}`)
-  if (element) {
-    element.scrollIntoView({ behavior: 'smooth', block: 'start' })
-  }
 }
 
 // 处理文档内链接跳转
@@ -524,9 +455,6 @@ watch(() => props.html, async () => {
   await renderPlantuml()
   renderWavedrom()
   fixImagePaths()
-  if (showToc.value) {
-    extractToc()
-  }
 }, { immediate: true })
 
 onUpdated(async () => {
@@ -565,87 +493,6 @@ onUpdated(async () => {
   display: flex;
   justify-content: center;
   overflow: hidden;
-}
-
-/* 目录面板 */
-.toc-panel {
-  width: 280px;
-  border-left: 1px solid #e2e8f0;
-  background-color: #f8fafc;
-  display: flex;
-  flex-direction: column;
-  flex-shrink: 0;
-}
-
-.toc-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 12px 16px;
-  border-bottom: 1px solid #e2e8f0;
-  font-weight: 600;
-  font-size: 14px;
-  color: #374151;
-}
-
-.toc-close {
-  background: none;
-  border: none;
-  font-size: 20px;
-  color: #6b7280;
-  cursor: pointer;
-  padding: 0;
-  line-height: 1;
-}
-
-.toc-close:hover {
-  color: #374151;
-}
-
-.toc-content {
-  flex: 1;
-  overflow-y: auto;
-  padding: 8px 0;
-}
-
-.toc-item {
-  padding: 6px 16px;
-  font-size: 13px;
-  color: #4b5563;
-  cursor: pointer;
-  transition: background-color 0.2s;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
-.toc-item:hover {
-  background-color: #e2e8f0;
-}
-
-.toc-level-1 {
-  font-weight: 600;
-  padding-left: 16px;
-}
-
-.toc-level-2 {
-  padding-left: 28px;
-}
-
-.toc-level-3 {
-  padding-left: 40px;
-}
-
-.toc-level-4 {
-  padding-left: 52px;
-  font-size: 12px;
-}
-
-.toc-empty {
-  padding: 16px;
-  text-align: center;
-  color: #9ca3af;
-  font-size: 13px;
 }
 
 /* 搜索高亮样式 - 使用 :deep 以应用到动态创建的元素 */
