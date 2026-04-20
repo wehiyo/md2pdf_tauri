@@ -63,10 +63,11 @@ function extractOutline() {
   outlineItems.value = items
 }
 
-// 移除标题编号（支持 "1.2.3 "、"1. "、"1.2 " 等格式）
+// 移除标题编号（支持 "1.2.3. "、"1. "、"1.2. " 等格式）
 function removeNumbering(text: string): string {
-  // 匹配开头的数字编号模式：如 "1.2.3 " 或 "1 " 或 "1.2 "
-  const match = text.match(/^(\d+(\.\d+)*\s+)/)
+  // 匹配开头的数字编号模式：如 "1.2.3. " 或 "1. " 或 "1.2. "
+  // 编号格式：数字序列，每个数字后跟句号，最后有空格
+  const match = text.match(/^(\d+\.(\d+\.)*\s+)/)
   if (match) {
     return text.substring(match[0].length)
   }
