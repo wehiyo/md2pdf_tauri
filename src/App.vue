@@ -1142,16 +1142,8 @@ function extractMdFilesFromNav(nav: any[], basePath: string): MdFile[] {
   return files
 }
 
-// 从文件树打开文件
+// 从文件树打开文件（不提示保存）
 async function openFileFromTree(path: string) {
-  // 检查未保存改动
-  const result = await checkUnsavedChanges()
-  if (result === 'cancel') return
-  if (result === 'save') {
-    const saved = await saveFile()
-    if (!saved) return  // 保存失败（用户取消），不继续打开
-  }
-
   try {
     const [text, encoding] = await invoke<[string, string]>('read_file_with_encoding', { path })
     const normalizedText = text.replace(/\r\n/g, '\n')
@@ -1325,16 +1317,8 @@ async function navigateForward() {
   await openFileFromTreeNoHistory(state.filePath)
 }
 
-// 打开文件但不记录历史（用于返回/前进）
+// 打开文件但不记录历史（用于返回/前进）（不提示保存）
 async function openFileFromTreeNoHistory(path: string) {
-  // 检查未保存改动
-  const result = await checkUnsavedChanges()
-  if (result === 'cancel') return
-  if (result === 'save') {
-    const saved = await saveFile()
-    if (!saved) return  // 保存失败（用户取消），不继续打开
-  }
-
   try {
     const [text, encoding] = await invoke<[string, string]>('read_file_with_encoding', { path })
     const normalizedText = text.replace(/\r\n/g, '\n')
@@ -1465,16 +1449,8 @@ function handleOutlineScroll(id: string) {
   }
 }
 
-// 选择搜索结果，跳转到对应文件
+// 选择搜索结果，跳转到对应文件（不提示保存）
 async function handleSearchResultSelect(path: string) {
-  // 检查未保存改动
-  const result = await checkUnsavedChanges()
-  if (result === 'cancel') return
-  if (result === 'save') {
-    await saveFile()
-    if (!hasUnsavedChanges.value) return
-  }
-
   // 打开选中的文件
   await openFileFromTree(path)
 
