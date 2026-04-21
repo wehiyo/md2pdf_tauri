@@ -23,6 +23,7 @@
   font-weight: 600;
   line-height: 1.25;
   color: #111827;
+  clear: both;
 }
 
 .markdown-body h1 {
@@ -272,6 +273,19 @@
   display: block;
   margin-left: auto;
   margin-right: auto;
+}
+
+/* 图片浮动 - 文字环绕 */
+.markdown-body .img-float-left {
+  float: left;
+  margin-right: 1em;
+  margin-bottom: 0.5em;
+}
+
+.markdown-body .img-float-right {
+  float: right;
+  margin-left: 1em;
+  margin-bottom: 0.5em;
 }
 
 /* 数学公式 */

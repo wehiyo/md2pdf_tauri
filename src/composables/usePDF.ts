@@ -684,7 +684,7 @@ function getMarkdownStyles(fontConfig?: FontConfig): string {
 
   return `
 .markdown-body { line-height: ${lineHeight}; color: #1f2937; font-size: ${bodyFontSize}px; font-family: ${bodyFontCss}; }
-.markdown-body h1, .markdown-body h2, .markdown-body h3, .markdown-body h4 { margin-top: 1.5em; margin-bottom: 0.75em; font-weight: 600; line-height: 1.25; color: #111827; }
+.markdown-body h1, .markdown-body h2, .markdown-body h3, .markdown-body h4 { margin-top: 1.5em; margin-bottom: 0.75em; font-weight: 600; line-height: 1.25; color: #111827; clear: both; }
 .markdown-body h1 { font-size: 2em; border-bottom: 2px solid #e5e7eb; padding-bottom: 0.3em; }
 .markdown-body h2 { font-size: 1.5em; border-bottom: 1px solid #e5e7eb; padding-bottom: 0.3em; }
 .markdown-body h3 { font-size: 1.25em; }
@@ -718,6 +718,8 @@ function getMarkdownStyles(fontConfig?: FontConfig): string {
 .markdown-body table tr:nth-child(2n) { background-color: #f9fafb; }
 .markdown-body hr { height: 0.25em; padding: 0; margin: 1.5em 0; background-color: #e5e7eb; border: 0; }
 .markdown-body img { max-width: 100%; box-sizing: content-box; border-style: none; display: block; margin-left: auto; margin-right: auto; }
+.markdown-body .img-float-left { float: left; margin-right: 1em; margin-bottom: 0.5em; }
+.markdown-body .img-float-right { float: right; margin-left: 1em; margin-bottom: 0.5em; }
 .markdown-body .katex { font-size: 1.1em; }
 .markdown-body .katex-display { margin: 1em 0; overflow-x: hidden; overflow-y: hidden; }
 .markdown-body .footnotes { margin-top: 2em; padding-top: 1em; border-top: 1px solid #e5e7eb; }

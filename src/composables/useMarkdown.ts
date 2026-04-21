@@ -1118,18 +1118,18 @@ function buildImageStyle(attrs: ImageAttributes): string {
 
 /**
  * 根据 align 属性生成包裹标签
- * 使用 margin 实现对齐，确保在各种容器中都能正确生效
+ * 使用 float 实现文字环绕效果
  */
 function wrapImageByAlign(imgTag: string, align?: 'left' | 'center' | 'right'): string {
   if (!align) return imgTag
 
-  // 使用 div 包裹，但通过 margin 控制对齐（比 text-align 更可靠）
+  // 使用 float 实现文字环绕
   if (align === 'center') {
-    return `<div style="display: flex; justify-content: center;">${imgTag}</div>`
+    return `<div style="display: block; text-align: center;">${imgTag}</div>`
   } else if (align === 'left') {
-    return `<div style="display: flex; justify-content: flex-start;">${imgTag}</div>`
+    return `<div class="img-float-left">${imgTag}</div>`
   } else if (align === 'right') {
-    return `<div style="display: flex; justify-content: flex-end;">${imgTag}</div>`
+    return `<div class="img-float-right">${imgTag}</div>`
   }
 
   return imgTag
