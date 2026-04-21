@@ -18,8 +18,8 @@
     <div class="sidebar-content">
       <!-- 文件 Tab -->
       <div v-show="activeTab === 'files'" class="tab-panel files-panel">
-        <!-- 多文件模式：显示打开的文件列表 -->
-        <div class="opened-files-view">
+        <!-- 单文件模式：显示打开的文件列表 -->
+        <div v-if="workState === 'file'" class="opened-files-view">
           <div class="opened-files-header">
             <span class="header-title">打开的文件</span>
           </div>
@@ -59,8 +59,8 @@
           </button>
         </div>
 
-        <!-- 文件夹/MkDocs 模式 -->
-        <div v-if="workState !== 'file'" class="folder-view">
+        <!-- 文件夹/MkDocs 模式：显示文件树（替换，不分割显示） -->
+        <div v-else class="folder-view">
           <div class="folder-header">
             <span class="folder-name">{{ folderName }}</span>
           </div>

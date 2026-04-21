@@ -643,6 +643,37 @@ async function checkUnsavedChanges(): Promise<'save' | 'discard' | 'cancel' | 'n
   })
 }
 
+// 批量检查所有未保存文件并依次提示保存
+// 返回：true - 继续操作（已保存或用户选择丢弃），false - 用户取消
+async function checkAllUnsavedFiles(): Promise<boolean> {
+  const unsavedFiles: { index: number; file: OpenedFile }[] = []
+
+  // 收集所有未保存的文件
+  for (let i = 0; i < openedFiles.value.length; i++) {
+    const file = openedFiles.value[i]
+    if (file.content !== file.savedContent) {
+      unsavedFiles.push({ index: i, file })
+    }
+  }
+
+  if (unsavedFiles.length === 0) return true
+
+  // 依次提示保存每个未保存的文件
+  for (const { index } of unsavedFiles) {
+    // 切换到该文件以便用户确认
+    switchToFile(index)
+
+    const result = await checkUnsavedChanges()
+    if (result === 'cancel') return false
+    if (result === 'save') {
+      await saveFile()
+    }
+    // result === 'discard' 时，继续下一个文件
+  }
+
+  return true
+}
+
 // 保存确认对话框按钮处理
 function handleSaveConfirmYes() {
   showSaveConfirmDialog.value = false
@@ -719,11 +750,24 @@ async function closeFile(index: number) {
   if (index < 0 || index >= openedFiles.value.length) return
 
   const file = openedFiles.value[index]
+  const wasCurrentFile = index === currentFileIndex.value
+  const originalCurrentIndex = currentFileIndex.value
 
-  // 如果关闭的是当前文件，先检查未保存改动
-  if (index === currentFileIndex.value && file.content !== file.savedContent) {
+  // 检查被关闭文件是否有未保存改动
+  if (file.content !== file.savedContent) {
+    // 如果不是当前文件，先切换到它以便用户确认
+    if (!wasCurrentFile) {
+      switchToFile(index)
+    }
+
     const result = await checkUnsavedChanges()
-    if (result === 'cancel') return
+    if (result === 'cancel') {
+      // 用户取消，恢复原来的文件
+      if (!wasCurrentFile) {
+        switchToFile(originalCurrentIndex)
+      }
+      return
+    }
     if (result === 'save') {
       await saveFile()
     }
@@ -740,16 +784,30 @@ async function closeFile(index: number) {
     savedContent.value = ''
     currentFilePath.value = null
     currentFileDir.value = null
-  } else if (currentFileIndex.value >= openedFiles.value.length) {
-    // 当前索引超出范围，切换到最后一个
-    switchToFile(openedFiles.value.length - 1)
-  } else if (currentFileIndex.value > index) {
-    // 当前索引在被关闭文件之后，需要减1
-    currentFileIndex.value--
-  } else if (currentFileIndex.value === index) {
+  } else if (wasCurrentFile) {
     // 关闭的是当前文件，切换到相邻文件
-    const newIndex = Math.min(index, openedFiles.value.length - 1)
-    switchToFile(newIndex)
+    if (currentFileIndex.value >= openedFiles.value.length) {
+      currentFileIndex.value = openedFiles.value.length - 1
+    }
+    const newFile = openedFiles.value[currentFileIndex.value]
+    content.value = newFile.content
+    savedContent.value = newFile.savedContent
+    currentFilePath.value = newFile.path
+    currentFileDir.value = newFile.dir
+  } else {
+    // 关闭的不是当前文件
+    // 如果关闭的文件在当前文件之前，当前索引需要减1
+    if (index < originalCurrentIndex) {
+      currentFileIndex.value = originalCurrentIndex - 1
+    } else {
+      currentFileIndex.value = originalCurrentIndex
+    }
+    // 恢复到原来的文件内容
+    const currentFile = openedFiles.value[currentFileIndex.value]
+    content.value = currentFile.content
+    savedContent.value = currentFile.savedContent
+    currentFilePath.value = currentFile.path
+    currentFileDir.value = currentFile.dir
   }
 }
 
@@ -762,16 +820,8 @@ watch(content, (newContent) => {
 
 // ===== 文件操作函数 =====
 
-// 新建文件
+// 新建文件（不提示保存，直接创建新文件）
 async function newFile() {
-  // 检查未保存改动
-  const result = await checkUnsavedChanges()
-  if (result === 'cancel') return
-  if (result === 'save') {
-    await saveFile()
-    if (!hasUnsavedChanges.value) return  // 保存失败（用户取消），不继续新建
-  }
-
   // 创建空白文件项
   const newFileItem: OpenedFile = {
     path: null,
@@ -797,6 +847,7 @@ async function newFile() {
 }
 
 // 打开文件（支持多选）
+// 打开时不提示保存，维持未修改状态
 async function openFile() {
   try {
     const selected = await open({
@@ -828,19 +879,6 @@ async function openFile() {
 
     // 切换到最后打开的文件
     const lastIndex = openedFiles.value.length - 1
-
-    // 如果当前文件有未保存改动，先提示保存
-    if (currentFileIndex.value >= 0) {
-      const currentFile = openedFiles.value[currentFileIndex.value]
-      if (currentFile && currentFile.content !== currentFile.savedContent) {
-        const result = await checkUnsavedChanges()
-        if (result === 'cancel') return
-        if (result === 'save') {
-          await saveFile()
-        }
-      }
-    }
-
     switchToFile(lastIndex)
     pushNavigationState(paths[paths.length - 1])
   } catch (error) {
@@ -897,13 +935,9 @@ async function saveFile(): Promise<boolean> {
 
 // 导入文件夹（递归读取子文件夹）
 async function importFolder() {
-  // 检查未保存改动
-  const result = await checkUnsavedChanges()
-  if (result === 'cancel') return
-  if (result === 'save') {
-    const saved = await saveFile()
-    if (!saved) return  // 保存失败（用户取消），不继续导入
-  }
+  // 批量检查所有未保存文件
+  const canContinue = await checkAllUnsavedFiles()
+  if (!canContinue) return
 
   try {
     const selected = await open({
@@ -917,6 +951,14 @@ async function importFolder() {
       // 清空导航历史（导入新文件夹时重新开始）
       navigationHistory.value = []
       navigationIndex.value = -1
+
+      // 清空打开的文件列表（替换为文件夹视图）
+      openedFiles.value = []
+      currentFileIndex.value = -1
+      content.value = ''
+      savedContent.value = ''
+      currentFilePath.value = null
+      currentFileDir.value = null
 
       // 递归读取文件夹结构
       mdFiles.value = await readFolderRecursive(selected)
@@ -1011,13 +1053,9 @@ function findFirstMdFilePath(files: MdFile[]): string | null {
 
 // 导入 Mkdocs（解析完整导航结构）
 async function importMkdocs() {
-  // 检查未保存改动
-  const result = await checkUnsavedChanges()
-  if (result === 'cancel') return
-  if (result === 'save') {
-    const saved = await saveFile()
-    if (!saved) return  // 保存失败（用户取消），不继续导入
-  }
+  // 批量检查所有未保存文件
+  const canContinue = await checkAllUnsavedFiles()
+  if (!canContinue) return
 
   try {
     const selected = await open({
@@ -1040,6 +1078,14 @@ async function importMkdocs() {
       // 清空导航历史（导入新项目时重新开始）
       navigationHistory.value = []
       navigationIndex.value = -1
+
+      // 清空打开的文件列表（替换为 mkdocs nav 视图）
+      openedFiles.value = []
+      currentFileIndex.value = -1
+      content.value = ''
+      savedContent.value = ''
+      currentFilePath.value = null
+      currentFileDir.value = null
 
       // 从 nav 结构提取 md 文件（保留层级结构）
       if (config.nav && Array.isArray(config.nav)) {
@@ -1446,19 +1492,8 @@ async function handleSearchResultSelect(path: string) {
 }
 
 // 处理切换文件（从 LeftSidebar 触发）
+// 切换时不提示保存，维持未修改状态
 async function handleSwitchFile(index: number) {
-  // 检查当前文件是否有未保存改动
-  if (currentFileIndex.value >= 0 && currentFileIndex.value < openedFiles.value.length) {
-    const currentFile = openedFiles.value[currentFileIndex.value]
-    if (currentFile.content !== currentFile.savedContent) {
-      const result = await checkUnsavedChanges()
-      if (result === 'cancel') return
-      if (result === 'save') {
-        await saveFile()
-      }
-    }
-  }
-
   switchToFile(index)
 }
 
@@ -1541,15 +1576,9 @@ let windowCloseUnlisten: (() => void) | null = null
 
 // 处理窗口关闭请求
 async function handleCloseRequest() {
-  // 检查是否有未保存的改动
-  const result = await checkUnsavedChanges()
-  if (result === 'cancel') return  // 用户取消，不做任何操作
-
-  if (result === 'save') {
-    // 用户选择保存，保存后关闭
-    const saved = await saveFile()
-    if (!saved) return  // 保存失败（用户取消），不关闭
-  }
+  // 检查所有未保存的改动
+  const canContinue = await checkAllUnsavedFiles()
+  if (!canContinue) return  // 用户取消，不做任何操作
 
   // 用户选择不保存，或者保存成功，关闭窗口
   const appWindow = getCurrentWindow()
