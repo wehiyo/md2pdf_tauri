@@ -1243,7 +1243,7 @@ async function navigateToFile(filePath: string, anchor?: string) {
     return
   }
 
-  // 打开新文件（会检查未保存改动）
+  // 打开新文件（不提示保存）
   await openFileFromTree(filePath)
 }
 
