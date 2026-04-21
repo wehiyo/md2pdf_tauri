@@ -1251,6 +1251,12 @@ async function navigateToFile(filePath: string, anchor?: string) {
 async function navigateToAnchor(anchor: string) {
   if (!currentFilePath.value) return
 
+  // 同步滚动编辑器到对应行
+  const lineNumber = getHeadingLine(anchor)
+  if (lineNumber !== undefined && editorRef.value) {
+    editorRef.value.scrollToLine(lineNumber)
+  }
+
   // 记录当前状态（跳转前的位置）
   if (navigationIndex.value >= 0) {
     navigationHistory.value[navigationIndex.value].anchor = pendingAnchor.value || undefined
@@ -1358,6 +1364,12 @@ function scrollToAnchor(anchor: string) {
 
   const previewContainer = previewRef.value.getScrollContainer()
   if (!previewContainer) return
+
+  // 同步滚动编辑器到对应行
+  const lineNumber = getHeadingLine(anchor)
+  if (lineNumber !== undefined && editorRef.value) {
+    editorRef.value.scrollToLine(lineNumber)
+  }
 
   // 尝试多种方式查找锚点元素
   // 1. 直接使用 CSS.escape（处理点号等特殊字符）
