@@ -55,6 +55,31 @@ function parseFrontmatter(content: string): ParseResult {
   return { metadata: {}, body: content }
 }
 
+/**
+ * 解析 frontmatter 并返回行数偏移
+ */
+function parseFrontmatterWithLineCount(content: string): ParseResult & { frontmatterLineCount: number } {
+  const frontmatterRegex = /^---\s*\n([\s\S]*?)\n---\s*\n/
+  const match = content.match(frontmatterRegex)
+
+  if (match) {
+    const yamlContent = match[1]
+    const body = content.slice(match[0].length)
+    // 计算 frontmatter 占用的行数（从文件开头到 body 开始）
+    const frontmatterLineCount = match[0].split('\n').length - 1
+
+    try {
+      const metadata = parseYaml(yamlContent) as Metadata
+      return { metadata: metadata || {}, body, frontmatterLineCount }
+    } catch (error) {
+      console.error('YAML parse error:', error)
+      return { metadata: {}, body: content, frontmatterLineCount: 0 }
+    }
+  }
+
+  return { metadata: {}, body: content, frontmatterLineCount: 0 }
+}
+
 // 配置 highlight.js
 const highlight = (str: string, lang?: string): string => {
   if (lang && hljs.getLanguage(lang)) {
@@ -1119,6 +1144,9 @@ const headingIdMap = new Map<string, string>()
 // 标题行号映射：标题 ID -> 源文本行号（用于编辑器定位）
 const headingLineMap = new Map<string, number>()
 
+// Frontmatter 行数偏移（用于修正行号）
+let frontmatterLineOffset = 0
+
 // MkDocs 组合导出时的外部编号上下文（模块级别）
 let externalNumberPrefix = ''
 let externalNavLevel = 0
@@ -1261,8 +1289,9 @@ md.renderer.rules.heading_open = (tokens, idx) => {
     }
 
     // 存储行号映射：标题 ID -> 源文本行号（用于编辑器定位）
-    // token.map 包含 [startLine, endLine]，行号从 0 开始
-    const line = token.map ? token.map[0] : 0
+    // token.map 包含 [startLine, endLine]，行号从 0 开始（相对于 body）
+    // 加上 frontmatterLineOffset 得到相对于完整文件的行号
+    const line = token.map ? token.map[0] + frontmatterLineOffset : frontmatterLineOffset
     headingLineMap.set(numberedId, line)
 
     // 渲染开标签
@@ -1387,8 +1416,10 @@ export function useMarkdown() {
    * 解析并渲染 Markdown，返回 metadata 和 HTML
    */
   function render(content: string): { html: string; metadata: Metadata } {
-    const { metadata, body } = parseFrontmatter(content)
+    const { metadata, body, frontmatterLineCount } = parseFrontmatterWithLineCount(content)
+    frontmatterLineOffset = frontmatterLineCount
     const html = renderBody(body)
+    frontmatterLineOffset = 0  // 重置
     return { html, metadata }
   }
 
