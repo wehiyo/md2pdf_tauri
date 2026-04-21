@@ -712,7 +712,7 @@ function getMarkdownStyles(fontConfig?: FontConfig): string {
 .markdown-body ol { list-style-type: decimal; }
 .markdown-body li { margin-bottom: 0.25em; }
 .markdown-body table { margin-top: 0; margin-bottom: ${paragraphSpacing}em; width: 100%; border-collapse: collapse; border-spacing: 0; font-size: 0.85em; }
-.markdown-body table th { font-weight: 600; }
+.markdown-body table th { font-weight: 600; background-color: #c2dfff; }
 .markdown-body table th, .markdown-body table td { padding: 0.5em 1em; border: 1px solid #d1d5db; }
 .markdown-body table tr { background-color: #fff; border-top: 1px solid #e5e7eb; }
 .markdown-body table tr:nth-child(2n) { background-color: #f9fafb; }
