@@ -717,7 +717,7 @@ function getMarkdownStyles(fontConfig?: FontConfig): string {
 .markdown-body table tr { background-color: #fff; border-top: 1px solid #e5e7eb; }
 .markdown-body table tr:nth-child(2n) { background-color: #f9fafb; }
 .markdown-body hr { height: 0.25em; padding: 0; margin: 1.5em 0; background-color: #e5e7eb; border: 0; }
-.markdown-body img { max-width: 100%; box-sizing: content-box; border-style: none; }
+.markdown-body img { max-width: 100%; box-sizing: content-box; border-style: none; display: block; margin-left: auto; margin-right: auto; }
 .markdown-body .katex { font-size: 1.1em; }
 .markdown-body .katex-display { margin: 1em 0; overflow-x: hidden; overflow-y: hidden; }
 .markdown-body .footnotes { margin-top: 2em; padding-top: 1em; border-top: 1px solid #e5e7eb; }
