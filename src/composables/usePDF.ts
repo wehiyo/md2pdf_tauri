@@ -616,9 +616,9 @@ async function addPageNumbers(
 function extractHeadings(htmlContent: string): Array<{ level: number; text: string; id: string }> {
   const headings: Array<{ level: number; text: string; id: string }> = []
   const seenIds = new Set<string>()
-  // 使用非贪婪匹配和 \b 确保 id 属性能正确提取
+  // 匹配 h1-h5 标签：h 后跟数字，然后空格和属性，包含 id 属性
   // PDF 书签显示 h1~h5，所以匹配 h1-h5
-  const headingRegex = /<h([1-5])[^>]*?\bid="([^"]*)"[^>]*>(.*?)<\/h\1>/g
+  const headingRegex = /<h([1-5])\s[^>]*?id="([^"]*)"[^>]*>(.*?)<\/h\1>/g
   let match
 
   while ((match = headingRegex.exec(htmlContent)) !== null) {
@@ -673,8 +673,9 @@ function addH1PageBreaks(htmlContent: string, headings: Array<{ level: number; t
 
   headings.forEach((heading, index) => {
     if (heading.level === 1 && index > 0) {
-      // 使用非贪婪匹配确保正确找到 id 属性
-      const h1Regex = new RegExp(`<h1[^>]*?\bid="${heading.id}"[^>]*>`, 'g')
+      // 匹配 h1 开标签：h1 后跟空格和属性，包含指定的 id
+      // 注意：在 RegExp 构造函数中 \\b 表示单词边界
+      const h1Regex = new RegExp(`<h1\\s[^>]*?id="${heading.id}"[^>]*>`, 'g')
       result = result.replace(h1Regex, `<div style="page-break-before: always;"></div><h1 id="${heading.id}">`)
     }
   })
