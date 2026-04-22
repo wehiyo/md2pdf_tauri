@@ -555,10 +555,9 @@ export function combineChaptersToHtml(chapters: NavChapter[]): string {
   for (let i = 0; i < chapters.length; i++) {
     const chapter = chapters[i]
 
-    // nav 第 1 层章节（从第二个开始）添加分页
-    if (chapter.navLevel === 0 && i > 0) {
-      htmlParts.push('<div style="page-break-before: always;"></div>')
-    }
+    // 注意：分页由 usePDF.ts 的 addH1PageBreaks 统一处理
+    // nav level 0 的章节标题是 h1，会被 addH1PageBreaks 添加分页
+    // 这里不再手动添加分页标记，避免重复产生空白页
 
     // 使用预先设置的 htmlId（由 renumberHeadings 设置）
     const chapterId = chapter.htmlId || `chapter-${chapter.chapterNumber}`
