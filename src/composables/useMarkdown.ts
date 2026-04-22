@@ -1200,10 +1200,12 @@ md.renderer.rules.heading_open = (tokens, idx) => {
   if (isMkdocsExportMode) {
     // MkDocs 组合导出模式：使用外部编号上下文
 
-    // 调整层级：h1 保持不变，h2+ 下降 navLevel 层
+    // 调整层级：h1 保持不变（但会被跳过渲染），h2+ 相对于 nav 标题降低 1 级
+    // nav 标题是 h(navLevel+1) 级，文件标题相对于它降低 1 级
+    // adjustedLevel = (navLevel + 1) + (originalLevel - 1) - 1 = navLevel + originalLevel - 1
     let adjustedLevel = originalLevel
     if (originalLevel >= 2) {
-      adjustedLevel = Math.min(originalLevel + externalNavLevel, 6)
+      adjustedLevel = Math.min(externalNavLevel + originalLevel - 1, 6)
     }
 
     // 计数器更新和编号计算基于原始层级（md 内层级）
@@ -1219,15 +1221,10 @@ md.renderer.rules.heading_open = (tokens, idx) => {
       chapterCounters.h4++
     }
 
-    // 生成编号（基于原始层级，仅 h2-h4 显示编号，总深度不超过 4）
+    // 生成编号（只有调整后层级 h1~h4 显示编号，即 adjustedLevel <= 4）
     let number = ''
-    const prefixDepth = externalNumberPrefix.split('.').filter(s => s).length
 
-    // 编号深度计算：nav 前缀深度 + 原始层级深度 - 1
-    // 例如：nav level 1（前缀深度1），原始 h2 → 总深度 1+1=2 → 编号 "1.1."
-    const numberDepth = prefixDepth + (originalLevel - 1)
-
-    if (originalLevel >= 2 && originalLevel <= 4 && numberDepth <= 4) {
+    if (adjustedLevel >= 1 && adjustedLevel <= 4 && originalLevel >= 2 && originalLevel <= 4) {
       if (originalLevel === 2) {
         number = `${externalNumberPrefix}${chapterCounters.h2}. `
       } else if (originalLevel === 3) {
