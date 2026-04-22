@@ -354,16 +354,14 @@ export function usePDF() {
     // Step 5: 生成标记列表
     const markers = headings.map((_, i) => `PDFMARK${i.toString().padStart(3, '0')}`)
 
-    // 构建封面 meta 信息
+    // 构建封面 meta 信息（中心位置，用于其他信息如密级）
     const metaItems: string[] = []
-    if (metadata.author) {
-      metaItems.push(`<div class="meta-item">作者：${escapeHtml(metadata.author)}</div>`)
-    }
-    if (metadata.date) {
-      metaItems.push(`<div class="meta-item">日期：${escapeHtml(metadata.date)}</div>`)
-    }
     if (metadata['security level']) {
       metaItems.push(`<div class="meta-item">密级：${escapeHtml(metadata['security level'])}</div>`)
+    }
+    // date 字段用于封面中心显示（如果有）
+    if (metadata.date) {
+      metaItems.push(`<div class="meta-item">日期：${escapeHtml(metadata.date)}</div>`)
     }
     const metaHtml = metaItems.length > 0 ? `<div class="meta">${metaItems.join('')}</div>` : ''
 
@@ -371,7 +369,11 @@ export function usePDF() {
     const fontFaceStyles = await getFontFaceStyles(fontConfig, contentWithPageBreaks)
 
     // Step 7: 创建 HTML 文档
-    const fullHtml = getFullHtml(fileName, coverTitle, contentWithPageBreaks, metaHtml, fontConfig, fontFaceStyles, coverSubtitle)
+    // 封面右下角使用 author、copyright 和当前日期
+    const fullHtml = getFullHtml(
+      fileName, coverTitle, contentWithPageBreaks, metaHtml, fontConfig, fontFaceStyles,
+      coverSubtitle, metadata.author, metadata.copyright
+    )
 
     // Step 8: 调用 Rust command 打印 PDF 并提取标记位置（使用内存流优化）
     // 进度会通过 Tauri 事件推送，前端监听 export-progress 事件
@@ -808,6 +810,8 @@ function getMarkdownStyles(fontConfig?: FontConfig): string {
  * @param fontConfig 字体配置
  * @param fontFaceStyles 字体样式
  * @param coverSubtitle 封面副标题（可选）
+ * @param author 作者（封面右下角显示）
+ * @param copyright 版权信息（封面右下角显示）
  */
 function getFullHtml(
   title: string,
@@ -816,10 +820,30 @@ function getFullHtml(
   metaHtml: string = '',
   fontConfig?: FontConfig,
   fontFaceStyles?: string,
-  coverSubtitle?: string
+  coverSubtitle?: string,
+  author?: string,
+  copyright?: string
 ): string {
   // 封面副标题：优先使用传入值，否则使用默认值
   const subtitleText = coverSubtitle || 'MarkRefine 生成文档'
+
+  // 当前日期
+  const currentDate = new Date().toLocaleDateString('zh-CN', {
+    year: 'numeric',
+    month: 'long',
+    day: 'numeric'
+  })
+
+  // 封面右下角信息：作者、版权、日期
+  const footerItems: string[] = []
+  if (author) {
+    footerItems.push(`<div class="cover-footer-item">作者：${escapeHtml(author)}</div>`)
+  }
+  if (copyright) {
+    footerItems.push(`<div class="cover-footer-item">${escapeHtml(copyright)}</div>`)
+  }
+  footerItems.push(`<div class="cover-footer-item">${currentDate}</div>`)
+  const coverFooterHtml = `<div class="cover-footer">${footerItems.join('\n')}</div>`
 
   const html = `<!DOCTYPE html>
 <html>
@@ -841,12 +865,17 @@ function getFullHtml(
     .cover-page {
       display: flex; flex-direction: column; justify-content: center; align-items: center;
       min-height: 100vh; text-align: center; padding: 2cm; box-sizing: border-box;
-      page-break-after: always;
+      page-break-after: always; position: relative;
     }
     .cover-page h1 { font-size: 2.5em; font-weight: 700; color: #1f2937; margin: 0 0 0.5em 0; border: none; }
     .cover-page .subtitle { font-size: 1.2em; color: #6b7280; }
     .cover-page .meta { margin-top: 3em; font-size: 1em; color: #6b7280; }
     .cover-page .meta-item { margin: 0.5em 0; }
+    .cover-page .cover-footer {
+      position: absolute; bottom: 2cm; right: 2cm;
+      text-align: right; font-size: 0.9em; color: #6b7280;
+    }
+    .cover-page .cover-footer-item { margin: 0.3em 0; }
 
     .main-content { page-break-before: always; padding: 0; }
     .main-content h1:first-child { margin-top: 0; }
@@ -867,6 +896,7 @@ function getFullHtml(
     <h1>${escapeHtml(coverTitle)}</h1>
     <div class="subtitle">${escapeHtml(subtitleText)}</div>
     ${metaHtml}
+    ${coverFooterHtml}
   </div>
 
   <div class="main-content markdown-body">

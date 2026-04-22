@@ -230,6 +230,8 @@ interface MkdocsConfig {
   siteName: string           // site_name，用于 PDF 文件名
   coverTitle?: string        // plugins/with-pdf cover_title，封面主标题
   coverSubtitle?: string     // plugins/with-pdf cover_subtitle，封面副标题
+  author?: string            // author，封面右下角显示
+  copyright?: string         // copyright，封面右下角显示
 }
 const mkdocsConfig = ref<MkdocsConfig>({
   siteName: 'Documentation'
@@ -614,7 +616,9 @@ async function confirmMkdocsExport() {
     const metadata: Metadata = {
       title: mkdocsConfig.value.siteName,           // PDF 文件名
       coverTitle: mkdocsConfig.value.coverTitle,    // 封面主标题
-      coverSubtitle: mkdocsConfig.value.coverSubtitle // 封面副标题
+      coverSubtitle: mkdocsConfig.value.coverSubtitle, // 封面副标题
+      author: mkdocsConfig.value.author,            // 作者
+      copyright: mkdocsConfig.value.copyright       // 版权信息
     }
     // 使用组合后的 HTML 导出 PDF
     await exportToPDF(mkdocsCombinedHtml.value, metadata, fontConfig.value)
@@ -1096,6 +1100,8 @@ async function importMkdocs() {
       // 解析 plugins/with-pdf 配置
       let coverTitle: string | undefined
       let coverSubtitle: string | undefined
+      let author: string | undefined
+      let copyright: string | undefined
       if (config.plugins) {
         // plugins 可以是数组或对象
         let withPdfConfig: any = null
@@ -1114,6 +1120,8 @@ async function importMkdocs() {
         if (withPdfConfig) {
           coverTitle = withPdfConfig.cover_title
           coverSubtitle = withPdfConfig.cover_subtitle
+          author = withPdfConfig.author
+          copyright = withPdfConfig.copyright
         }
       }
 
@@ -1121,7 +1129,9 @@ async function importMkdocs() {
       mkdocsConfig.value = {
         siteName,
         coverTitle,
-        coverSubtitle
+        coverSubtitle,
+        author,
+        copyright
       }
 
       // 获取 docs_dir（默认 docs）
