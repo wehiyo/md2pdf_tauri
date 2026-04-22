@@ -19,9 +19,11 @@ const KATEX_MACROS: Record<string, string> = {
 
 // Metadata 类型定义
 export interface Metadata {
-  title?: string
-  author?: string
-  date?: string
+  title?: string           // 文档标题（用于 PDF 文件名和封面）
+  author?: string          // 作者
+  date?: string            // 日期
+  coverTitle?: string      // 封面主标题（优先用于封面）
+  coverSubtitle?: string   // 封面副标题
   [key: string]: any
 }
 

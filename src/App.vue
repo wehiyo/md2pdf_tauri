@@ -225,6 +225,16 @@ const mkdocsBookmarkTree = ref<BookmarkTreeNode[]>([])
 const mkdocsCombinedHtml = ref('')
 const mkdocsChapters = ref<any[]>([])
 
+// MkDocs 配置（从 mkdocs.yml 解析）
+interface MkdocsConfig {
+  siteName: string           // site_name，用于 PDF 文件名
+  coverTitle?: string        // plugins/with-pdf cover_title，封面主标题
+  coverSubtitle?: string     // plugins/with-pdf cover_subtitle，封面副标题
+}
+const mkdocsConfig = ref<MkdocsConfig>({
+  siteName: 'Documentation'
+})
+
 // 全局搜索结果（传递给 LeftSidebar 显示）
 const globalSearchText = ref('')
 interface GlobalSearchResult {
@@ -600,8 +610,14 @@ async function confirmMkdocsExport() {
   showMkdocsPreview.value = false
 
   try {
+    // 构建 metadata，使用 mkdocs.yml 的配置
+    const metadata: Metadata = {
+      title: mkdocsConfig.value.siteName,           // PDF 文件名
+      coverTitle: mkdocsConfig.value.coverTitle,    // 封面主标题
+      coverSubtitle: mkdocsConfig.value.coverSubtitle // 封面副标题
+    }
     // 使用组合后的 HTML 导出 PDF
-    await exportToPDF(mkdocsCombinedHtml.value, currentMetadata.value, fontConfig.value)
+    await exportToPDF(mkdocsCombinedHtml.value, metadata, fontConfig.value)
   } catch (error) {
     await handleError(error, 'MkDocs 组合导出')
   }
@@ -1067,7 +1083,46 @@ async function importMkdocs() {
     if (selected && typeof selected === 'string') {
       // 读取 mkdocs.yml 内容
       const ymlContent = await readTextFile(selected)
-      const config = parseYaml(ymlContent) as { nav?: any[]; docs_dir?: string }
+      const config = parseYaml(ymlContent) as {
+        nav?: any[]
+        docs_dir?: string
+        site_name?: string
+        plugins?: any
+      }
+
+      // 解析 site_name
+      const siteName = config.site_name || 'Documentation'
+
+      // 解析 plugins/with-pdf 配置
+      let coverTitle: string | undefined
+      let coverSubtitle: string | undefined
+      if (config.plugins) {
+        // plugins 可以是数组或对象
+        let withPdfConfig: any = null
+        if (Array.isArray(config.plugins)) {
+          // 数组形式: plugins: [search, { with-pdf: {...} }]
+          for (const plugin of config.plugins) {
+            if (typeof plugin === 'object' && plugin['with-pdf']) {
+              withPdfConfig = plugin['with-pdf']
+              break
+            }
+          }
+        } else if (typeof config.plugins === 'object') {
+          // 对象形式: plugins: { with-pdf: {...} }
+          withPdfConfig = config.plugins['with-pdf']
+        }
+        if (withPdfConfig) {
+          coverTitle = withPdfConfig.cover_title
+          coverSubtitle = withPdfConfig.cover_subtitle
+        }
+      }
+
+      // 存储 MkDocs 配置
+      mkdocsConfig.value = {
+        siteName,
+        coverTitle,
+        coverSubtitle
+      }
 
       // 获取 docs_dir（默认 docs）
       const mkdocsPath = selected.substring(0, Math.max(selected.lastIndexOf('/'), selected.lastIndexOf('\\')))

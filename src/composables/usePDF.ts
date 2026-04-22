@@ -323,12 +323,17 @@ export function usePDF() {
   ): Promise<void> {
     // 优先使用 metadata.title，否则从 headings 中提取第一个 h1 标题
     const firstH1 = headings.find(h => h.level === 1)
-    const title = metadata.title || firstH1?.text || '文档'
+    // 文件名使用 metadata.title 或第一个 h1
+    const fileName = metadata.title || firstH1?.text || '文档'
+    // 封面主标题：优先 coverTitle，否则 title，否则第一个 h1
+    const coverTitle = metadata.coverTitle || metadata.title || firstH1?.text || '文档'
+    // 封面副标题：优先 coverSubtitle
+    const coverSubtitle = metadata.coverSubtitle
 
     // Step 1: 获取保存路径
     const savePath = await save({
       filters: [{ name: 'PDF', extensions: ['pdf'] }],
-      defaultPath: `${title}.pdf`,
+      defaultPath: `${fileName}.pdf`,
       title: '保存 PDF 文件'
     })
 
@@ -366,7 +371,7 @@ export function usePDF() {
     const fontFaceStyles = await getFontFaceStyles(fontConfig, contentWithPageBreaks)
 
     // Step 7: 创建 HTML 文档
-    const fullHtml = getFullHtml(title, metaHtml, contentWithPageBreaks, fontConfig, fontFaceStyles)
+    const fullHtml = getFullHtml(fileName, coverTitle, contentWithPageBreaks, metaHtml, fontConfig, fontFaceStyles, coverSubtitle)
 
     // Step 8: 调用 Rust command 打印 PDF 并提取标记位置（使用内存流优化）
     // 进度会通过 Tauri 事件推送，前端监听 export-progress 事件
@@ -796,8 +801,26 @@ function getMarkdownStyles(fontConfig?: FontConfig): string {
 
 /**
  * 生成完整的 HTML 文档
+ * @param title 文档标题（用于 HTML title 标签）
+ * @param coverTitle 封面主标题
+ * @param content 正文内容
+ * @param metaHtml 封面 meta 信息 HTML
+ * @param fontConfig 字体配置
+ * @param fontFaceStyles 字体样式
+ * @param coverSubtitle 封面副标题（可选）
  */
-function getFullHtml(title: string, metaHtml: string, content: string, fontConfig?: FontConfig, fontFaceStyles?: string): string {
+function getFullHtml(
+  title: string,
+  coverTitle: string,
+  content: string,
+  metaHtml: string = '',
+  fontConfig?: FontConfig,
+  fontFaceStyles?: string,
+  coverSubtitle?: string
+): string {
+  // 封面副标题：优先使用传入值，否则使用默认值
+  const subtitleText = coverSubtitle || 'MarkRefine 生成文档'
+
   const html = `<!DOCTYPE html>
 <html>
 <head>
@@ -841,8 +864,8 @@ function getFullHtml(title: string, metaHtml: string, content: string, fontConfi
 </head>
 <body>
   <div class="cover-page">
-    <h1>${escapeHtml(title)}</h1>
-    <div class="subtitle">MarkRefine 生成文档</div>
+    <h1>${escapeHtml(coverTitle)}</h1>
+    <div class="subtitle">${escapeHtml(subtitleText)}</div>
     ${metaHtml}
   </div>
 
