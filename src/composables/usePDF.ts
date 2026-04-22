@@ -391,10 +391,15 @@ export function usePDF() {
       // 进度已通过事件推送为"注入书签..."
       const bookmarks = headings.map((h, i) => {
         const pos = printResult.bookmarks.find(b => b.title === markers[i])
+        if (!pos) {
+          console.warn(`未找到 marker: ${markers[i]} 对应标题: ${h.text}`)
+        }
+        // 只减封面页（1页），确保页码至少为 1
+        const page = pos ? Math.max(1, pos.page - 1) : 1
         return {
           title: h.text,
           level: h.level,
-          page: pos ? pos.page - 2 : 0,  // 减 2 因为封面页和目录页
+          page,
           y: pos ? pos.y : 700
         }
       })
