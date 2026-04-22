@@ -206,7 +206,7 @@ export function usePDF() {
       updateStep('预渲染图表...', 1)
       contentWithoutToc = await preRenderDiagrams(contentWithoutToc)
 
-      // 提取标题数据（h1-h4，用于分页和书签）
+      // 提取标题数据（h1-h5，用于分页和书签）
       const headings = extractHeadings(contentWithoutToc)
 
       // 生成 PDF
@@ -394,7 +394,9 @@ export function usePDF() {
         if (!pos) {
           console.warn(`未找到 marker: ${markers[i]} 对应标题: ${h.text}`)
         }
-        // 只减封面页（1页），确保页码至少为 1
+        // pdf-extract 返回的 page 是 1-indexed（包含封面页）
+        // 减去封面页（第 1 页），得到正文页码（从 1 开始）
+        // 例如：pos.page = 2（PDF 第 2 页，正文第一页） -> page = 1
         const page = pos ? Math.max(1, pos.page - 1) : 1
         return {
           title: h.text,
@@ -602,12 +604,14 @@ async function addPageNumbers(
 }
 
 /**
- * 提取 h1-h4 标题（根据 id 去重）
+ * 提取 h1-h5 标题（根据 id 去重）
  */
 function extractHeadings(htmlContent: string): Array<{ level: number; text: string; id: string }> {
   const headings: Array<{ level: number; text: string; id: string }> = []
   const seenIds = new Set<string>()
-  const headingRegex = /<h([1-4])[^>]*id="([^"]*)"[^>]*>(.*?)<\/h\1>/g
+  // 使用非贪婪匹配和 \b 确保 id 属性能正确提取
+  // PDF 书签显示 h1~h5，所以匹配 h1-h5
+  const headingRegex = /<h([1-5])[^>]*?\bid="([^"]*)"[^>]*>(.*?)<\/h\1>/g
   let match
 
   while ((match = headingRegex.exec(htmlContent)) !== null) {
@@ -646,8 +650,9 @@ function addMarkerText(htmlContent: string, headings: Array<{ level: number; tex
     const markerHtml = `<span style="font-family:'Courier New',Courier,monospace;font-size:0.01em;line-height:1;color:#f9fafb;display:inline-block;vertical-align:baseline;">${marker}</span>`
 
     // 在标题元素内部开头插入标记
-    const headingRegex = new RegExp(`<h${heading.level}([^>]*)id="${heading.id}"([^>]*)>`, 'g')
-    result = result.replace(headingRegex, `<h${heading.level}$1id="${heading.id}"$2>${markerHtml}`)
+    // 匹配包含指定 id 的 h 标签开标签，id 可能是第一个属性或有其他属性在前
+    const headingRegex = new RegExp(`<h${heading.level}[^>]*\\bid="${heading.id}"[^>]*>`, 'g')
+    result = result.replace(headingRegex, `<h${heading.level} id="${heading.id}">${markerHtml}`)
   })
 
   return result
@@ -661,7 +666,8 @@ function addH1PageBreaks(htmlContent: string, headings: Array<{ level: number; t
 
   headings.forEach((heading, index) => {
     if (heading.level === 1 && index > 0) {
-      const h1Regex = new RegExp(`<h1[^>]*id="${heading.id}"[^>]*>`, 'g')
+      // 使用非贪婪匹配确保正确找到 id 属性
+      const h1Regex = new RegExp(`<h1[^>]*?\bid="${heading.id}"[^>]*>`, 'g')
       result = result.replace(h1Regex, `<div style="page-break-before: always;"></div><h1 id="${heading.id}">`)
     }
   })

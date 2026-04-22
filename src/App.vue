@@ -211,6 +211,7 @@ interface MdFile {
   path?: string  // 文件节点才有路径
   children?: MdFile[]  // 目录节点才有子节点
   isFolder?: boolean  // 是否为目录节点
+  hasExplicitTitle?: boolean  // 是否有显式标题（nav 中指定）
 }
 const mdFiles = ref<MdFile[]>([])
 
@@ -1114,25 +1115,28 @@ function extractMdFilesFromNav(nav: any[], basePath: string): MdFile[] {
 
   for (const item of nav) {
     if (typeof item === 'string' && item.endsWith('.md')) {
-      // 字符串形式："index.md"
+      // 字符串形式："index.md" - 无显式标题
       files.push({
         name: item.replace(/\.md$/i, ''),
-        path: basePath + '/' + item
+        path: basePath + '/' + item,
+        hasExplicitTitle: false
       })
     } else if (typeof item === 'object') {
       for (const [title, value] of Object.entries(item)) {
         if (typeof value === 'string' && value.endsWith('.md')) {
-          // 对象形式：{ "Home": "index.md" }
+          // 对象形式：{ "Home": "index.md" } - 有显式标题
           files.push({
             name: title,
-            path: basePath + '/' + value
+            path: basePath + '/' + value,
+            hasExplicitTitle: true
           })
         } else if (Array.isArray(value)) {
-          // 嵌套导航：{ "Section": [...] }
+          // 嵌套导航：{ "Section": [...] } - 文件夹有显式标题
           files.push({
             name: title,
             isFolder: true,
-            children: extractMdFilesFromNav(value, basePath)
+            children: extractMdFilesFromNav(value, basePath),
+            hasExplicitTitle: true
           })
         }
       }

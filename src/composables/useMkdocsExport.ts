@@ -13,6 +13,8 @@ export interface NavChapter {
   numberPrefix: string   // 编号前缀（如 "1.2."）
   chapterNumber: string  // 章节编号（如 "1"、"1.1"、"1.1.1"）
   htmlId?: string        // HTML 标题元素的 id（用于书签跳转）
+  mdH1Title?: string     // md 文件的 h1 标题（如果有）
+  displayTitle?: string  // 实际显示的标题
 }
 
 export interface Heading {
@@ -40,6 +42,7 @@ interface MdFile {
   path?: string
   children?: MdFile[]
   isFolder?: boolean
+  hasExplicitTitle?: boolean  // 是否有显式标题（nav 中指定）
 }
 
 // 编号计数器（模块级别，用于跨章节编号）
@@ -110,6 +113,7 @@ export function collectNavChapters(
 
     if (item.isFolder && item.children) {
       // 嵌套导航：文件夹节点本身作为章节
+      // 文件夹总是有显式标题（nav 中指定的）
       chapters.push({
         title: item.name,
         navLevel: level,
@@ -126,8 +130,10 @@ export function collectNavChapters(
 
     } else if (item.path) {
       // 文件条目
+      // 如果有显式标题，使用 nav 标题；否则设置为空，后续使用 md h1
+      const navTitle = item.hasExplicitTitle ? item.name : ''
       chapters.push({
-        title: item.name,
+        title: navTitle,
         navLevel: level,
         filePath: item.path,
         numberPrefix,
@@ -141,7 +147,40 @@ export function collectNavChapters(
 }
 
 /**
- * 异步读取所有 md 文件内容
+ * 从 Markdown 内容提取 h1 标题
+ */
+function extractH1Title(content: string): string | undefined {
+  // 跳过 frontmatter
+  const lines = content.split('\n')
+  let startIndex = 0
+
+  if (lines[0] === '---') {
+    for (let i = 1; i < lines.length; i++) {
+      if (lines[i] === '---') {
+        startIndex = i + 1
+        break
+      }
+    }
+  }
+
+  // 查找 h1 标题
+  for (let i = startIndex; i < lines.length; i++) {
+    const line = lines[i]
+    // # 开头的 h1
+    if (line.startsWith('# ') && !line.startsWith('## ')) {
+      return line.substring(2).trim()
+    }
+    // === 下划线风格的 h1（上一行是标题）
+    if (line.match(/^={3,}$/) && i > startIndex && lines[i - 1].trim()) {
+      return lines[i - 1].trim()
+    }
+  }
+
+  return undefined
+}
+
+/**
+ * 异步读取所有 md 文件内容，并提取 h1 标题
  */
 export async function loadAllMdFiles(chapters: NavChapter[]): Promise<void> {
   for (const chapter of chapters) {
@@ -152,6 +191,8 @@ export async function loadAllMdFiles(chapters: NavChapter[]): Promise<void> {
         })
         // 规范化换行符
         chapter.content = text.replace(/\r\n/g, '\n')
+        // 提取 h1 标题
+        chapter.mdH1Title = extractH1Title(chapter.content)
       } catch (error) {
         console.warn(`无法读取文件 ${chapter.filePath}:`, error)
         chapter.content = ''
@@ -163,14 +204,19 @@ export async function loadAllMdFiles(chapters: NavChapter[]): Promise<void> {
 /**
  * 调整标题层级
  * h1 隐藏（跳过），h2+ 相对于 nav 标题降低 1 级显示
- * nav level 0 → h1，文件 h2 → h2 (navLevel + 2 - 1 = 1 + 2 - 1 = 2)
- * nav level 1 → h2，文件 h2 → h3 (navLevel + 2 = 1 + 2 = 3)
+ * nav level 0 → h1 (level 1)，文件 h2 → h2 (level 2)
+ * nav level 1 → h2 (level 2)，文件 h2 → h3 (level 3)
+ *
+ * 层级计算：
+ * nav 标题层级 = navLevel + 1
+ * 文件标题相对于 nav 标题保持原有层级差（h2 比 h1 低 1 级）
+ * 所以 adjustedLevel = navLevel + originalLevel
  */
 function adjustHeadingLevel(originalLevel: number, navLevel: number): number {
   if (originalLevel === 1) return 1  // h1 不调整，但会被跳过
-  // h2+ 相对于 nav 标题（navLevel+1 级）降低 1 级
-  // adjustedLevel = (navLevel + 1) + (originalLevel - 1) - 1 = navLevel + originalLevel - 1
-  return Math.min(navLevel + originalLevel - 1, 6)
+  // adjustedLevel = navLevel + originalLevel
+  // nav level 0, h2 → level 2; nav level 1, h2 → level 3
+  return Math.min(navLevel + originalLevel, 6)
 }
 
 /**
@@ -271,9 +317,16 @@ export function renumberHeadings(chapters: NavChapter[]): BookmarkTreeNode[] {
     // 重置章节内计数器（h2-h6）
     const chapterCounters = { h2: 0, h3: 0, h4: 0, h5: 0, h6: 0 }
 
-    // 处理 md 内标题，生成子书签节点
+    // 处理 md 内标题，生成嵌套的子书签节点
     const chapterBookmarkChildren: BookmarkTreeNode[] = []
     const adjustedHeadings: Heading[] = []
+
+    // md 内标题的层级栈：用于构建嵌套书签树
+    // 栈顶是当前层级的父节点数组
+    // 章节的书签层级 = navLevel + 1，作为根节点
+    const headingStack: { level: number; children: BookmarkTreeNode[] }[] = [
+      { level: chapter.navLevel + 1, children: chapterBookmarkChildren }
+    ]
 
     for (const rawHeading of rawHeadings) {
       // 跳过 h1 标题（章节标题已由 nav 条目提供）
@@ -329,13 +382,29 @@ export function renumberHeadings(chapters: NavChapter[]): BookmarkTreeNode[] {
 
       // 添加书签子节点（PDF 书签显示 h1~h5，层级 1~5）
       if (adjustedLevel <= 5) {
-        chapterBookmarkChildren.push({
+        const bookmarkChild: BookmarkTreeNode = {
           id: adjustedId,  // 使用与HTML一致的ID
           title: adjustedNumber ? `${adjustedNumber}${rawHeading.text}` : rawHeading.text,
           level: adjustedLevel,  // 书签层级使用调整后的层级
           navLevel: chapter.navLevel,
           filePath: chapter.filePath,
-          originalHeadingLevel: rawHeading.level
+          originalHeadingLevel: rawHeading.level,
+          children: []  // 初始化空 children，用于嵌套子标题
+        }
+
+        // 根据层级找到正确的父节点
+        // 回溯栈，直到找到层级小于当前标题的节点
+        while (headingStack.length > 1 && headingStack[headingStack.length - 1].level >= adjustedLevel) {
+          headingStack.pop()
+        }
+
+        // 添加到当前父节点的 children
+        headingStack[headingStack.length - 1].children.push(bookmarkChild)
+
+        // 当前节点入栈，作为后续子标题的潜在父节点
+        headingStack.push({
+          level: adjustedLevel,
+          children: bookmarkChild.children!
         })
       }
 
@@ -346,14 +415,21 @@ export function renumberHeadings(chapters: NavChapter[]): BookmarkTreeNode[] {
 
     // 创建章节书签节点
     // nav level 决定书签层级：level 0 → h1 (层级 1), level 1 → h2 (层级 2), ...
-    const displayTitle = `${chapter.chapterNumber}. ${chapter.title}`
+    // 确定显示标题：nav 有标题用 nav，nav 无标题用 md h1
+    let displayTitle = chapter.title
+    if (!chapter.title || chapter.title.trim() === '') {
+      displayTitle = chapter.mdH1Title || ''
+    }
+    chapter.displayTitle = displayTitle
+
+    const bookmarkDisplayTitle = `${chapter.chapterNumber}. ${displayTitle}`
     // 章节ID使用与combineChaptersToHtml相同的逻辑
     const chapterId = `chapter-${chapter.chapterNumber}`
     chapter.htmlId = chapterId  // 预先设置，供后续使用
     chapterIndex++  // 使用局部计数器，不影响 globalHeadingIndex
     const bookmarkNode: BookmarkTreeNode = {
       id: chapterId,
-      title: displayTitle,
+      title: bookmarkDisplayTitle,
       level: chapter.navLevel + 1,  // 书签层级：navLevel + 1
       navLevel: chapter.navLevel,
       filePath: chapter.filePath,
@@ -489,12 +565,22 @@ export function combineChaptersToHtml(chapters: NavChapter[]): string {
     chapter.htmlId = chapterId  // 存储 id 供书签跳转使用
     chapterIndex++
 
+    // 确定显示标题
+    // 规则：nav 有标题时用 nav 标题；nav 无标题时用 md h1 标题
+    // 如果 nav 标题与 md h1 相同，显示 nav 标题（内容相同）
+    let displayTitle = chapter.title  // 默认使用 nav 标题
+    if (!chapter.title || chapter.title.trim() === '') {
+      // nav 无标题，使用 md h1
+      displayTitle = chapter.mdH1Title || ''
+    }
+    chapter.displayTitle = displayTitle
+
     // 添加章节标题
     // nav level 决定标题层级：level 0 → h1, level 1 → h2, level 2 → h3, level 3 → h4, level 4+ → h4（HTML 最多 h4）
     const headingLevel = Math.min(chapter.navLevel + 1, 4)
     // 所有层级都显示编号
     const numberSpan = `<span class="heading-number">${chapter.chapterNumber}. </span>`
-    const chapterTitleHtml = `<h${headingLevel} id="${chapterId}">${numberSpan}${chapter.title}</h${headingLevel}>`
+    const chapterTitleHtml = `<h${headingLevel} id="${chapterId}">${numberSpan}${displayTitle}</h${headingLevel}>`
     htmlParts.push(chapterTitleHtml)
 
     // 如果有文件路径和内容，渲染内容
@@ -529,11 +615,20 @@ export function extractPdfBookmarks(
   const bookmarks: Array<{ title: string; level: number; id: string }> = []
 
   for (const chapter of chapters) {
+    // 使用 displayTitle（已由 renumberHeadings 或 combineChaptersToHtml 设置）
+    const displayTitle = chapter.displayTitle || chapter.title
     if (!chapter.filePath) {
       // 嵌套导航本身作为书签
       bookmarks.push({
-        title: `${chapter.chapterNumber}. ${chapter.title}`,
+        title: `${chapter.chapterNumber}. ${displayTitle}`,
         level: Math.min(chapter.navLevel + 1, 5), // PDF 书签最多 5 级
+        id: `chapter-${chapter.chapterNumber}`
+      })
+    } else {
+      // 文件条目：章节标题作为书签
+      bookmarks.push({
+        title: `${chapter.chapterNumber}. ${displayTitle}`,
+        level: Math.min(chapter.navLevel + 1, 5),
         id: `chapter-${chapter.chapterNumber}`
       })
     }

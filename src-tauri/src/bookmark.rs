@@ -38,8 +38,12 @@ fn utf16be_encode(s: &str) -> Vec<u8> {
 /// PDF 书签 Y：从页面底部开始，单位 pt
 /// 转换：PDF_Y = page_height - extracted_Y + offset（向上偏移以跳转到标题上方）
 fn transform_y(extracted_y_pt: f32) -> f32 {
+    // extracted_y_pt 是 pdf-extract 返回的翻转后坐标（从上往下，顶部为 0）
+    // PDF 书签需要从底部往上计算的坐标
     // 向上偏移 15pt，让书签跳转到标题上方一点，避免标题被遮挡
     const OFFSET: f32 = 15.0;
+    // 转换：从顶部往下 -> 从底部往上
+    // y_pdf = A4_HEIGHT - y_from_top + OFFSET
     A4_HEIGHT_PT - extracted_y_pt + OFFSET
 }
 
@@ -149,17 +153,19 @@ fn build_tree_structure(
     let mut path: Vec<BookmarkNode> = Vec::new();
 
     for bm in bookmarks {
-        // 计算实际页码：封面页 + 正文页码
-        // 封面页是第 0 页，正文从第 1 页开始
-        // 前端传来的 page 是 0-indexed 正文页码
-        let actual_page = bm.page + 1; // 加 1 跳过封面页
+        // 计算实际页码索引
+        // 前端传来的 page 是正文页码（从 1 开始，已减去封面页）
+        // page_ids 数组索引从 0 开始：page_ids[0] = PDF 第 1 页（封面）
+        // 所以：如果 bm.page = 1（正文第一页），需要访问 page_ids[1]（PDF 第 2 页）
+        // actual_page_index = bm.page（因为 bm.page 已经是 1-indexed 的正文页码）
+        let actual_page_index = bm.page as usize; // 直接使用 bm.page 作为索引
 
-        if actual_page >= page_ids.len() {
+        if actual_page_index >= page_ids.len() {
             continue;
         }
 
         // 获取页面引用
-        let page_ref = page_ids[actual_page].clone();
+        let page_ref = page_ids[actual_page_index].clone();
 
         // 转换 Y 坐标
         let pdf_y = transform_y(bm.y);

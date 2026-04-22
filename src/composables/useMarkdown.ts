@@ -1200,12 +1200,13 @@ md.renderer.rules.heading_open = (tokens, idx) => {
   if (isMkdocsExportMode) {
     // MkDocs 组合导出模式：使用外部编号上下文
 
-    // 调整层级：h1 保持不变（但会被跳过渲染），h2+ 相对于 nav 标题降低 1 级
-    // nav 标题是 h(navLevel+1) 级，文件标题相对于它降低 1 级
-    // adjustedLevel = (navLevel + 1) + (originalLevel - 1) - 1 = navLevel + originalLevel - 1
+    // 调整层级：h1 保持不变（但会被跳过渲染），h2+ 相对于 nav 标题保持层级差
+    // nav 标题是 h(navLevel+1) 级，文件 h2 是其子标题，应显示为 h(navLevel+2) 级
+    // adjustedLevel = navLevel + originalLevel
+    // nav level 0, h2 → level 2; nav level 1, h2 → level 3
     let adjustedLevel = originalLevel
     if (originalLevel >= 2) {
-      adjustedLevel = Math.min(externalNavLevel + originalLevel - 1, 6)
+      adjustedLevel = Math.min(externalNavLevel + originalLevel, 6)
     }
 
     // 只有调整后层级 h1~h4 才更新计数器和生成编号（adjustedLevel <= 4）
