@@ -1208,23 +1208,23 @@ md.renderer.rules.heading_open = (tokens, idx) => {
       adjustedLevel = Math.min(externalNavLevel + originalLevel - 1, 6)
     }
 
-    // 计数器更新和编号计算基于原始层级（md 内层级）
-    // h1 不计数，h2-h4 计数并生成编号
-    if (originalLevel === 2) {
-      chapterCounters.h2++
-      chapterCounters.h3 = 0
-      chapterCounters.h4 = 0
-    } else if (originalLevel === 3) {
-      chapterCounters.h3++
-      chapterCounters.h4 = 0
-    } else if (originalLevel === 4) {
-      chapterCounters.h4++
-    }
-
-    // 生成编号（只有调整后层级 h1~h4 显示编号，即 adjustedLevel <= 4）
+    // 只有调整后层级 h1~h4 才更新计数器和生成编号（adjustedLevel <= 4）
     let number = ''
 
     if (adjustedLevel >= 1 && adjustedLevel <= 4 && originalLevel >= 2 && originalLevel <= 4) {
+      // 更新计数器
+      if (originalLevel === 2) {
+        chapterCounters.h2++
+        chapterCounters.h3 = 0
+        chapterCounters.h4 = 0
+      } else if (originalLevel === 3) {
+        chapterCounters.h3++
+        chapterCounters.h4 = 0
+      } else if (originalLevel === 4) {
+        chapterCounters.h4++
+      }
+
+      // 生成编号
       if (originalLevel === 2) {
         number = `${externalNumberPrefix}${chapterCounters.h2}. `
       } else if (originalLevel === 3) {

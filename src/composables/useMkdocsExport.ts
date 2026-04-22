@@ -281,14 +281,14 @@ export function renumberHeadings(chapters: NavChapter[]): BookmarkTreeNode[] {
         continue
       }
 
-      // 调整层级：h2+ 下降 navLevel 层
+      // 调整层级：h2+ 相对于 nav 标题降低 1 级显示
       const adjustedLevel = adjustHeadingLevel(rawHeading.level, chapter.navLevel)
 
-      // 计算编号 - 基于原始层级（rawHeading.level）
+      // 计算编号 - 只有调整后层级 h1~h4 显示编号（adjustedLevel <= 4）
       let adjustedNumber = ''
 
-      // 只有 h2-h4 显示编号，且总深度不超过 4 级
-      if (rawHeading.level >= 2 && rawHeading.level <= 4) {
+      // 原始层级 h2-h4 才计数和生成编号
+      if (rawHeading.level >= 2 && rawHeading.level <= 4 && adjustedLevel <= 4) {
         // 更新章节内计数器 - 基于原始层级
         if (rawHeading.level === 2) {
           chapterCounters.h2++
@@ -301,21 +301,13 @@ export function renumberHeadings(chapters: NavChapter[]): BookmarkTreeNode[] {
           chapterCounters.h4++
         }
 
-        // 计算编号前缀长度（来自 nav 层级）
-        const prefixDepth = chapter.numberPrefix.split('.').filter(s => s).length
-
-        // 总编号深度：nav 前缀深度 + 原始层级深度 - 1
-        const totalDepth = prefixDepth + (rawHeading.level - 1)
-
-        if (totalDepth <= 4) {
-          // 组合编号：nav 前缀 + 章节内编号
-          if (rawHeading.level === 2) {
-            adjustedNumber = `${chapter.numberPrefix}${chapterCounters.h2}. `
-          } else if (rawHeading.level === 3) {
-            adjustedNumber = `${chapter.numberPrefix}${chapterCounters.h2}.${chapterCounters.h3}. `
-          } else if (rawHeading.level === 4) {
-            adjustedNumber = `${chapter.numberPrefix}${chapterCounters.h2}.${chapterCounters.h3}.${chapterCounters.h4}. `
-          }
+        // 组合编号：nav 前缀 + 章节内编号
+        if (rawHeading.level === 2) {
+          adjustedNumber = `${chapter.numberPrefix}${chapterCounters.h2}. `
+        } else if (rawHeading.level === 3) {
+          adjustedNumber = `${chapter.numberPrefix}${chapterCounters.h2}.${chapterCounters.h3}. `
+        } else if (rawHeading.level === 4) {
+          adjustedNumber = `${chapter.numberPrefix}${chapterCounters.h2}.${chapterCounters.h3}.${chapterCounters.h4}. `
         }
       }
 
