@@ -509,49 +509,107 @@ md.block.ruler.before('heading', 'heading_deflist', function heading_deflist(sta
 md.renderer.rules.heading_deflist_block = (tokens, idx) => {
   const token = tokens[idx]
   const data = JSON.parse(token.content)
-  const level = data.level as number
+  const originalLevel = data.level as number  // 原始标题层级 (1-6)
   const titleText = data.titleText as string
   const defHtml = data.defHtml as string
 
-  // 更新计数器（与 heading_open 渲染规则逻辑一致）
-  let number = ''
-  let numberPrefix = ''
-  if (level === 2) {
-    headingCounters.h2++
-    headingCounters.h3 = 0
-    headingCounters.h4 = 0
-    number = `${headingCounters.h2}. `
-    numberPrefix = `${headingCounters.h2}-`
-  } else if (level === 3) {
-    headingCounters.h3++
-    headingCounters.h4 = 0
-    number = `${headingCounters.h2}.${headingCounters.h3}. `
-    numberPrefix = `${headingCounters.h2}-${headingCounters.h3}-`
-  } else if (level === 4) {
-    headingCounters.h4++
-    number = `${headingCounters.h2}.${headingCounters.h3}.${headingCounters.h4}. `
-    numberPrefix = `${headingCounters.h2}-${headingCounters.h3}-${headingCounters.h4}-`
+  // 判断是否使用外部编号上下文（MkDocs 模式）
+  if (isMkdocsExportMode) {
+    // MkDocs 组合导出模式：使用外部编号上下文
+
+    // 调整层级：h1 保持不变（但会被跳过渲染），h2+ 相对于 nav 标题保持层级差
+    // adjustedLevel = navLevel + originalLevel
+    let adjustedLevel = originalLevel
+    if (originalLevel >= 2) {
+      adjustedLevel = Math.min(externalNavLevel + originalLevel, 6)
+    }
+
+    // 只有调整后层级 h1~h4 才更新计数器和生成编号
+    let number = ''
+
+    if (adjustedLevel >= 1 && adjustedLevel <= 4 && originalLevel >= 2 && originalLevel <= 4) {
+      // 更新计数器（基于原始层级）
+      if (originalLevel === 2) {
+        chapterCounters.h2++
+        chapterCounters.h3 = 0
+        chapterCounters.h4 = 0
+      } else if (originalLevel === 3) {
+        chapterCounters.h3++
+        chapterCounters.h4 = 0
+      } else if (originalLevel === 4) {
+        chapterCounters.h4++
+      }
+
+      // 生成编号（使用外部前缀）
+      if (originalLevel === 2) {
+        number = `${externalNumberPrefix}${chapterCounters.h2}. `
+      } else if (originalLevel === 3) {
+        number = `${externalNumberPrefix}${chapterCounters.h2}.${chapterCounters.h3}. `
+      } else if (originalLevel === 4) {
+        number = `${externalNumberPrefix}${chapterCounters.h2}.${chapterCounters.h3}.${chapterCounters.h4}. `
+      }
+    }
+
+    // 生成 ID（使用全局索引）
+    const baseSlug = slugify(titleText)
+    const headingId = `heading-${globalHeadingIndex}-${baseSlug}`
+    globalHeadingIndex++
+
+    // 渲染标题 inline 内容
+    const headingContent = titleText
+      .replace(/\[([^\]]+)\]\(([^)]+)\)/g, '<a href="$2">$1</a>')
+      .replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>')
+      .replace(/\*([^*]+)\*/g, '<em>$1</em>')
+      .replace(/`([^`]+)`/g, '<code>$1</code>')
+
+    // 输出 HTML
+    const numberSpan = number ? `<span class="heading-number">${number}</span>` : ''
+    return `<h${adjustedLevel} id="${headingId}">${numberSpan}${headingContent}</h${adjustedLevel}><dd>${defHtml}</dd>`
+
+  } else {
+    // 普通模式：使用标准编号逻辑
+    const level = originalLevel
+
+    // 更新计数器
+    let number = ''
+    let numberPrefix = ''
+    if (level === 2) {
+      headingCounters.h2++
+      headingCounters.h3 = 0
+      headingCounters.h4 = 0
+      number = `${headingCounters.h2}. `
+      numberPrefix = `${headingCounters.h2}-`
+    } else if (level === 3) {
+      headingCounters.h3++
+      headingCounters.h4 = 0
+      number = `${headingCounters.h2}.${headingCounters.h3}. `
+      numberPrefix = `${headingCounters.h2}-${headingCounters.h3}-`
+    } else if (level === 4) {
+      headingCounters.h4++
+      number = `${headingCounters.h2}.${headingCounters.h3}.${headingCounters.h4}. `
+      numberPrefix = `${headingCounters.h2}-${headingCounters.h3}-${headingCounters.h4}-`
+    }
+
+    // 生成带编号前缀的 ID
+    const baseSlug = slugify(titleText)
+    const headingId = numberPrefix ? `${numberPrefix}${baseSlug}` : baseSlug
+
+    // 存储映射
+    if (baseSlug) {
+      headingIdMap.set(baseSlug, headingId)
+    }
+
+    // 渲染标题 inline 内容
+    const headingContent = titleText
+      .replace(/\[([^\]]+)\]\(([^)]+)\)/g, '<a href="$2">$1</a>')
+      .replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>')
+      .replace(/\*([^*]+)\*/g, '<em>$1</em>')
+      .replace(/`([^`]+)`/g, '<code>$1</code>')
+
+    // 输出 HTML
+    const numberSpan = number ? `<span class="heading-number">${number}</span>` : ''
+    return `<h${level} id="${headingId}">${numberSpan}${headingContent}</h${level}><dd>${defHtml}</dd>`
   }
-
-  // 生成带编号前缀的 ID
-  const baseSlug = slugify(titleText)
-  const headingId = numberPrefix ? `${numberPrefix}${baseSlug}` : baseSlug
-
-  // 存储映射
-  if (baseSlug) {
-    headingIdMap.set(baseSlug, headingId)
-  }
-
-  // 渲染标题 inline 内容（处理链接、强调等）
-  const headingContent = titleText
-    .replace(/\[([^\]]+)\]\(([^)]+)\)/g, '<a href="$2">$1</a>')
-    .replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>')
-    .replace(/\*([^*]+)\*/g, '<em>$1</em>')
-    .replace(/`([^`]+)`/g, '<code>$1</code>')
-
-  // 输出 HTML：标题 + dd（标题已显示术语，不需要 dt）
-  const numberSpan = number ? `<span class="heading-number">${number}</span>` : ''
-  return `<h${level} id="${headingId}">${numberSpan}${headingContent}</h${level}><dd>${defHtml}</dd>`
 }
 
 // 自定义 Admonition 解析器（支持缩进语法和结束标记语法）
