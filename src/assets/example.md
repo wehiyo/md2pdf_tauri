@@ -246,13 +246,14 @@ class Cat extends Animal {
 
 #### 本地图片
 
-![MarkRefine Logo](example.png)
+![MarkRefine Logo](example.png) {width=300, align=left}
 
-这是一张本地图片，使用相对路径引用。
+这是一张本地图片，使用相对路径引用。这是一张本地图片，使用相对路径引用。这是一张本地图片，使用相对路径引用。这是一张本地图片，使用相对路径引用。
+
 
 #### 网络图片
 
-![Vite Logo](https://vitejs.dev/logo.svg)
+![Vite Logo](https://vitejs.dev/logo.svg){width=400}
 
 网络图片通过 URL 引用。
 

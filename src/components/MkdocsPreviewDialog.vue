@@ -116,8 +116,8 @@ onUnmounted(() => {
 function scrollToHeading(id: string) {
   if (!previewRef.value) return
 
-  // id 可能包含点号，需要转义
-  const escapedId = id.replace(/\./g, '\\.')
+  // 使用 CSS.escape 处理 ID 中的特殊字符（包括点号、中文等）
+  const escapedId = CSS.escape(id)
   const targetElement = previewRef.value.querySelector(`#${escapedId}`)
   if (targetElement) {
     targetElement.scrollIntoView({ behavior: 'smooth', block: 'start' })
@@ -135,14 +135,37 @@ function handleCancel() {
   emit('cancel')
 }
 
-// 对话框打开时，初始化图表渲染
+// 对话框打开时，初始化图表渲染和链接点击处理
 watch(() => props.visible, async (newVal) => {
   if (newVal && previewRef.value) {
     await nextTick()
     // 这里可以初始化 Mermaid 等图表渲染
     // 目前暂不处理，因为组合导出时图表已在 prepareMkdocsExport 中预渲染
+
+    // 添加链接点击处理（拦截内部锚点链接）
+    previewRef.value.addEventListener('click', handleLinkClick)
+  } else if (!newVal && previewRef.value) {
+    // 对话框关闭时移除事件监听
+    previewRef.value.removeEventListener('click', handleLinkClick)
   }
 })
+
+// 处理链接点击（拦截内部锚点链接）
+function handleLinkClick(event: MouseEvent) {
+  const target = event.target as HTMLElement
+  const link = target.closest('a')
+  if (!link) return
+
+  const href = link.getAttribute('href')
+  if (!href) return
+
+  // 只处理内部锚点链接（以 # 开头）
+  if (href.startsWith('#')) {
+    event.preventDefault()
+    const targetId = href.substring(1)
+    scrollToHeading(targetId)
+  }
+}
 </script>
 
 <style scoped>

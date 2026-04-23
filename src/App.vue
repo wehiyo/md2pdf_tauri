@@ -105,7 +105,7 @@ import LeftSidebar from './components/LeftSidebar.vue'
 import OutlinePanel from './components/OutlinePanel.vue'
 import ExportProgress from './components/ExportProgress.vue'
 import MkdocsPreviewDialog from './components/MkdocsPreviewDialog.vue'
-import { useMarkdown } from './composables/useMarkdown'
+import { useMarkdown, slugifyForMkdocs } from './composables/useMarkdown'
 import type { Metadata } from './composables/useMarkdown'
 import { usePDF } from './composables/usePDF'
 import { useScrollSync } from './composables/useScrollSync'
@@ -1434,39 +1434,81 @@ function scrollToAnchor(anchor: string) {
   const previewContainer = previewRef.value.getScrollContainer()
   if (!previewContainer) return
 
-  // 同步滚动编辑器到对应行
-  const lineNumber = getHeadingLine(anchor)
-  if (lineNumber !== undefined && editorRef.value) {
-    editorRef.value.scrollToLine(lineNumber)
-  }
-
   // 尝试多种方式查找锚点元素
-  // 1. 直接使用 CSS.escape（处理点号等特殊字符）
-  let targetElement = previewContainer.querySelector(`#${CSS.escape(anchor)}`)
+  let targetElement: Element | null = null
 
-  // 2. 如果找不到，尝试使用属性选择器（更可靠）
-  if (!targetElement) {
-    targetElement = previewContainer.querySelector(`[id="${anchor}"]`)
+  // 1. 先尝试 URL 解码
+  let decodedAnchor = anchor
+  try {
+    decodedAnchor = decodeURIComponent(anchor)
+  } catch {
+    // URL 解码失败，使用原始值
   }
 
-  // 3. 如果还是找不到，尝试解码后查找（处理编码的中文）
+  // 2. 使用 slugifyForMkdocs 转换（匹配 MkDocs 模式 ID）
+  const slugifiedAnchor = slugifyForMkdocs(decodedAnchor)
+
+  // 3. 尝试直接查找（无编号前缀）
+  targetElement = previewContainer.querySelector(`#${CSS.escape(slugifiedAnchor)}`)
   if (!targetElement) {
-    try {
-      const decodedAnchor = decodeURIComponent(anchor)
-      targetElement = previewContainer.querySelector(`#${CSS.escape(decodedAnchor)}`)
-      if (!targetElement) {
-        targetElement = previewContainer.querySelector(`[id="${decodedAnchor}"]`)
+    targetElement = previewContainer.querySelector(`[id="${slugifiedAnchor}"]`)
+  }
+
+  // 4. 如果找不到，尝试带编号前缀的 ID（普通模式：如 "1-数据库", "1-2-数据库"）
+  if (!targetElement) {
+    // 尝试匹配各种编号前缀格式
+    const numberedIdPatterns = [
+      `^[0-9]+-${slugifiedAnchor}$`,           // h2: 1-数据库
+      `^[0-9]+-[0-9]+-${slugifiedAnchor}$`,    // h3: 1-2-数据库
+      `^[0-9]+-[0-9]+-[0-9]+-${slugifiedAnchor}$` // h4: 1-2-3-数据库
+    ]
+    const headings = previewContainer.querySelectorAll('h1, h2, h3, h4, h5, h6')
+    for (const heading of headings) {
+      const id = heading.getAttribute('id')
+      if (id) {
+        // 检查是否匹配编号前缀模式
+        for (const pattern of numberedIdPatterns) {
+          if (new RegExp(pattern).test(id)) {
+            targetElement = heading
+            break
+          }
+        }
+        if (targetElement) break
+
+        // 也检查 ID 是否以 slugifiedAnchor 结尾
+        if (id.endsWith(`-${slugifiedAnchor}`) || id === slugifiedAnchor) {
+          targetElement = heading
+          break
+        }
       }
-    } catch {
-      // URL 解码失败，忽略
     }
   }
 
+  // 5. 如果还是找不到，遍历标题匹配文本内容
+  if (!targetElement) {
+    const headings = previewContainer.querySelectorAll('h1, h2, h3, h4, h5, h6')
+    for (const heading of headings) {
+      const text = heading.textContent?.trim() || ''
+      if (slugifyForMkdocs(text) === slugifiedAnchor) {
+        targetElement = heading
+        break
+      }
+    }
+  }
+
+  // 6. 同步滚动编辑器到对应行
   if (targetElement) {
+    const headingId = targetElement.getAttribute('id')
+    if (headingId) {
+      const lineNumber = getHeadingLine(headingId)
+      if (lineNumber !== undefined && editorRef.value) {
+        editorRef.value.scrollToLine(lineNumber)
+      }
+    }
     targetElement.scrollIntoView({ behavior: 'smooth', block: 'start' })
-    console.log('跳转到锚点:', anchor)
+    console.log('跳转到锚点:', slugifiedAnchor)
   } else {
-    console.warn('未找到锚点:', anchor)
+    console.warn('未找到锚点:', anchor, 'decoded:', decodedAnchor, 'slugified:', slugifiedAnchor)
   }
 }
 

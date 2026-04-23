@@ -150,9 +150,12 @@ md.use(sub)
 md.use(abbr)
 md.use(deflist)
 md.use(emoji)
+// markdown-it-anchor：只启用级别过滤，禁用 permalink 和 slugify
+// ID 由自定义 heading_open 渲染规则生成
 md.use(anchor, {
   permalink: false,
-  level: [1, 2, 3, 4]
+  level: [1, 2, 3, 4],
+  slugify: (s: string) => s  // 禁用默认 slugify，保留原文
 })
 // toc 插件已禁用
 // md.use(toc, {
@@ -550,10 +553,8 @@ md.renderer.rules.heading_deflist_block = (tokens, idx) => {
       }
     }
 
-    // 生成 ID（使用全局索引）
-    const baseSlug = slugify(titleText)
-    const headingId = `heading-${globalHeadingIndex}-${baseSlug}`
-    globalHeadingIndex++
+    // 生成 ID（MkDocs 模式：不加编号前缀）
+    const headingId = slugifyForMkdocs(titleText)
 
     // 渲染标题 inline 内容
     const headingContent = titleText
@@ -1245,6 +1246,14 @@ function slugify(text: string): string {
     .replace(/[^\w\u4e00-\u9fa5-]/g, '')  // 保留中文、字母、数字、连字符
 }
 
+
+// MkDocs 模式专用 slugify：中文保留，英文大写转小写，空格转连字符
+export function slugifyForMkdocs(text: string): string {
+  return text
+    .toLowerCase()  // 英文大写转小写（中文不受影响）
+    .replace(/\s+/g, '-')  // 空格转连字符
+    .replace(/[^\w一-龥-]/g, '')  // 保留中文、字母、数字、连字符
+}
 // 重写 heading_open 渲染规则，为 h2-h4 添加编号，并将编号加入ID
 // 支持外部编号上下文（用于 MkDocs 组合导出）
 md.renderer.rules.heading_open = (tokens, idx) => {
@@ -1296,10 +1305,8 @@ md.renderer.rules.heading_open = (tokens, idx) => {
       }
     }
 
-    // 生成 ID
-    const baseSlug = slugify(titleText)
-    const adjustedId = `heading-${globalHeadingIndex}-${baseSlug}`
-    globalHeadingIndex++
+    // 生成 ID（MkDocs 模式：不转小写，不加编号前缀）
+    const adjustedId = slugifyForMkdocs(titleText)
 
     // 渲染调整后的层级标签
     const adjustedTag = `h${adjustedLevel}`
