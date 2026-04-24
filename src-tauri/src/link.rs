@@ -13,14 +13,13 @@ pub struct LinkInput {
     pub href_id: String,     // 目标标题 ID（用于调试）
     pub link_page: usize,    // 链接所在页码（1-indexed）
     pub link_y: f32,         // 链接顶部 Y 坐标（从顶部开始，单位 pt）
+    pub link_page_height: f32, // 链接所在页面高度（单位 pt）
     pub target_page: usize,  // 目标页码（1-indexed）
     pub target_y: f32,       // 目标 Y 坐标（从顶部开始，单位 pt）
+    pub target_page_height: f32, // 目标页面高度（单位 pt）
 }
 
-/// A4 页面高度 (72 DPI)
-const A4_HEIGHT_PT: f32 = 842.0;
-
-/// 页面宽度 (72 DPI)
+/// A4 页面宽度 (72 DPI)
 const A4_WIDTH_PT: f32 = 595.0;
 
 /// 链接文本行高（假设值）
@@ -30,14 +29,14 @@ const LINE_HEIGHT_PT: f32 = 14.0;
 /// 与 bookmark.rs 保持完全一致
 /// pdf-extract 返回的 Y：从顶部开始（翻转后），单位 pt
 /// PDF Dest XYZ top：从底部开始，单位 pt
-fn transform_y(extracted_y_pt: f32) -> f32 {
+fn transform_y(extracted_y_pt: f32, page_height: f32) -> f32 {
     // 与 bookmark.rs 使用相同的偏移值
     const OFFSET: f32 = 15.0;
     // pdf-extract 返回的 Y 是从页面顶部往下
     // PDF Dest 需要从底部往上
-    let pdf_y = A4_HEIGHT_PT - extracted_y_pt + OFFSET;
-    println!("[link] transform_y: extracted_y={} -> pdf_y={} (A4_HEIGHT={}, OFFSET={})",
-             extracted_y_pt, pdf_y, A4_HEIGHT_PT, OFFSET);
+    let pdf_y = page_height - extracted_y_pt + OFFSET;
+    println!("[link] transform_y: extracted_y={} -> pdf_y={} (page_height={}, OFFSET={})",
+             extracted_y_pt, pdf_y, page_height, OFFSET);
     pdf_y
 }
 
@@ -97,11 +96,11 @@ pub async fn inject_links(
         println!("[link] 链接页索引: {} (PDF页{}), 目标页索引: {} (PDF页{})",
                  link_page_index, link.link_page, target_page_index, link.target_page);
 
-        // 转换 Y 坐标
+        // 转换 Y 坐标（使用页面实际高度）
         println!("[link] 转换坐标...");
-        let link_top_y = transform_y(link.link_y);
-        let link_bottom_y = transform_y(link.link_y + LINE_HEIGHT_PT);
-        let target_y = transform_y(link.target_y);
+        let link_top_y = transform_y(link.link_y, link.link_page_height);
+        let link_bottom_y = transform_y(link.link_y + LINE_HEIGHT_PT, link.link_page_height);
+        let target_y = transform_y(link.target_y, link.target_page_height);
         println!("[link] link_top_y: {}, link_bottom_y: {}, target_y: {}", link_top_y, link_bottom_y, target_y);
 
         // 创建 Link Annotation 字典

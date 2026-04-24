@@ -25,6 +25,7 @@ pub struct BookmarkPosition {
     pub page: u32,
     pub y: f32,
     pub level: u32,
+    pub page_height: f32, // 页面实际高度（单位 pt）
 }
 
 // 使用 pdf_extract.rs 中的 MarkerPosition 类型
@@ -947,6 +948,7 @@ async fn load_html_and_print_stream(
             page: mp.page,
             y: mp.y,
             level: 0, // 标记文本不包含层级信息，需要从标题 ID 推断
+            page_height: mp.page_height,
         })
         .collect();
 
@@ -956,6 +958,7 @@ async fn load_html_and_print_stream(
             marker: mp.marker.clone(),
             page: mp.page,
             y: mp.y,
+            page_height: mp.page_height,
         })
         .collect();
 
@@ -965,6 +968,7 @@ async fn load_html_and_print_stream(
             marker: mp.marker.clone(),
             page: mp.page,
             y: mp.y,
+            page_height: mp.page_height,
         })
         .collect();
 

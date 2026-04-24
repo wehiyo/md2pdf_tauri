@@ -13,10 +13,8 @@ pub struct BookmarkInput {
     pub page: usize,     // 0-indexed 页码（相对于正文，不包括封面）
     pub y: f32,          // PDF Y 坐标（从顶部开始，单位 pt，由 pdf-extract 提取）
     pub level: u32,      // 标题层级 (h1=1, h2=2, h3=3, h4=4)
+    pub page_height: f32, // 页面实际高度（单位 pt）
 }
-
-/// A4 页面高度 (72 DPI)
-const A4_HEIGHT_PT: f32 = 842.0;
 
 /// 将字符串编码为 UTF-16BE（PDF 书签要求）
 /// 以 BOM (U+FEFF) 开头标识编码
@@ -37,14 +35,14 @@ fn utf16be_encode(s: &str) -> Vec<u8> {
 /// pdf-extract 提取的 Y：从页面顶部开始（翻转后），单位 pt
 /// PDF 书签 Y：从页面底部开始，单位 pt
 /// 转换：PDF_Y = page_height - extracted_Y + offset（向上偏移以跳转到标题上方）
-fn transform_y(extracted_y_pt: f32) -> f32 {
+fn transform_y(extracted_y_pt: f32, page_height: f32) -> f32 {
     // extracted_y_pt 是 pdf-extract 返回的翻转后坐标（从上往下，顶部为 0）
     // PDF 书签需要从底部往上计算的坐标
     // 向上偏移 15pt，让书签跳转到标题上方一点，避免标题被遮挡
     const OFFSET: f32 = 15.0;
     // 转换：从顶部往下 -> 从底部往上
-    // y_pdf = A4_HEIGHT - y_from_top + OFFSET
-    A4_HEIGHT_PT - extracted_y_pt + OFFSET
+    // y_pdf = page_height - y_from_top + OFFSET
+    page_height - extracted_y_pt + OFFSET
 }
 
 /// 注入书签到 PDF
@@ -167,8 +165,8 @@ fn build_tree_structure(
         // 获取页面引用
         let page_ref = page_ids[actual_page_index].clone();
 
-        // 转换 Y 坐标
-        let pdf_y = transform_y(bm.y);
+        // 转换 Y 坐标（使用页面实际高度）
+        let pdf_y = transform_y(bm.y, bm.page_height);
 
         // 创建书签字典
         let mut bookmark_dict = Dictionary::new();

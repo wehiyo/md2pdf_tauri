@@ -394,9 +394,9 @@ export function usePDF() {
         success: boolean
         path: string
         error?: string
-        bookmarks: Array<{ title: string; page: number; y: number; level: number }>
-        link_targets: Array<{ marker: string; page: number; y: number }>
-        link_positions: Array<{ marker: string; page: number; y: number }>
+        bookmarks: Array<{ title: string; page: number; y: number; level: number; page_height: number }>
+        link_targets: Array<{ marker: string; page: number; y: number; page_height: number }>
+        link_positions: Array<{ marker: string; page: number; y: number; page_height: number }>
       }>('print_to_pdf_stream_with_markers', {
         html: fullHtml,
         savePath: savePath,
@@ -435,12 +435,14 @@ export function usePDF() {
         // 减去封面页（第 1 页），得到正文页码（从 1 开始）
         // 例如：pos.page = 2（PDF 第 2 页，正文第一页） -> page = 1
         const page = pos ? Math.max(1, pos.page - 1) : 1
-        console.log(`[PDF] 书签映射: heading.id="${h.id}" -> marker="${marker}" -> page=${page}, y=${pos?.y || 700}`)
+        const pageHeight = pos?.page_height || 842.0 // 默认 A4 高度
+        console.log(`[PDF] 书签映射: heading.id="${h.id}" -> marker="${marker}" -> page=${page}, y=${pos?.y || 700}, page_height=${pageHeight}`)
         return {
           title: h.text,
           level: h.level,
           page,
-          y: pos ? pos.y : 700
+          y: pos ? pos.y : 700,
+          page_height: pageHeight
         }
       })
 
@@ -458,34 +460,34 @@ export function usePDF() {
       // Step 13: 构建链接数据并注入 Link Annotations
       // 构建标题 ID → 坐标映射（复用书签结果）
       console.log('[PDF] ========== 构建链接坐标映射 ========== ')
-      const headingIdToPosition = new Map<string, { page: number; y: number }>()
+      const headingIdToPosition = new Map<string, { page: number; y: number; page_height: number }>()
       headings.forEach((h, i) => {
         const pos = printResult.bookmarks.find(b => b.title === headingMarkers[i])
         if (pos) {
           // PDF 页码（1-indexed），不减封面页，因为 Link Annotation 使用 PDF 实际页码
-          headingIdToPosition.set(h.id, { page: pos.page, y: pos.y })
-          console.log(`[PDF] 标题ID映射: "${h.id}" -> page=${pos.page}, y=${pos.y}`)
+          headingIdToPosition.set(h.id, { page: pos.page, y: pos.y, page_height: pos.page_height })
+          console.log(`[PDF] 标题ID映射: "${h.id}" -> page=${pos.page}, y=${pos.y}, page_height=${pos.page_height}`)
         }
       })
 
       // 构建非标题目标 ID → 坐标映射
-      const nonHeadingIdToPosition = new Map<string, { page: number; y: number }>()
+      const nonHeadingIdToPosition = new Map<string, { page: number; y: number; page_height: number }>()
       const nonHeadingIds = Array.from(linkClassification.nonHeadingLinks)
       nonHeadingIds.forEach((targetId, i) => {
         const marker = `LINKMARK${i.toString().padStart(3, '0')}`
         const pos = printResult.link_targets.find(p => p.marker === marker)
         if (pos) {
-          nonHeadingIdToPosition.set(targetId, { page: pos.page, y: pos.y })
-          console.log(`[PDF] 非标题目标映射: "${targetId}" -> marker="${marker}" -> page=${pos.page}, y=${pos.y}`)
+          nonHeadingIdToPosition.set(targetId, { page: pos.page, y: pos.y, page_height: pos.page_height })
+          console.log(`[PDF] 非标题目标映射: "${targetId}" -> marker="${marker}" -> page=${pos.page}, y=${pos.y}, page_height=${pos.page_height}`)
         }
       })
 
       // 构建链接位置映射
-      const linkPosToPosition = new Map<string, { page: number; y: number }>()
+      const linkPosToPosition = new Map<string, { page: number; y: number; page_height: number }>()
       linkMarkers.forEach((marker) => {
         const pos = printResult.link_positions.find(p => p.marker === marker)
         if (pos) {
-          linkPosToPosition.set(marker, { page: pos.page, y: pos.y })
+          linkPosToPosition.set(marker, { page: pos.page, y: pos.y, page_height: pos.page_height })
         }
       })
 
@@ -496,8 +498,10 @@ export function usePDF() {
         href_id: string
         link_page: number
         link_y: number
+        link_page_height: number
         target_page: number
         target_y: number
+        target_page_height: number
       }> = []
 
       linkClassification.allLinkHrefs.forEach((href, i) => {
@@ -508,16 +512,18 @@ export function usePDF() {
         const targetPos = headingIdToPosition.get(href) || nonHeadingIdToPosition.get(href)
 
         console.log(`[PDF] 链接 #${i}: href="${href}"`)
-        console.log(`[PDF]   链接位置: marker="${linkMarker}" -> page=${linkPos?.page || 'N/A'}, y=${linkPos?.y || 'N/A'}`)
-        console.log(`[PDF]   目标位置: page=${targetPos?.page || 'N/A'}, y=${targetPos?.y || 'N/A'}`)
+        console.log(`[PDF]   链接位置: marker="${linkMarker}" -> page=${linkPos?.page || 'N/A'}, y=${linkPos?.y || 'N/A'}, page_height=${linkPos?.page_height || 'N/A'}`)
+        console.log(`[PDF]   目标位置: page=${targetPos?.page || 'N/A'}, y=${targetPos?.y || 'N/A'}, page_height=${targetPos?.page_height || 'N/A'}`)
 
         if (linkPos && targetPos) {
           links.push({
             href_id: href,
             link_page: linkPos.page,  // PDF 页码（1-indexed）
             link_y: linkPos.y,
+            link_page_height: linkPos.page_height,
             target_page: targetPos.page,
-            target_y: targetPos.y
+            target_y: targetPos.y,
+            target_page_height: targetPos.page_height
           })
           console.log(`[PDF]   ✓ 链接已添加到注入列表`)
         } else {
