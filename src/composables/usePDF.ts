@@ -345,26 +345,33 @@ export function usePDF() {
     // Step 2: 预渲染图表（已在 exportToPDF 中完成）
     const contentWithDiagrams = contentWithoutToc
 
-    // Step 3: 分类链接目标
-    const linkClassification = classifyLinkTargets(contentWithDiagrams, headings)
+    // Step 3: 提取自定义锚点（空的 <a id="xxx"> 元素）
+    const customAnchors = extractCustomAnchors(contentWithDiagrams)
 
-    // Step 4: 为非标题目标添加标记
+    // Step 4: 分类链接目标（包含自定义锚点）
+    const linkClassification = classifyLinkTargets(contentWithDiagrams, headings, customAnchors)
+
+    // Step 5: 为空锚点添加标记
+    const { html: contentWithAnchorMarkers, markers: anchorMarkers } =
+      addAnchorMarkers(contentWithDiagrams, customAnchors)
+
+    // Step 6: 为非标题目标添加标记
     const { html: contentWithNonHeadingMarkers, markers: nonHeadingMarkers } =
-      addNonHeadingMarkers(contentWithDiagrams, linkClassification.nonHeadingLinks)
+      addNonHeadingMarkers(contentWithAnchorMarkers, linkClassification.nonHeadingLinks)
 
-    // Step 5: 为链接元素添加位置标记
+    // Step 7: 为链接元素添加位置标记
     const { html: contentWithLinkMarkers, linkMarkers } =
       addLinkPositionMarkers(contentWithNonHeadingMarkers)
 
-    // Step 6: 为标题添加标记文本（用于 PDF 书签定位）
+    // Step 8: 为标题添加标记文本（用于 PDF 书签定位）
     const contentWithMarkers = addMarkerText(contentWithLinkMarkers, headings)
 
-    // Step 7: 为 h1 标题添加分页（从第二个开始）
+    // Step 9: 为 h1 标题添加分页（从第二个开始）
     const contentWithPageBreaks = addH1PageBreaks(contentWithMarkers, headings)
 
-    // Step 8: 生成所有标记列表
+    // Step 10: 生成所有标记列表
     const headingMarkers = headings.map((_, i) => `PDFMARK${i.toString().padStart(3, '0')}`)
-    const allMarkers = [...headingMarkers, ...nonHeadingMarkers, ...linkMarkers]
+    const allMarkers = [...headingMarkers, ...anchorMarkers, ...nonHeadingMarkers, ...linkMarkers]
 
     // 构建封面 meta 信息（中心位置，用于其他信息如密级）
     const metaItems: string[] = []
@@ -482,6 +489,18 @@ export function usePDF() {
         }
       })
 
+      // 构建自定义锚点坐标映射
+      const anchorIdToPosition = new Map<string, { page: number; y: number; page_height: number }>()
+      const anchorIds = Array.from(customAnchors)
+      anchorIds.forEach((anchorId, i) => {
+        const marker = `ANCHORMARK${i.toString().padStart(3, '0')}`
+        const pos = printResult.link_targets.find(p => p.marker === marker)
+        if (pos) {
+          anchorIdToPosition.set(anchorId, { page: pos.page, y: pos.y, page_height: pos.page_height })
+          console.log(`[PDF] 自定义锚点映射: "${anchorId}" -> marker="${marker}" -> page=${pos.page}, y=${pos.y}, page_height=${pos.page_height}`)
+        }
+      })
+
       // 构建链接位置映射
       const linkPosToPosition = new Map<string, { page: number; y: number; page_height: number }>()
       linkMarkers.forEach((marker) => {
@@ -508,8 +527,8 @@ export function usePDF() {
         const linkMarker = `LINKPOS${i.toString().padStart(3, '0')}`
         const linkPos = linkPosToPosition.get(linkMarker)
 
-        // 查找目标坐标
-        const targetPos = headingIdToPosition.get(href) || nonHeadingIdToPosition.get(href)
+        // 查找目标坐标（优先：标题 → 自定义锚点 → 非标题元素）
+        const targetPos = headingIdToPosition.get(href) || anchorIdToPosition.get(href) || nonHeadingIdToPosition.get(href)
 
         console.log(`[PDF] 链接 #${i}: href="${href}"`)
         console.log(`[PDF]   链接位置: marker="${linkMarker}" -> page=${linkPos?.page || 'N/A'}, y=${linkPos?.y || 'N/A'}, page_height=${linkPos?.page_height || 'N/A'}`)
@@ -785,15 +804,68 @@ function addMarkerText(htmlContent: string, headings: Array<{ level: number; tex
 }
 
 /**
- * 分类链接目标：区分指向标题的链接和指向非标题的链接
+ * 提取自定义锚点定义（空的 <a id="xxx"> 元素）
+ */
+function extractCustomAnchors(htmlContent: string): Set<string> {
+  const anchors = new Set<string>()
+
+  // 匹配空的 <a id="xxx"></a> 元素（id 属性无 href）
+  // 格式：<a id="anchor-name"></a> 或 <a id="anchor-name" name="xxx"></a>
+  const emptyAnchorRegex = /<a\s[^>]*\bid="([^"]+)"[^>]*>\s*<\/a>/g
+
+  htmlContent.replace(emptyAnchorRegex, (_, id) => {
+    anchors.add(id)
+    return _
+  })
+
+  return anchors
+}
+
+/**
+ * 为自定义锚点添加标记（确保 pdf-extract 可定位）
+ */
+function addAnchorMarkers(
+  htmlContent: string,
+  customAnchors: Set<string>
+): { html: string, markers: string[] } {
+  let result = htmlContent
+  const markers: string[] = []
+  const anchorToMarker = new Map<string, string>()
+
+  // 为每个锚点生成标记
+  customAnchors.forEach(anchorId => {
+    const marker = `ANCHORMARK${markers.length.toString().padStart(3, '0')}`
+    markers.push(marker)
+    anchorToMarker.set(anchorId, marker)
+  })
+
+  // 在空锚点内部注入标记
+  anchorToMarker.forEach((marker, anchorId) => {
+    const markerHtml = `<span style="font-family:'Courier New',Courier,monospace;font-size:0.01em;line-height:1;color:#f9fafb;display:inline-block;vertical-align:baseline;">${marker}</span>`
+
+    // 替换空锚点为带标记的锚点
+    const emptyAnchorRegex = new RegExp(
+      `<a\\s[^>]*\\bid="${anchorId}"[^>]*>\\s*<\/a>`,
+      'g'
+    )
+    result = result.replace(emptyAnchorRegex, `<a id="${anchorId}">${markerHtml}</a>`)
+  })
+
+  return { html: result, markers }
+}
+
+/**
+ * 分类链接目标：区分指向标题、自定义锚点和非标题的链接
  */
 function classifyLinkTargets(
   htmlContent: string,
-  headings: Array<{ id: string }>
-): { headingLinks: Set<string>, nonHeadingLinks: Set<string>, allLinkHrefs: string[] } {
+  headings: Array<{ id: string }>,
+  customAnchors: Set<string>
+): { headingLinks: Set<string>, nonHeadingLinks: Set<string>, anchorLinks: Set<string>, allLinkHrefs: string[] } {
   const headingIds = new Set(headings.map(h => h.id))
   const headingLinks = new Set<string>()
   const nonHeadingLinks = new Set<string>()
+  const anchorLinks = new Set<string>()
   const allLinkHrefs: string[] = []
 
   // 提取所有 href="#xxx" 的内部链接
@@ -810,13 +882,15 @@ function classifyLinkTargets(
 
     if (headingIds.has(decodedHref) || headingIds.has(href)) {
       headingLinks.add(decodedHref)
+    } else if (customAnchors.has(decodedHref) || customAnchors.has(href)) {
+      anchorLinks.add(decodedHref)
     } else {
       nonHeadingLinks.add(decodedHref)
     }
     return _
   })
 
-  return { headingLinks, nonHeadingLinks, allLinkHrefs }
+  return { headingLinks, nonHeadingLinks, anchorLinks, allLinkHrefs }
 }
 
 /**
