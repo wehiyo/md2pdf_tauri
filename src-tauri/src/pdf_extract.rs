@@ -9,7 +9,7 @@ use pdf_extract::{Document, OutputDev, MediaBox, Transform, OutputError, ColorSp
 use std::collections::HashMap;
 
 /// 标记位置结果
-#[derive(Debug, Clone, serde::Serialize)]
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct MarkerPosition {
     pub marker: String,
     pub page: u32,      // 1-indexed 页码

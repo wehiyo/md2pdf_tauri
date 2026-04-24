@@ -354,8 +354,12 @@ export function renumberHeadings(chapters: NavChapter[]): BookmarkTreeNode[] {
         }
       }
 
-      // 生成调整后的 ID（MkDocs 模式：不加编号前缀）
-      const adjustedId = slugifyForMkdocs(rawHeading.text)
+      // 生成调整后的 ID（带编号前缀，格式如 "1-1-数据库"）
+      // 从 adjustedNumber 提取编号（去掉空格，点号改为连字符）
+      // adjustedNumber 格式如 "1.1.1 "，转换为 "1-1-1-slug"
+      const numberPrefix = adjustedNumber.trim().replace(/\./g, '-')
+      const baseSlug = slugifyForMkdocs(rawHeading.text)
+      const adjustedId = numberPrefix ? `${numberPrefix}-${baseSlug}` : baseSlug
 
       const heading: Heading = {
         level: rawHeading.level,

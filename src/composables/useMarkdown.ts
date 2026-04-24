@@ -553,8 +553,10 @@ md.renderer.rules.heading_deflist_block = (tokens, idx) => {
       }
     }
 
-    // 生成 ID（MkDocs 模式：不加编号前缀）
-    const headingId = slugifyForMkdocs(titleText)
+    // 生成 ID（MkDocs 模式：带编号前缀，格式如 "1-1-数据库"）
+    const numberPrefix = number.trim().replace(/\./g, '-')
+    const baseSlug = slugifyForMkdocs(titleText)
+    const headingId = numberPrefix ? `${numberPrefix}-${baseSlug}` : baseSlug
 
     // 渲染标题 inline 内容
     const headingContent = titleText
@@ -1305,8 +1307,11 @@ md.renderer.rules.heading_open = (tokens, idx) => {
       }
     }
 
-    // 生成 ID（MkDocs 模式：不转小写，不加编号前缀）
-    const adjustedId = slugifyForMkdocs(titleText)
+    // 生成 ID（MkDocs 模式：带编号前缀，格式如 "1-1-数据库"）
+    // 从 number 提取编号（去掉空格，点号改为连字符）
+    const numberPrefix = number.trim().replace(/\./g, '-')
+    const baseSlug = slugifyForMkdocs(titleText)
+    const adjustedId = numberPrefix ? `${numberPrefix}-${baseSlug}` : baseSlug
 
     // 渲染调整后的层级标签
     const adjustedTag = `h${adjustedLevel}`

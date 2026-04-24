@@ -345,14 +345,26 @@ export function usePDF() {
     // Step 2: 预渲染图表（已在 exportToPDF 中完成）
     const contentWithDiagrams = contentWithoutToc
 
-    // Step 3: 添加标记文本（用于 PDF 书签定位）
-    const contentWithMarkers = addMarkerText(contentWithDiagrams, headings)
+    // Step 3: 分类链接目标
+    const linkClassification = classifyLinkTargets(contentWithDiagrams, headings)
 
-    // Step 4: 为 h1 标题添加分页（从第二个开始）
+    // Step 4: 为非标题目标添加标记
+    const { html: contentWithNonHeadingMarkers, markers: nonHeadingMarkers } =
+      addNonHeadingMarkers(contentWithDiagrams, linkClassification.nonHeadingLinks)
+
+    // Step 5: 为链接元素添加位置标记
+    const { html: contentWithLinkMarkers, linkMarkers } =
+      addLinkPositionMarkers(contentWithNonHeadingMarkers)
+
+    // Step 6: 为标题添加标记文本（用于 PDF 书签定位）
+    const contentWithMarkers = addMarkerText(contentWithLinkMarkers, headings)
+
+    // Step 7: 为 h1 标题添加分页（从第二个开始）
     const contentWithPageBreaks = addH1PageBreaks(contentWithMarkers, headings)
 
-    // Step 5: 生成标记列表
-    const markers = headings.map((_, i) => `PDFMARK${i.toString().padStart(3, '0')}`)
+    // Step 8: 生成所有标记列表
+    const headingMarkers = headings.map((_, i) => `PDFMARK${i.toString().padStart(3, '0')}`)
+    const allMarkers = [...headingMarkers, ...nonHeadingMarkers, ...linkMarkers]
 
     // 构建封面 meta 信息（中心位置，用于其他信息如密级）
     const metaItems: string[] = []
@@ -365,17 +377,17 @@ export function usePDF() {
     }
     const metaHtml = metaItems.length > 0 ? `<div class="meta">${metaItems.join('')}</div>` : ''
 
-    // Step 6: 获取字体 CSS（用于 PDF 渲染环境）
+    // Step 9: 获取字体 CSS（用于 PDF 渲染环境）
     const fontFaceStyles = await getFontFaceStyles(fontConfig, contentWithPageBreaks)
 
-    // Step 7: 创建 HTML 文档
+    // Step 10: 创建 HTML 文档
     // 封面右下角使用 author、copyright 和当前日期
     const fullHtml = getFullHtml(
       fileName, coverTitle, contentWithPageBreaks, metaHtml, fontConfig, fontFaceStyles,
       coverSubtitle, metadata.author, metadata.copyright
     )
 
-    // Step 8: 调用 Rust command 打印 PDF 并提取标记位置（使用内存流优化）
+    // Step 11: 调用 Rust command 打印 PDF 并提取标记位置（使用内存流优化）
     // 进度会通过 Tauri 事件推送，前端监听 export-progress 事件
     try {
       const printResult = await invoke<{
@@ -383,10 +395,12 @@ export function usePDF() {
         path: string
         error?: string
         bookmarks: Array<{ title: string; page: number; y: number; level: number }>
+        link_targets: Array<{ marker: string; page: number; y: number }>
+        link_positions: Array<{ marker: string; page: number; y: number }>
       }>('print_to_pdf_stream_with_markers', {
         html: fullHtml,
         savePath: savePath,
-        markers: markers
+        markers: allMarkers
       })
 
       if (!printResult.success) {
@@ -394,17 +408,34 @@ export function usePDF() {
         return
       }
 
-      // Step 8: 构建书签数据（使用返回的位置信息）
+      // 打印 Rust 返回的坐标信息
+      console.log('[PDF] ========== Rust 返回坐标信息 ========== ')
+      console.log('[PDF] 书签坐标 (PDFMARKxxx):')
+      printResult.bookmarks.forEach((b, i) => {
+        console.log(`[PDF]   PDFMARK${i.toString().padStart(3, '0')}: page=${b.page}, y=${b.y}, marker=${b.title}`)
+      })
+      console.log('[PDF] 链接目标坐标 (LINKMARKxxx):')
+      printResult.link_targets.forEach((p) => {
+        console.log(`[PDF]   ${p.marker}: page=${p.page}, y=${p.y}`)
+      })
+      console.log('[PDF] 链接位置坐标 (LINKPOSxxx):')
+      printResult.link_positions.forEach((p) => {
+        console.log(`[PDF]   ${p.marker}: page=${p.page}, y=${p.y}`)
+      })
+
+      // Step 12: 构建书签数据（使用返回的位置信息）
       // 进度已通过事件推送为"注入书签..."
       const bookmarks = headings.map((h, i) => {
-        const pos = printResult.bookmarks.find(b => b.title === markers[i])
+        const marker = headingMarkers[i]
+        const pos = printResult.bookmarks.find(b => b.title === marker)
         if (!pos) {
-          console.warn(`未找到 marker: ${markers[i]} 对应标题: ${h.text}`)
+          console.warn(`未找到 marker: ${marker} 对应标题: ${h.text}`)
         }
         // pdf-extract 返回的 page 是 1-indexed（包含封面页）
         // 减去封面页（第 1 页），得到正文页码（从 1 开始）
         // 例如：pos.page = 2（PDF 第 2 页，正文第一页） -> page = 1
         const page = pos ? Math.max(1, pos.page - 1) : 1
+        console.log(`[PDF] 书签映射: heading.id="${h.id}" -> marker="${marker}" -> page=${page}, y=${pos?.y || 700}`)
         return {
           title: h.text,
           level: h.level,
@@ -424,7 +455,89 @@ export function usePDF() {
         }
       }
 
-      // Step 9: 添加页码和页眉
+      // Step 13: 构建链接数据并注入 Link Annotations
+      // 构建标题 ID → 坐标映射（复用书签结果）
+      console.log('[PDF] ========== 构建链接坐标映射 ========== ')
+      const headingIdToPosition = new Map<string, { page: number; y: number }>()
+      headings.forEach((h, i) => {
+        const pos = printResult.bookmarks.find(b => b.title === headingMarkers[i])
+        if (pos) {
+          // PDF 页码（1-indexed），不减封面页，因为 Link Annotation 使用 PDF 实际页码
+          headingIdToPosition.set(h.id, { page: pos.page, y: pos.y })
+          console.log(`[PDF] 标题ID映射: "${h.id}" -> page=${pos.page}, y=${pos.y}`)
+        }
+      })
+
+      // 构建非标题目标 ID → 坐标映射
+      const nonHeadingIdToPosition = new Map<string, { page: number; y: number }>()
+      const nonHeadingIds = Array.from(linkClassification.nonHeadingLinks)
+      nonHeadingIds.forEach((targetId, i) => {
+        const marker = `LINKMARK${i.toString().padStart(3, '0')}`
+        const pos = printResult.link_targets.find(p => p.marker === marker)
+        if (pos) {
+          nonHeadingIdToPosition.set(targetId, { page: pos.page, y: pos.y })
+          console.log(`[PDF] 非标题目标映射: "${targetId}" -> marker="${marker}" -> page=${pos.page}, y=${pos.y}`)
+        }
+      })
+
+      // 构建链接位置映射
+      const linkPosToPosition = new Map<string, { page: number; y: number }>()
+      linkMarkers.forEach((marker) => {
+        const pos = printResult.link_positions.find(p => p.marker === marker)
+        if (pos) {
+          linkPosToPosition.set(marker, { page: pos.page, y: pos.y })
+        }
+      })
+
+      // 构建链接输入数据
+      console.log('[PDF] ========== 构建链接数据 ========== ')
+      console.log(`[PDF] allLinkHrefs数量: ${linkClassification.allLinkHrefs.length}`)
+      const links: Array<{
+        href_id: string
+        link_page: number
+        link_y: number
+        target_page: number
+        target_y: number
+      }> = []
+
+      linkClassification.allLinkHrefs.forEach((href, i) => {
+        const linkMarker = `LINKPOS${i.toString().padStart(3, '0')}`
+        const linkPos = linkPosToPosition.get(linkMarker)
+
+        // 查找目标坐标
+        const targetPos = headingIdToPosition.get(href) || nonHeadingIdToPosition.get(href)
+
+        console.log(`[PDF] 链接 #${i}: href="${href}"`)
+        console.log(`[PDF]   链接位置: marker="${linkMarker}" -> page=${linkPos?.page || 'N/A'}, y=${linkPos?.y || 'N/A'}`)
+        console.log(`[PDF]   目标位置: page=${targetPos?.page || 'N/A'}, y=${targetPos?.y || 'N/A'}`)
+
+        if (linkPos && targetPos) {
+          links.push({
+            href_id: href,
+            link_page: linkPos.page,  // PDF 页码（1-indexed）
+            link_y: linkPos.y,
+            target_page: targetPos.page,
+            target_y: targetPos.y
+          })
+          console.log(`[PDF]   ✓ 链接已添加到注入列表`)
+        } else {
+          console.log(`[PDF]   ✗ 链接未添加: linkPos=${!!linkPos}, targetPos=${!!targetPos}`)
+        }
+      })
+
+      // 注入 Link Annotations
+      if (links.length > 0) {
+        try {
+          await invoke<void>('inject_links', {
+            pdfPath: printResult.path,
+            links: links
+          })
+        } catch (linkError) {
+          handleWarning(linkError, '链接注入')
+        }
+      }
+
+      // Step 14: 添加页码和页眉
       updateStep('添加页码...', 5)
       try {
         const pdfBytes = await readFile(printResult.path)
@@ -663,6 +776,97 @@ function addMarkerText(htmlContent: string, headings: Array<{ level: number; tex
   })
 
   return result
+}
+
+/**
+ * 分类链接目标：区分指向标题的链接和指向非标题的链接
+ */
+function classifyLinkTargets(
+  htmlContent: string,
+  headings: Array<{ id: string }>
+): { headingLinks: Set<string>, nonHeadingLinks: Set<string>, allLinkHrefs: string[] } {
+  const headingIds = new Set(headings.map(h => h.id))
+  const headingLinks = new Set<string>()
+  const nonHeadingLinks = new Set<string>()
+  const allLinkHrefs: string[] = []
+
+  // 提取所有 href="#xxx" 的内部链接
+  htmlContent.replace(/<a[^>]*href="#([^"]+)"[^>]*>/g, (_, href) => {
+    // 链接可能是 URL 编码，需要解码后匹配
+    let decodedHref = href
+    try {
+      decodedHref = decodeURIComponent(href)
+    } catch {
+      // URL 解码失败，使用原始值
+    }
+
+    allLinkHrefs.push(decodedHref)
+
+    if (headingIds.has(decodedHref) || headingIds.has(href)) {
+      headingLinks.add(decodedHref)
+    } else {
+      nonHeadingLinks.add(decodedHref)
+    }
+    return _
+  })
+
+  return { headingLinks, nonHeadingLinks, allLinkHrefs }
+}
+
+/**
+ * 为非标题目标添加标记（用于提取精确位置）
+ */
+function addNonHeadingMarkers(htmlContent: string, nonHeadingLinks: Set<string>): { html: string, markers: string[] } {
+  let result = htmlContent
+  const markers: string[] = []
+  const markerMap = new Map<string, string>()
+
+  // 为每个非标题目标生成唯一标记
+  let markerIndex = 0
+  nonHeadingLinks.forEach(targetId => {
+    const marker = `LINKMARK${markerIndex.toString().padStart(3, '0')}`
+    markers.push(marker)
+    markerMap.set(targetId, marker)
+    markerIndex++
+  })
+
+  // 在目标元素内插入标记
+  markerMap.forEach((marker, targetId) => {
+    const markerHtml = `<span style="font-family:'Courier New',Courier,monospace;font-size:0.01em;line-height:1;color:#f9fafb;display:inline-block;vertical-align:baseline;">${marker}</span>`
+
+    // 尝试多种匹配方式
+    // 1. 匹配 id="xxx" 的元素开标签
+    const elementRegex1 = new RegExp(`<[^>]*\\bid="${targetId}"[^>]*>`, 'g')
+    result = result.replace(elementRegex1, (match) => match + markerHtml)
+
+    // 2. 如果没有匹配，尝试匹配带引号变体
+    if (!elementRegex1.test(result)) {
+      const elementRegex2 = new RegExp(`<[^>]*\\bid='${targetId}'[^>]*>`, 'g')
+      result = result.replace(elementRegex2, (match) => match + markerHtml)
+    }
+  })
+
+  return { html: result, markers }
+}
+
+/**
+ * 为链接元素添加位置标记（用于提取链接点击区域）
+ */
+function addLinkPositionMarkers(htmlContent: string): { html: string, linkMarkers: string[] } {
+  let result = htmlContent
+  const linkMarkers: string[] = []
+  let linkIndex = 0
+
+  // 为每个内部链接添加位置标记
+  result = result.replace(/<a[^>]*href="#[^"]*"[^>]*>/g, (match) => {
+    const marker = `LINKPOS${linkIndex.toString().padStart(3, '0')}`
+    linkMarkers.push(marker)
+    const markerHtml = `<span style="font-family:'Courier New',Courier,monospace;font-size:0.01em;line-height:1;color:#f9fafb;display:inline-block;vertical-align:baseline;">${marker}</span>`
+    linkIndex++
+    return match + markerHtml
+  })
+
+  return { html: result, linkMarkers }
 }
 
 /**

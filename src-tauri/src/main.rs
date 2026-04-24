@@ -6,12 +6,14 @@ mod plantuml;
 mod bookmark;
 mod pdf_extract;
 mod font_subset;
+mod link;
 
 use print::{print_to_pdf, print_to_pdf_with_bookmarks, check_print_support, print_to_pdf_stream_with_markers};
 use plantuml::render_plantuml;
 use bookmark::inject_bookmarks;
 use pdf_extract::{extract_pdf_markers, extract_pdf_markers_from_bytes};
 use font_subset::{subset_chinese_font, subset_font_to_base64};
+use link::inject_links;
 use std::fs;
 use encoding_rs::{UTF_8, GB18030};
 use tauri::{Emitter, Manager, AppHandle};
@@ -227,6 +229,7 @@ fn main() {
             extract_pdf_markers,
             extract_pdf_markers_from_bytes,
             print_to_pdf_stream_with_markers,
+            inject_links,
             read_file_with_encoding,
             get_resource_dir,
             get_config_dir,
