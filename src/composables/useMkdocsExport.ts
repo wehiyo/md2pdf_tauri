@@ -734,6 +734,43 @@ export async function prepareMkdocsExport(
     }
   }
 
+  // 提取自定义锚点（空 <a id="xxx"> 元素）并添加到映射
+  // 这样跨文件链接如 ./file.md#anchor 能正确跳转到自定义锚点
+  for (const chapter of chapters) {
+    if (chapter.filePath) {
+      const fileName = chapter.filePath.split(/[/\\]/).pop() || ''
+      const fileNameNoExt = fileName.replace(/\.md$/i, '')
+
+      // 从章节内容中提取自定义锚点 ID
+      if (chapter.content) {
+        const { parse, renderWithNumberPrefix } = useMarkdown()
+        const { body } = parse(chapter.content)
+        const chapterHtml = renderWithNumberPrefix(body, chapter.numberPrefix, chapter.navLevel)
+
+        // 提取空锚点 <a id="xxx"></a>
+        const emptyAnchorRegex = /<a\s[^>]*\bid="([^"]+)"[^>]*>\s*<\/a>/g
+        let match
+        while ((match = emptyAnchorRegex.exec(chapterHtml)) !== null) {
+          const anchorId = match[1]
+          // 添加到全局映射
+          const key = slugifyForMkdocs(anchorId)
+          const existing = headingTextToIds.get(key) || []
+          if (!existing.includes(anchorId)) {
+            existing.push(anchorId)
+            headingTextToIds.set(key, existing)
+          }
+          // 添加到文件映射
+          const fileHeadings = filePathToHeadings.get(fileName) || filePathToHeadings.get(fileNameNoExt)
+          if (fileHeadings && !fileHeadings.has(key)) {
+            fileHeadings.set(key, anchorId)
+          }
+          // 添加到 allHeadingIds（用于 PDF 链接目标分类）
+          allHeadingIds.add(anchorId)
+        }
+      }
+    }
+  }
+
   // 替换所有 href，包括跨文件链接
   // 格式1: href="#xxx" - 内部锚点
   // 格式2: href="file.md#xxx" - 跨文件锚点链接
