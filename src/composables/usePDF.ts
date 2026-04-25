@@ -206,7 +206,7 @@ export function usePDF() {
       updateStep('预渲染图表...', 1)
       contentWithoutToc = await preRenderDiagrams(contentWithoutToc)
 
-      // 提取标题数据（h1-h5，用于分页和书签）
+      // 提取标题数据（h1-h6，用于标记和链接；书签显示 h1-h5）
       const headings = extractHeadings(contentWithoutToc)
 
       // 生成 PDF
@@ -431,27 +431,33 @@ export function usePDF() {
       })
 
       // Step 12: 构建书签数据（使用返回的位置信息）
+      // PDF 书签显示 h1~h5，需要过滤 h6
       // 进度已通过事件推送为"注入书签..."
-      const bookmarks = headings.map((h, i) => {
-        const marker = headingMarkers[i]
-        const pos = printResult.bookmarks.find(b => b.title === marker)
-        if (!pos) {
-          console.warn(`未找到 marker: ${marker} 对应标题: ${h.text}`)
-        }
-        // pdf-extract 返回的 page 是 1-indexed（包含封面页）
-        // 减去封面页（第 1 页），得到正文页码（从 1 开始）
-        // 例如：pos.page = 2（PDF 第 2 页，正文第一页） -> page = 1
-        const page = pos ? Math.max(1, pos.page - 1) : 1
-        const pageHeight = pos?.page_height || 842.0 // 默认 A4 高度
-        console.log(`[PDF] 书签映射: heading.id="${h.id}" -> marker="${marker}" -> page=${page}, y=${pos?.y || 700}, page_height=${pageHeight}`)
-        return {
-          title: h.text,
-          level: h.level,
-          page,
-          y: pos ? pos.y : 700,
-          page_height: pageHeight
-        }
-      })
+      const bookmarks = headings
+        .filter(h => h.level <= 5)  // 书签只显示 h1-h5
+        .map((h) => {
+          // 注意：过滤后的索引与 headingMarkers 对应关系需要调整
+          // headingMarkers 是按原始顺序生成的，需要找到对应的 marker
+          const originalIndex = headings.findIndex(oh => oh.id === h.id)
+          const marker = headingMarkers[originalIndex]
+          const pos = printResult.bookmarks.find(b => b.title === marker)
+          if (!pos) {
+            console.warn(`未找到 marker: ${marker} 对应标题: ${h.text}`)
+          }
+          // pdf-extract 返回的 page 是 1-indexed（包含封面页）
+          // 减去封面页（第 1 页），得到正文页码（从 1 开始）
+          // 例如：pos.page = 2（PDF 第 2 页，正文第一页） -> page = 1
+          const page = pos ? Math.max(1, pos.page - 1) : 1
+          const pageHeight = pos?.page_height || 842.0 // 默认 A4 高度
+          console.log(`[PDF] 书签映射: heading.id="${h.id}" -> marker="${marker}" -> page=${page}, y=${pos?.y || 700}, page_height=${pageHeight}`)
+          return {
+            title: h.text,
+            level: h.level,
+            page,
+            y: pos ? pos.y : 700,
+            page_height: pageHeight
+          }
+        })
 
       if (bookmarks.length > 0) {
         try {
@@ -749,14 +755,15 @@ async function addPageNumbers(
 }
 
 /**
- * 提取 h1-h5 标题（根据 id 去重）
+ * 提取 h1-h6 标题（根据 id 去重）
+ * 标记和链接支持 h1-h6，但 PDF 书签只显示 h1-h5
  */
 function extractHeadings(htmlContent: string): Array<{ level: number; text: string; id: string }> {
   const headings: Array<{ level: number; text: string; id: string }> = []
   const seenIds = new Set<string>()
-  // 匹配 h1-h5 标签：h 后跟数字，然后空格和属性，包含 id 属性
-  // PDF 书签显示 h1~h5，所以匹配 h1-h5
-  const headingRegex = /<h([1-5])\s[^>]*?id="([^"]*)"[^>]*>(.*?)<\/h\1>/g
+  // 匹配 h1-h6 标签：h 后跟数字，然后空格和属性，包含 id 属性
+  // 标记和链接支持 h1-h6，PDF 书签显示 h1~h5
+  const headingRegex = /<h([1-6])\s[^>]*?id="([^"]*)"[^>]*>(.*?)<\/h\1>/g
   let match
 
   while ((match = headingRegex.exec(htmlContent)) !== null) {
