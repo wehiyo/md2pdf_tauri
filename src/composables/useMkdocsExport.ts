@@ -793,42 +793,44 @@ export async function prepareMkdocsExport(
     // 检查是否是跨文件链接（带 .md 扩展名）
     const mdLinkMatch = href.match(/^([^#]+\.md)(#(.+))?$/i)
     if (mdLinkMatch) {
-      const fileName = mdLinkMatch[1]
+      const rawFileName = mdLinkMatch[1]
       const anchor = mdLinkMatch[3]  // 可能为 undefined
 
+      // 提取纯文件名（去掉路径前缀）
+      // 例如：./fun2/alg/flow.md -> flow.md
+      // 例如：fun2/alg/flow.md -> flow.md
+      const fileName = rawFileName.split(/[/\\]/).pop() || rawFileName
+      const fileNameNoExt = fileName.replace(/\.md$/i, '')
+
       if (anchor) {
-        // 跨文件锚点链接：data.md#数据库 -> #数据库
+        // 跨文件锚点链接：必须限定在目标文件内查找
         const decodedAnchor = decodeURIComponent(anchor)
         const slugifiedAnchor = slugifyForMkdocs(decodedAnchor)
 
-        // 优先从目标文件的标题映射中查找
-        const fileHeadings = filePathToHeadings.get(fileName)
+        // 只从目标文件的标题映射中查找，不允许 fallback 到全局
+        const fileHeadings = filePathToHeadings.get(fileName) || filePathToHeadings.get(fileNameNoExt)
         if (fileHeadings) {
           const targetId = fileHeadings.get(slugifiedAnchor)
           if (targetId) {
             newHref = `#${targetId}`
           } else {
             // 目标文件中没有该标题，跳转到文件章节开头
-            const chapterId = filePathToChapterId.get(fileName)
+            const chapterId = filePathToChapterId.get(fileName) || filePathToChapterId.get(fileNameNoExt)
             if (chapterId) {
               newHref = `#${chapterId}`
             }
           }
         } else {
-          // 没有找到文件映射，使用全局映射（兜底）
-          const targetIds = headingTextToIds.get(slugifiedAnchor)
-          if (targetIds && targetIds.length > 0) {
-            newHref = `#${targetIds[0]}`
-          } else {
-            const chapterId = filePathToChapterId.get(fileName)
-            if (chapterId) {
-              newHref = `#${chapterId}`
-            }
+          // 目标文件不存在于映射中（可能是外部链接或未加载的文件）
+          // 跳转到章节开头作为 fallback
+          const chapterId = filePathToChapterId.get(fileName) || filePathToChapterId.get(fileNameNoExt)
+          if (chapterId) {
+            newHref = `#${chapterId}`
           }
         }
       } else {
         // 只有文件链接：data.md -> #chapter-x
-        const chapterId = filePathToChapterId.get(fileName)
+        const chapterId = filePathToChapterId.get(fileName) || filePathToChapterId.get(fileNameNoExt)
         if (chapterId) {
           newHref = `#${chapterId}`
         }
