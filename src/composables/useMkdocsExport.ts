@@ -238,6 +238,12 @@ function extractHeadingsFromMd(content: string, md: MarkdownIt): { text: string;
         const text = tokens[i + 1].content || ''
         headings.push({ text, level })
       }
+    } else if (tokens[i].type === 'heading_deflist_block') {
+      // heading_deflist 标题（如 `#### JAVA : 定义内容`）
+      const data = JSON.parse(tokens[i].content)
+      const level = data.level as number
+      const text = data.titleText as string
+      headings.push({ text, level })
     }
   }
 
