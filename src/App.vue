@@ -117,6 +117,7 @@ import {
   collectNavChapters,
   loadAllMdFiles,
   resetChapterCounters,
+  extractH1TitleFromContent,
   type BookmarkTreeNode
 } from './composables/useMkdocsExport'
 import { exportStaticSite } from './composables/useStaticSiteExport'
@@ -1161,6 +1162,8 @@ async function importMkdocs() {
       // 从 nav 结构提取 md 文件（保留层级结构）
       if (config.nav && Array.isArray(config.nav)) {
         mdFiles.value = extractMdFilesFromNav(config.nav, docsPath)
+        // 异步更新无显式标题文件的名称（从 md h1 提取）
+        await updateMdFileNamesFromH1(mdFiles.value)
       } else {
         mdFiles.value = []
       }
@@ -1214,6 +1217,30 @@ function extractMdFilesFromNav(nav: any[], basePath: string): MdFile[] {
   }
 
   return files
+}
+
+// 从 md 文件提取 h1 标题，更新无显式标题文件的显示名称
+async function updateMdFileNamesFromH1(files: MdFile[]): Promise<void> {
+  for (const file of files) {
+    if (file.isFolder && file.children) {
+      // 递归处理文件夹子项
+      await updateMdFileNamesFromH1(file.children)
+    } else if (file.path && !file.hasExplicitTitle) {
+      // 无显式标题的文件，尝试提取 h1 标题
+      try {
+        const [text, _encoding] = await invoke<[string, string]>('read_file_with_encoding', {
+          path: file.path
+        })
+        const content = text.replace(/\r\n/g, '\n')
+        const h1Title = extractH1TitleFromContent(content)
+        if (h1Title && h1Title.trim() !== '') {
+          file.name = h1Title
+        }
+      } catch (error) {
+        console.warn(`无法读取文件 ${file.path}:`, error)
+      }
+    }
+  }
 }
 
 // 从文件树打开文件（不提示保存）

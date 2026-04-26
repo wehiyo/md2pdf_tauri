@@ -153,30 +153,48 @@ export function collectNavChapters(
 /**
  * 从 Markdown 内容提取 h1 标题
  */
-function extractH1Title(content: string): string | undefined {
-  // 跳过 frontmatter
+export function extractH1TitleFromContent(content: string): string | undefined {
   const lines = content.split('\n')
   let startIndex = 0
 
-  if (lines[0] === '---') {
-    for (let i = 1; i < lines.length; i++) {
-      if (lines[i] === '---') {
-        startIndex = i + 1
-        break
+  // 跳过 frontmatter（查找第一个 ---）
+  for (let i = 0; i < lines.length; i++) {
+    if (lines[i].trim() === '---') {
+      // 找到第二个 ---
+      for (let j = i + 1; j < lines.length; j++) {
+        if (lines[j].trim() === '---') {
+          startIndex = j + 1
+          break
+        }
       }
+      break
+    }
+    // 如果第一个非空行不是 ---，说明没有 frontmatter
+    if (lines[i].trim() !== '' && lines[i].trim() !== '---') {
+      startIndex = i
+      break
     }
   }
 
   // 查找 h1 标题
   for (let i = startIndex; i < lines.length; i++) {
     const line = lines[i]
+    // 跳过空行
+    if (line.trim() === '') continue
+
     // # 开头的 h1
     if (line.startsWith('# ') && !line.startsWith('## ')) {
       return line.substring(2).trim()
     }
-    // === 下划线风格的 h1（上一行是标题）
+    // === 下划线风格的 h1（下一行是 ===，上一行是标题）
     if (line.match(/^={3,}$/) && i > startIndex && lines[i - 1].trim()) {
       return lines[i - 1].trim()
+    }
+    // 如果找到非 h1 标题（h2 或其他内容），停止搜索
+    // h1 应该是文件的第一个标题
+    if (line.startsWith('## ') || line.match(/^[^#\s]/)) {
+      // 如果还没找到 h1，继续搜索（可能是下划线格式的 h1 在后面）
+      continue
     }
   }
 
@@ -196,7 +214,7 @@ export async function loadAllMdFiles(chapters: NavChapter[]): Promise<void> {
         // 规范化换行符
         chapter.content = text.replace(/\r\n/g, '\n')
         // 提取 h1 标题
-        chapter.mdH1Title = extractH1Title(chapter.content)
+        chapter.mdH1Title = extractH1TitleFromContent(chapter.content)
       } catch (error) {
         console.warn(`无法读取文件 ${chapter.filePath}:`, error)
         chapter.content = ''
@@ -600,12 +618,12 @@ export function combineChaptersToHtml(chapters: NavChapter[]): string {
     chapterIndex++
 
     // 确定显示标题
-    // 规则：nav 有标题时用 nav 标题；nav 无标题时用 md h1 标题
+    // 规则：nav 有标题时用 nav 标题；nav 无标题时用 md h1 标题，否则用文件名
     // 如果 nav 标题与 md h1 相同，显示 nav 标题（内容相同）
     let displayTitle = chapter.title  // 默认使用 nav 标题
     if (!chapter.title || chapter.title.trim() === '') {
-      // nav 无标题，使用 md h1
-      displayTitle = chapter.mdH1Title || ''
+      // nav 无标题，优先使用 md h1，否则用文件名
+      displayTitle = chapter.mdH1Title || chapter.fallbackTitle || ''
     }
     chapter.displayTitle = displayTitle
 
