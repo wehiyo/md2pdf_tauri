@@ -15,6 +15,7 @@ export interface NavChapter {
   htmlId?: string        // HTML 标题元素的 id（用于书签跳转）
   mdH1Title?: string     // md 文件的 h1 标题（如果有）
   displayTitle?: string  // 实际显示的标题
+  fallbackTitle?: string // 后备标题：文件名（去掉扩展名）
 }
 
 export interface Heading {
@@ -132,13 +133,16 @@ export function collectNavChapters(
       // 文件条目
       // 如果有显式标题，使用 nav 标题；否则设置为空，后续使用 md h1
       const navTitle = item.hasExplicitTitle ? item.name : ''
+      // 从文件路径提取文件名（去掉扩展名）作为后备标题
+      const fileName = item.path.replace(/\\/g, '/').split('/').pop()?.replace(/\.md$/i, '') || ''
       chapters.push({
         title: navTitle,
         navLevel: level,
         filePath: item.path,
         numberPrefix,
         chapterNumber,
-        headings: []
+        headings: [],
+        fallbackTitle: fileName  // 后备标题：文件名
       })
     }
   }
@@ -446,10 +450,10 @@ export function renumberHeadings(chapters: NavChapter[]): BookmarkTreeNode[] {
 
     // 创建章节书签节点
     // nav level 决定书签层级：level 0 → h1 (层级 1), level 1 → h2 (层级 2), ...
-    // 确定显示标题：nav 有标题用 nav，nav 无标题用 md h1
+    // 确定显示标题：nav 有标题用 nav，nav 无标题用 md h1，否则用文件名
     let displayTitle = chapter.title
     if (!chapter.title || chapter.title.trim() === '') {
-      displayTitle = chapter.mdH1Title || ''
+      displayTitle = chapter.mdH1Title || chapter.fallbackTitle || ''
     }
     chapter.displayTitle = displayTitle
 
