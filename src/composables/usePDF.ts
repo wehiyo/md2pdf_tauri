@@ -8,7 +8,7 @@ import wavedrom from 'wavedrom'
 import JSON5 from 'json5'
 import type { Metadata } from './useMarkdown'
 import type { FontConfig } from './useConfig'
-import { BUILTIN_CHINESE_FONTS, BUILTIN_CODE_FONTS } from './useConfig'
+import { BUILTIN_CHINESE_FONTS, BUILTIN_CODE_FONTS, PAGE_SIZE_PRESETS } from './useConfig'
 import { useExportProgress } from './useExportProgress'
 import { useErrorHandling } from './useErrorHandling'
 
@@ -396,6 +396,18 @@ export function usePDF() {
 
     // Step 11: 调用 Rust command 打印 PDF 并提取标记位置（使用内存流优化）
     // 进度会通过 Tauri 事件推送，前端监听 export-progress 事件
+    // 构建页面设置参数
+    const pageSize = fontConfig?.pageSize || 'A4'
+    const preset = PAGE_SIZE_PRESETS[pageSize]
+    const pageSettings = {
+      page_width_mm: preset.width,
+      page_height_mm: preset.height,
+      margin_top_mm: fontConfig?.marginTop || 20,
+      margin_bottom_mm: fontConfig?.marginBottom || 20,
+      margin_left_mm: fontConfig?.marginLeft || 25,
+      margin_right_mm: fontConfig?.marginRight || 25,
+    }
+
     try {
       const printResult = await invoke<{
         success: boolean
@@ -407,7 +419,8 @@ export function usePDF() {
       }>('print_to_pdf_stream_with_markers', {
         html: fullHtml,
         savePath: savePath,
-        markers: allMarkers
+        markers: markers,
+        pageSettings: pageSettings
       })
 
       if (!printResult.success) {
@@ -461,9 +474,12 @@ export function usePDF() {
 
       if (bookmarks.length > 0) {
         try {
+          // 计算页面高度（mm 转 pt: pt = mm × 72 / 25.4）
+          const pageHeightPt = pageSettings.page_height_mm * 72 / 25.4
           await invoke<void>('inject_bookmarks', {
             pdfPath: printResult.path,
-            bookmarks: bookmarks
+            bookmarks: bookmarks,
+            pageHeightPt: pageHeightPt
           })
         } catch (bookmarkError) {
           handleWarning(bookmarkError, '书签注入')
@@ -1094,6 +1110,16 @@ function getMarkdownStyles(fontConfig?: FontConfig): string {
 }
 
 /**
+ * 生成 @page CSS 规则（页面尺寸和边距）
+ */
+function getPageCss(pageSize: 'A4' | 'B5' | 'Letter', marginTop: number, marginBottom: number, marginLeft: number, marginRight: number): string {
+  return `
+    @page { margin: ${marginTop}mm ${marginRight}mm ${marginBottom}mm ${marginLeft}mm; size: ${pageSize}; }
+    @page :first { margin: 0; }
+  `
+}
+
+/**
  * 生成完整的 HTML 文档
  * @param title 文档标题（用于 HTML title 标签）
  * @param coverTitle 封面主标题
@@ -1149,8 +1175,13 @@ function getFullHtml(
     ${katexStyles}
     ${highlightStyles}
 
-    @page { margin: 2cm 2.5cm; size: A4; }
-    @page :first { margin: 0; }
+    ${getPageCss(
+      fontConfig?.pageSize || 'A4',
+      fontConfig?.marginTop || 20,
+      fontConfig?.marginBottom || 20,
+      fontConfig?.marginLeft || 25,
+      fontConfig?.marginRight || 25
+    )}
 
     body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; font-size: 11pt; line-height: 1.6; color: #1f2937; margin: 0; padding: 0; }
 

@@ -16,6 +16,9 @@ pub struct BookmarkInput {
     pub page_height: f32, // 页面实际高度（单位 pt）
 }
 
+/// A4 页面高度 (72 DPI) - 用于默认值
+const A4_HEIGHT_PT: f32 = 842.0;
+
 /// 将字符串编码为 UTF-16BE（PDF 书签要求）
 /// 以 BOM (U+FEFF) 开头标识编码
 fn utf16be_encode(s: &str) -> Vec<u8> {
@@ -35,14 +38,14 @@ fn utf16be_encode(s: &str) -> Vec<u8> {
 /// pdf-extract 提取的 Y：从页面顶部开始（翻转后），单位 pt
 /// PDF 书签 Y：从页面底部开始，单位 pt
 /// 转换：PDF_Y = page_height - extracted_Y + offset（向上偏移以跳转到标题上方）
-fn transform_y(extracted_y_pt: f32, page_height: f32) -> f32 {
+fn transform_y(extracted_y_pt: f32, page_height_pt: f32) -> f32 {
     // extracted_y_pt 是 pdf-extract 返回的翻转后坐标（从上往下，顶部为 0）
     // PDF 书签需要从底部往上计算的坐标
     // 向上偏移 15pt，让书签跳转到标题上方一点，避免标题被遮挡
     const OFFSET: f32 = 15.0;
     // 转换：从顶部往下 -> 从底部往上
     // y_pdf = page_height - y_from_top + OFFSET
-    page_height - extracted_y_pt + OFFSET
+    page_height_pt - extracted_y_pt + OFFSET
 }
 
 /// 注入书签到 PDF
@@ -50,7 +53,11 @@ fn transform_y(extracted_y_pt: f32, page_height: f32) -> f32 {
 pub async fn inject_bookmarks(
     pdf_path: String,
     bookmarks: Vec<BookmarkInput>,
+    page_height_pt: Option<f32>,
 ) -> Result<(), String> {
+    // 使用传入的页面高度或默认 A4
+    let page_height = page_height_pt.unwrap_or(A4_HEIGHT_PT);
+
     if bookmarks.is_empty() {
         return Ok(()); // 无书签，直接返回
     }
@@ -66,7 +73,7 @@ pub async fn inject_bookmarks(
         .collect();
 
     // 构建书签树结构
-    let outlines_ref = build_outline_tree(&mut doc, &bookmarks, &page_ids)?;
+    let outlines_ref = build_outline_tree(&mut doc, &bookmarks, &page_ids, page_height)?;
 
     // 将 Outlines 挂载到 Catalog
     // 从 trailer 获取 Root (catalog) 引用
@@ -101,13 +108,14 @@ fn build_outline_tree(
     doc: &mut Document,
     bookmarks: &[BookmarkInput],
     page_ids: &[Object],
+    page_height_pt: f32,
 ) -> Result<Object, String> {
     // 创建 Outlines 根节点
     let outlines_dict = Dictionary::new();
     let outlines_id = doc.add_object(Object::Dictionary(outlines_dict));
 
     // 构建树形结构
-    let root_children: Vec<BookmarkNode> = build_tree_structure(doc, bookmarks, page_ids, outlines_id)?;
+    let root_children: Vec<BookmarkNode> = build_tree_structure(doc, bookmarks, page_ids, outlines_id, page_height_pt)?;
 
     if root_children.is_empty() {
         return Ok(Object::Reference(outlines_id));
@@ -145,6 +153,7 @@ fn build_tree_structure(
     bookmarks: &[BookmarkInput],
     page_ids: &[Object],
     parent_id: (u32, u16),
+    page_height_pt: f32,
 ) -> Result<Vec<BookmarkNode>, String> {
     // 使用栈维护当前路径
     let mut root_children: Vec<BookmarkNode> = Vec::new();
@@ -165,8 +174,8 @@ fn build_tree_structure(
         // 获取页面引用
         let page_ref = page_ids[actual_page_index].clone();
 
-        // 转换 Y 坐标（使用页面实际高度）
-        let pdf_y = transform_y(bm.y, bm.page_height);
+        // 转换 Y 坐标（使用动态页面高度）
+        let pdf_y = transform_y(bm.y, page_height_pt);
 
         // 创建书签字典
         let mut bookmark_dict = Dictionary::new();

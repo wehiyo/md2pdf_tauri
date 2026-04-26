@@ -527,36 +527,64 @@ md.renderer.rules.heading_deflist_block = (tokens, idx) => {
       adjustedLevel = Math.min(externalNavLevel + originalLevel, 6)
     }
 
-    // 只有调整后层级 h1~h4 才更新计数器和生成编号
-    let number = ''
+    // h2-h6 都更新计数器（用于 ID 生成）
+    // h2-h4 显示编号，h5-h6 不显示编号但 ID 仍带前缀
+    let number = ''  // 显示编号（仅 h2-h4）
+    let numberPrefixForId = ''  // 用于 ID 的编号前缀（连字符格式）
 
-    if (adjustedLevel >= 1 && adjustedLevel <= 4 && originalLevel >= 2 && originalLevel <= 4) {
-      // 更新计数器（基于原始层级）
+    if (originalLevel >= 2 && originalLevel <= 6) {
+      // 更新计数器
       if (originalLevel === 2) {
         chapterCounters.h2++
         chapterCounters.h3 = 0
         chapterCounters.h4 = 0
+        chapterCounters.h5 = 0
+        chapterCounters.h6 = 0
       } else if (originalLevel === 3) {
         chapterCounters.h3++
         chapterCounters.h4 = 0
+        chapterCounters.h5 = 0
+        chapterCounters.h6 = 0
       } else if (originalLevel === 4) {
         chapterCounters.h4++
+        chapterCounters.h5 = 0
+        chapterCounters.h6 = 0
+      } else if (originalLevel === 5) {
+        chapterCounters.h5++
+        chapterCounters.h6 = 0
+      } else if (originalLevel === 6) {
+        chapterCounters.h6++
       }
 
-      // 生成编号（使用外部前缀）
+      // 生成 ID 前缀（h2-h6 都生成）
+      const prefixParts = externalNumberPrefix.replace(/\.$/, '').split('.')
       if (originalLevel === 2) {
-        number = `${externalNumberPrefix}${chapterCounters.h2}. `
+        if (adjustedLevel <= 4) {
+          number = `${externalNumberPrefix}${chapterCounters.h2}. `
+        }
+        numberPrefixForId = prefixParts.join('-') + '-' + chapterCounters.h2 + '-'
       } else if (originalLevel === 3) {
-        number = `${externalNumberPrefix}${chapterCounters.h2}.${chapterCounters.h3}. `
+        if (adjustedLevel <= 4) {
+          number = `${externalNumberPrefix}${chapterCounters.h2}.${chapterCounters.h3}. `
+        }
+        numberPrefixForId = prefixParts.join('-') + '-' + chapterCounters.h2 + '-' + chapterCounters.h3 + '-'
       } else if (originalLevel === 4) {
-        number = `${externalNumberPrefix}${chapterCounters.h2}.${chapterCounters.h3}.${chapterCounters.h4}. `
+        if (adjustedLevel <= 4) {
+          number = `${externalNumberPrefix}${chapterCounters.h2}.${chapterCounters.h3}.${chapterCounters.h4}. `
+        }
+        numberPrefixForId = prefixParts.join('-') + '-' + chapterCounters.h2 + '-' + chapterCounters.h3 + '-' + chapterCounters.h4 + '-'
+      } else if (originalLevel === 5) {
+        // h5：不显示编号，但 ID 带前缀
+        numberPrefixForId = prefixParts.join('-') + '-' + chapterCounters.h2 + '-' + chapterCounters.h3 + '-' + chapterCounters.h4 + '-' + chapterCounters.h5 + '-'
+      } else if (originalLevel === 6) {
+        // h6：不显示编号，但 ID 带前缀
+        numberPrefixForId = prefixParts.join('-') + '-' + chapterCounters.h2 + '-' + chapterCounters.h3 + '-' + chapterCounters.h4 + '-' + chapterCounters.h5 + '-' + chapterCounters.h6 + '-'
       }
     }
 
-    // 生成 ID（MkDocs 模式：带编号前缀，格式如 "1-1-数据库"）
-    const numberPrefix = number.trim().replace(/\./g, '-')
+    // 生成带编号前缀的 ID（MkDocs 模式：编号前缀 + 标题 slug）
     const baseSlug = slugifyForMkdocs(titleText)
-    const headingId = numberPrefix ? `${numberPrefix}-${baseSlug}` : baseSlug
+    const headingId = numberPrefixForId ? `${numberPrefixForId}${baseSlug}` : baseSlug
 
     // 渲染标题 inline 内容
     const headingContent = titleText
@@ -1216,7 +1244,7 @@ let externalNumberPrefix = ''
 let externalNavLevel = 0
 let isMkdocsExportMode = false  // 标识是否处于 MkDocs 组合导出模式
 let globalHeadingIndex = 0
-const chapterCounters = { h2: 0, h3: 0, h4: 0 }
+const chapterCounters = { h2: 0, h3: 0, h4: 0, h5: 0, h6: 0 }
 let lastAdjustedLevel = 0  // 存储最近的调整后层级（用于 heading_close）
 
 /**
@@ -1281,37 +1309,64 @@ md.renderer.rules.heading_open = (tokens, idx) => {
       adjustedLevel = Math.min(externalNavLevel + originalLevel, 6)
     }
 
-    // 只有调整后层级 h1~h4 才更新计数器和生成编号（adjustedLevel <= 4）
-    let number = ''
+    // h2-h6 都更新计数器（用于 ID 生成）
+    // h2-h4 显示编号，h5-h6 不显示编号但 ID 仍带前缀
+    let number = ''  // 显示编号（仅 h2-h4）
+    let numberPrefixForId = ''  // 用于 ID 的编号前缀（连字符格式）
 
-    if (adjustedLevel >= 1 && adjustedLevel <= 4 && originalLevel >= 2 && originalLevel <= 4) {
+    if (originalLevel >= 2 && originalLevel <= 6) {
       // 更新计数器
       if (originalLevel === 2) {
         chapterCounters.h2++
         chapterCounters.h3 = 0
         chapterCounters.h4 = 0
+        chapterCounters.h5 = 0
+        chapterCounters.h6 = 0
       } else if (originalLevel === 3) {
         chapterCounters.h3++
         chapterCounters.h4 = 0
+        chapterCounters.h5 = 0
+        chapterCounters.h6 = 0
       } else if (originalLevel === 4) {
         chapterCounters.h4++
+        chapterCounters.h5 = 0
+        chapterCounters.h6 = 0
+      } else if (originalLevel === 5) {
+        chapterCounters.h5++
+        chapterCounters.h6 = 0
+      } else if (originalLevel === 6) {
+        chapterCounters.h6++
       }
 
-      // 生成编号
+      // 生成 ID 前缀（h2-h6 都生成）
+      const prefixParts = externalNumberPrefix.replace(/\.$/, '').split('.')
       if (originalLevel === 2) {
-        number = `${externalNumberPrefix}${chapterCounters.h2}. `
+        if (adjustedLevel <= 4) {
+          number = `${externalNumberPrefix}${chapterCounters.h2}. `
+        }
+        numberPrefixForId = prefixParts.join('-') + '-' + chapterCounters.h2 + '-'
       } else if (originalLevel === 3) {
-        number = `${externalNumberPrefix}${chapterCounters.h2}.${chapterCounters.h3}. `
+        if (adjustedLevel <= 4) {
+          number = `${externalNumberPrefix}${chapterCounters.h2}.${chapterCounters.h3}. `
+        }
+        numberPrefixForId = prefixParts.join('-') + '-' + chapterCounters.h2 + '-' + chapterCounters.h3 + '-'
       } else if (originalLevel === 4) {
-        number = `${externalNumberPrefix}${chapterCounters.h2}.${chapterCounters.h3}.${chapterCounters.h4}. `
+        if (adjustedLevel <= 4) {
+          number = `${externalNumberPrefix}${chapterCounters.h2}.${chapterCounters.h3}.${chapterCounters.h4}. `
+        }
+        numberPrefixForId = prefixParts.join('-') + '-' + chapterCounters.h2 + '-' + chapterCounters.h3 + '-' + chapterCounters.h4 + '-'
+      } else if (originalLevel === 5) {
+        // h5：不显示编号，但 ID 带前缀
+        numberPrefixForId = prefixParts.join('-') + '-' + chapterCounters.h2 + '-' + chapterCounters.h3 + '-' + chapterCounters.h4 + '-' + chapterCounters.h5 + '-'
+      } else if (originalLevel === 6) {
+        // h6：不显示编号，但 ID 带前缀
+        numberPrefixForId = prefixParts.join('-') + '-' + chapterCounters.h2 + '-' + chapterCounters.h3 + '-' + chapterCounters.h4 + '-' + chapterCounters.h5 + '-' + chapterCounters.h6 + '-'
       }
     }
 
-    // 生成 ID（MkDocs 模式：带编号前缀，格式如 "1-1-数据库"）
-    // 从 number 提取编号（去掉空格，点号改为连字符）
-    const numberPrefix = number.trim().replace(/\./g, '-')
+    // 生成带编号前缀的 ID（MkDocs 模式：编号前缀 + 标题 slug）
     const baseSlug = slugifyForMkdocs(titleText)
-    const adjustedId = numberPrefix ? `${numberPrefix}-${baseSlug}` : baseSlug
+    const adjustedId = numberPrefixForId ? `${numberPrefixForId}${baseSlug}` : baseSlug
 
     // 渲染调整后的层级标签
     const adjustedTag = `h${adjustedLevel}`
@@ -1512,6 +1567,8 @@ export function useMarkdown() {
     chapterCounters.h2 = 0
     chapterCounters.h3 = 0
     chapterCounters.h4 = 0
+    chapterCounters.h5 = 0
+    chapterCounters.h6 = 0
     lastAdjustedLevel = 0
 
     try {

@@ -94,7 +94,12 @@ const fontConfig = ref<FontConfig>({
   lineHeight: 1.6,
   paragraphSpacing: 1,
   previewWidth: 900,
-  previewBackgroundColor: '#ffffff'
+  previewBackgroundColor: '#ffffff',
+  pageSize: 'A4',
+  marginTop: 20,
+  marginBottom: 20,
+  marginLeft: 25,
+  marginRight: 25
 })
 
 // 处理设置保存

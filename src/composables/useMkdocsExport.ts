@@ -15,6 +15,7 @@ export interface NavChapter {
   htmlId?: string        // HTML 标题元素的 id（用于书签跳转）
   mdH1Title?: string     // md 文件的 h1 标题（如果有）
   displayTitle?: string  // 实际显示的标题
+  fallbackTitle?: string // 后备标题：文件名（去掉扩展名）
 }
 
 export interface Heading {
@@ -132,13 +133,16 @@ export function collectNavChapters(
       // 文件条目
       // 如果有显式标题，使用 nav 标题；否则设置为空，后续使用 md h1
       const navTitle = item.hasExplicitTitle ? item.name : ''
+      // 从文件路径提取文件名（去掉扩展名）作为后备标题
+      const fileName = item.path.replace(/\\/g, '/').split('/').pop()?.replace(/\.md$/i, '') || ''
       chapters.push({
         title: navTitle,
         navLevel: level,
         filePath: item.path,
         numberPrefix,
         chapterNumber,
-        headings: []
+        headings: [],
+        fallbackTitle: fileName  // 后备标题：文件名
       })
     }
   }
@@ -221,6 +225,7 @@ function adjustHeadingLevel(originalLevel: number, navLevel: number): number {
 
 /**
  * 从 Markdown 内容提取标题（使用与渲染相同的 md 实例解析）
+ * 包括普通标题和 deflist 标题（#标题 : 定义）
  * @param content Markdown 内容
  * @param md markdown-it 实例（与渲染时使用的相同）
  */
@@ -239,11 +244,17 @@ function extractHeadingsFromMd(content: string, md: MarkdownIt): { text: string;
         headings.push({ text, level })
       }
     } else if (tokens[i].type === 'heading_deflist_block') {
-      // heading_deflist 标题（如 `#### JAVA : 定义内容`）
-      const data = JSON.parse(tokens[i].content)
-      const level = data.level as number
-      const text = data.titleText as string
-      headings.push({ text, level })
+      // deflist 标题（#标题 : 定义）
+      try {
+        const data = JSON.parse(tokens[i].content)
+        const level = data.level as number
+        const titleText = data.titleText as string
+        if (titleText) {
+          headings.push({ text: titleText, level })
+        }
+      } catch (e) {
+        // 解析失败，忽略
+      }
     }
   }
 
@@ -333,39 +344,65 @@ export function renumberHeadings(chapters: NavChapter[]): BookmarkTreeNode[] {
       // 调整层级：h2+ 相对于 nav 标题降低 1 级显示
       const adjustedLevel = adjustHeadingLevel(rawHeading.level, chapter.navLevel)
 
-      // 计算编号 - 只有调整后层级 h1~h4 显示编号（adjustedLevel <= 4）
+      // 计算编号 - h2-h4 显示编号，h5-h6 不显示编号
       let adjustedNumber = ''
+      let numberPrefixForId = ''  // 用于 ID 的编号前缀（连字符格式）
 
-      // 原始层级 h2-h4 才计数和生成编号
-      if (rawHeading.level >= 2 && rawHeading.level <= 4 && adjustedLevel <= 4) {
+      // h2-h6 都更新计数器和生成 ID 前缀
+      if (rawHeading.level >= 2 && rawHeading.level <= 6) {
         // 更新章节内计数器 - 基于原始层级
         if (rawHeading.level === 2) {
           chapterCounters.h2++
           chapterCounters.h3 = 0
           chapterCounters.h4 = 0
+          chapterCounters.h5 = 0
+          chapterCounters.h6 = 0
         } else if (rawHeading.level === 3) {
           chapterCounters.h3++
           chapterCounters.h4 = 0
+          chapterCounters.h5 = 0
+          chapterCounters.h6 = 0
         } else if (rawHeading.level === 4) {
           chapterCounters.h4++
+          chapterCounters.h5 = 0
+          chapterCounters.h6 = 0
+        } else if (rawHeading.level === 5) {
+          chapterCounters.h5++
+          chapterCounters.h6 = 0
+        } else if (rawHeading.level === 6) {
+          chapterCounters.h6++
         }
 
         // 组合编号：nav 前缀 + 章节内编号
+        // h2-h4 显示编号（adjustedLevel <= 4），h5-h6 不显示编号
+        const prefixParts = chapter.numberPrefix.replace(/\.$/, '').split('.')
         if (rawHeading.level === 2) {
-          adjustedNumber = `${chapter.numberPrefix}${chapterCounters.h2}. `
+          if (adjustedLevel <= 4) {
+            adjustedNumber = `${chapter.numberPrefix}${chapterCounters.h2}. `
+          }
+          numberPrefixForId = prefixParts.join('-') + '-' + chapterCounters.h2 + '-'
         } else if (rawHeading.level === 3) {
-          adjustedNumber = `${chapter.numberPrefix}${chapterCounters.h2}.${chapterCounters.h3}. `
+          if (adjustedLevel <= 4) {
+            adjustedNumber = `${chapter.numberPrefix}${chapterCounters.h2}.${chapterCounters.h3}. `
+          }
+          numberPrefixForId = prefixParts.join('-') + '-' + chapterCounters.h2 + '-' + chapterCounters.h3 + '-'
         } else if (rawHeading.level === 4) {
-          adjustedNumber = `${chapter.numberPrefix}${chapterCounters.h2}.${chapterCounters.h3}.${chapterCounters.h4}. `
+          if (adjustedLevel <= 4) {
+            adjustedNumber = `${chapter.numberPrefix}${chapterCounters.h2}.${chapterCounters.h3}.${chapterCounters.h4}. `
+          }
+          numberPrefixForId = prefixParts.join('-') + '-' + chapterCounters.h2 + '-' + chapterCounters.h3 + '-' + chapterCounters.h4 + '-'
+        } else if (rawHeading.level === 5) {
+          // h5：不显示编号，但 ID 带前缀
+          numberPrefixForId = prefixParts.join('-') + '-' + chapterCounters.h2 + '-' + chapterCounters.h3 + '-' + chapterCounters.h4 + '-' + chapterCounters.h5 + '-'
+        } else if (rawHeading.level === 6) {
+          // h6：不显示编号，但 ID 带前缀
+          numberPrefixForId = prefixParts.join('-') + '-' + chapterCounters.h2 + '-' + chapterCounters.h3 + '-' + chapterCounters.h4 + '-' + chapterCounters.h5 + '-' + chapterCounters.h6 + '-'
         }
       }
 
-      // 生成调整后的 ID（带编号前缀，格式如 "1-1-数据库"）
-      // 从 adjustedNumber 提取编号（去掉空格，点号改为连字符）
-      // adjustedNumber 格式如 "1.1.1 "，转换为 "1-1-1-slug"
-      const numberPrefix = adjustedNumber.trim().replace(/\./g, '-')
+      // 生成带编号前缀的 ID（MkDocs 模式：编号前缀 + 标题 slug）
       const baseSlug = slugifyForMkdocs(rawHeading.text)
-      const adjustedId = numberPrefix ? `${numberPrefix}-${baseSlug}` : baseSlug
+      const adjustedId = numberPrefixForId ? `${numberPrefixForId}${baseSlug}` : baseSlug
 
       const heading: Heading = {
         level: rawHeading.level,
@@ -413,10 +450,10 @@ export function renumberHeadings(chapters: NavChapter[]): BookmarkTreeNode[] {
 
     // 创建章节书签节点
     // nav level 决定书签层级：level 0 → h1 (层级 1), level 1 → h2 (层级 2), ...
-    // 确定显示标题：nav 有标题用 nav，nav 无标题用 md h1
+    // 确定显示标题：nav 有标题用 nav，nav 无标题用 md h1，否则用文件名
     let displayTitle = chapter.title
     if (!chapter.title || chapter.title.trim() === '') {
-      displayTitle = chapter.mdH1Title || ''
+      displayTitle = chapter.mdH1Title || chapter.fallbackTitle || ''
     }
     chapter.displayTitle = displayTitle
 
@@ -595,7 +632,11 @@ export function combineChaptersToHtml(chapters: NavChapter[]): string {
     const fileDir = getFileDir(chapter.filePath)
     const fixedHtml = fixImagePathsInHtml(renderedHtml, fileDir)
 
-    htmlParts.push(fixedHtml)
+    // 包裹章节内容，添加 data-source-file 属性标记来源文件
+    // 用于后处理时解析相对路径链接
+    const wrappedHtml = `<div data-source-file="${chapter.filePath}">${fixedHtml}</div>`
+
+    htmlParts.push(wrappedHtml)
   }
 
   const result = htmlParts.join('\n')
@@ -680,9 +721,9 @@ export async function prepareMkdocsExport(
   // 后处理：统一处理所有锚点链接，使用收集的标题 ID
   // 创建全局标题文本 -> ID 的映射（支持多章节同名标题）
   const headingTextToIds: Map<string, string[]> = new Map()
-  // 创建文件路径 -> 章节 ID 的映射（用于跨文件链接到章节开头）
+  // 创建文件绝对路径 -> 章节 ID 的映射（用于跨文件链接到章节开头）
   const filePathToChapterId: Map<string, string> = new Map()
-  // 创建文件路径 -> 该文件内标题映射（用于跨文件锚点链接）
+  // 创建文件绝对路径 -> 该文件内标题映射（用于跨文件锚点链接）
   const filePathToHeadings: Map<string, Map<string, string>> = new Map()
 
   for (const chapter of chapters) {
@@ -704,28 +745,23 @@ export async function prepareMkdocsExport(
         headingTextToIds.set(key, existing)
       }
     }
-    // 文件路径映射
+    // 文件路径映射 - 使用绝对路径作为主 key
     if (chapter.filePath) {
-      // 提取文件名（如 "data.md"）
-      const fileName = chapter.filePath.split(/[/\\]/).pop() || ''
-      filePathToChapterId.set(fileName, chapterTitleId)
-      // 也存储不带扩展名的文件名
-      const fileNameNoExt = fileName.replace(/\.md$/i, '')
-      filePathToChapterId.set(fileNameNoExt, chapterTitleId)
+      // 绝对路径（主 key）
+      const absolutePath = chapter.filePath.replace(/\\/g, '/')
+      filePathToChapterId.set(absolutePath, chapterTitleId)
+      filePathToHeadings.set(absolutePath, new Map())
 
-      // 为该文件建立标题文本 -> ID 的映射
-      const fileHeadings: Map<string, string> = new Map()
+      // 填充该文件的标题映射
+      const fileHeadings = filePathToHeadings.get(absolutePath)!
       if (chapter.headings) {
         for (const heading of chapter.headings) {
           fileHeadings.set(slugifyForMkdocs(heading.text), heading.adjustedId)
         }
       }
-      // 也包含章节标题
       if (displayTitle) {
         fileHeadings.set(slugifyForMkdocs(displayTitle), chapterTitleId)
       }
-      filePathToHeadings.set(fileName, fileHeadings)
-      filePathToHeadings.set(fileNameNoExt, fileHeadings)
     }
   }
 
@@ -740,120 +776,195 @@ export async function prepareMkdocsExport(
     }
   }
 
-  // 提取自定义锚点（空 <a id="xxx"> 元素）并添加到映射
-  // 这样跨文件链接如 ./file.md#anchor 能正确跳转到自定义锚点
-  for (const chapter of chapters) {
-    if (chapter.filePath) {
-      const fileName = chapter.filePath.split(/[/\\]/).pop() || ''
-      const fileNameNoExt = fileName.replace(/\.md$/i, '')
-
-      // 从章节内容中提取自定义锚点 ID
-      if (chapter.content) {
-        const { parse, renderWithNumberPrefix } = useMarkdown()
-        const { body } = parse(chapter.content)
-        const chapterHtml = renderWithNumberPrefix(body, chapter.numberPrefix, chapter.navLevel)
-
-        // 提取空锚点 <a id="xxx"></a>
-        const emptyAnchorRegex = /<a\s[^>]*\bid="([^"]+)"[^>]*>\s*<\/a>/g
-        let match
-        while ((match = emptyAnchorRegex.exec(chapterHtml)) !== null) {
-          const anchorId = match[1]
-          // 添加到全局映射
-          const key = slugifyForMkdocs(anchorId)
-          const existing = headingTextToIds.get(key) || []
-          if (!existing.includes(anchorId)) {
-            existing.push(anchorId)
-            headingTextToIds.set(key, existing)
-          }
-          // 添加到文件映射
-          const fileHeadings = filePathToHeadings.get(fileName) || filePathToHeadings.get(fileNameNoExt)
-          if (fileHeadings && !fileHeadings.has(key)) {
-            fileHeadings.set(key, anchorId)
-          }
-          // 添加到 allHeadingIds（用于 PDF 链接目标分类）
-          allHeadingIds.add(anchorId)
-        }
-      }
-    }
+  /**
+   * 解析相对路径为绝对路径
+   * @param relativePath 相对路径（如 "../chapter2/data.md"）
+   * @param sourceFile 来源文件的绝对路径
+   */
+  function resolveRelativePath(relativePath: string, sourceFile: string): string {
+    // 获取来源文件所在目录
+    const sourceDir = getFileDir(sourceFile).replace(/\\/g, '/')
+    // 合并路径
+    const combined = sourceDir + '/' + relativePath
+    // 规范化路径
+    return normalizePath(combined)
   }
 
-  // 替换所有 href，包括跨文件链接
-  // 格式1: href="#xxx" - 内部锚点
-  // 格式2: href="file.md#xxx" - 跨文件锚点链接
-  // 格式3: href="file.md" - 跨文件链接（跳到章节开头）
-  combinedHtml = combinedHtml.replace(/href="([^"]+)"/g, (_match, href) => {
-    // 解析 href
-    let newHref = href
+  // 处理链接：按 data-source-file 块分割处理
+  // 正则匹配：<div data-source-file="xxx">...</div>（可能嵌套其他 div）
+  // 使用非贪婪匹配，配合手动处理
 
-    // 检查是否是外部链接（http/https）
-    if (href.match(/^https?:\/\//i)) {
-      return _match  // 不处理外部链接
-    }
+  /**
+   * 处理单个块内的链接
+   * @param html HTML 内容
+   * @param sourceFile 来源文件绝对路径
+   */
+  function processLinksInBlock(html: string, sourceFile: string): string {
+    return html.replace(/href="([^"]+)"/g, (_match, href) => {
+      let newHref = href
 
-    // 检查是否是跨文件链接（带 .md 扩展名）
-    const mdLinkMatch = href.match(/^([^#]+\.md)(#(.+))?$/i)
-    if (mdLinkMatch) {
-      const rawFileName = mdLinkMatch[1]
-      const anchor = mdLinkMatch[3]  // 可能为 undefined
+      // 检查是否是外部链接（http/https）
+      if (href.match(/^https?:\/\//i)) {
+        return _match  // 不处理外部链接
+      }
 
-      // 提取纯文件名（去掉路径前缀）
-      // 例如：./fun2/alg/flow.md -> flow.md
-      // 例如：fun2/alg/flow.md -> flow.md
-      const fileName = rawFileName.split(/[/\\]/).pop() || rawFileName
-      const fileNameNoExt = fileName.replace(/\.md$/i, '')
+      // 检查是否是跨文件链接（带 .md 扩展名）
+      const mdLinkMatch = href.match(/^([^#]+\.md)(#(.+))?$/i)
+      if (mdLinkMatch) {
+        const linkPath = mdLinkMatch[1]  // 可能是相对路径
+        const anchor = mdLinkMatch[3]
 
-      if (anchor) {
-        // 跨文件锚点链接：必须限定在目标文件内查找
-        const decodedAnchor = decodeURIComponent(anchor)
-        const slugifiedAnchor = slugifyForMkdocs(decodedAnchor)
+        // 解析相对路径为绝对路径
+        const absolutePath = resolveRelativePath(linkPath, sourceFile)
 
-        // 只从目标文件的标题映射中查找，不允许 fallback 到全局
-        const fileHeadings = filePathToHeadings.get(fileName) || filePathToHeadings.get(fileNameNoExt)
-        if (fileHeadings) {
-          const targetId = fileHeadings.get(slugifiedAnchor)
-          if (targetId) {
-            newHref = `#${targetId}`
+        if (anchor) {
+          // 跨文件锚点链接：../chapter2/data.md#数据库 -> #ID
+          const decodedAnchor = decodeURIComponent(anchor)
+          const slugifiedAnchor = slugifyForMkdocs(decodedAnchor)
+
+          // 使用绝对路径查找目标文件的标题映射
+          const fileHeadings = filePathToHeadings.get(absolutePath)
+          if (fileHeadings) {
+            const targetId = fileHeadings.get(slugifiedAnchor)
+            if (targetId) {
+              newHref = `#${targetId}`
+            } else {
+              // 目标文件中没有该标题，跳转到文件章节开头
+              const chapterId = filePathToChapterId.get(absolutePath)
+              if (chapterId) {
+                newHref = `#${chapterId}`
+              }
+            }
           } else {
-            // 目标文件中没有该标题，跳转到文件章节开头
-            const chapterId = filePathToChapterId.get(fileName) || filePathToChapterId.get(fileNameNoExt)
-            if (chapterId) {
-              newHref = `#${chapterId}`
+            // 没有找到文件映射（可能路径解析错误），使用全局映射兜底
+            console.warn(`无法找到文件映射: ${absolutePath} (原链接: ${href}, 来源: ${sourceFile})`)
+            const targetIds = headingTextToIds.get(slugifiedAnchor)
+            if (targetIds && targetIds.length > 0) {
+              newHref = `#${targetIds[0]}`
             }
           }
         } else {
-          // 目标文件不存在于映射中（可能是外部链接或未加载的文件）
-          // 跳转到章节开头作为 fallback
-          const chapterId = filePathToChapterId.get(fileName) || filePathToChapterId.get(fileNameNoExt)
+          // 只有文件链接：../chapter2/data.md -> #chapter-x
+          const chapterId = filePathToChapterId.get(absolutePath)
           if (chapterId) {
             newHref = `#${chapterId}`
+          } else {
+            console.warn(`无法找到章节ID: ${absolutePath} (原链接: ${href}, 来源: ${sourceFile})`)
           }
         }
-      } else {
-        // 只有文件链接：data.md -> #chapter-x
-        const chapterId = filePathToChapterId.get(fileName) || filePathToChapterId.get(fileNameNoExt)
-        if (chapterId) {
-          newHref = `#${chapterId}`
+      } else if (href.startsWith('#')) {
+        // 纯内部锚点链接：#xxx
+        const anchor = href.substring(1)
+        const decodedAnchor = decodeURIComponent(anchor)
+        const slugifiedAnchor = slugifyForMkdocs(decodedAnchor)
+
+        // 先尝试直接匹配 ID（链接已经是编号 ID）
+        if (allHeadingIds.has(slugifiedAnchor)) {
+          newHref = `#${slugifiedAnchor}`
+        } else {
+          // 内部链接：优先从当前文件的标题映射中查找
+          const fileHeadings = filePathToHeadings.get(sourceFile)
+          if (fileHeadings) {
+            const targetId = fileHeadings.get(slugifiedAnchor)
+            if (targetId) {
+              newHref = `#${targetId}`
+            } else {
+              // 当前文件没找到，用全局映射（取第一个）
+              const targetIds = headingTextToIds.get(slugifiedAnchor)
+              if (targetIds && targetIds.length > 0) {
+                newHref = `#${targetIds[0]}`
+              }
+            }
+          } else {
+            // 兜底：全局映射
+            const targetIds = headingTextToIds.get(slugifiedAnchor)
+            if (targetIds && targetIds.length > 0) {
+              newHref = `#${targetIds[0]}`
+            }
+          }
         }
       }
-    } else if (href.startsWith('#')) {
-      // 纯内部锚点链接：#xxx
-      const anchor = href.substring(1)
-      const decodedAnchor = decodeURIComponent(anchor)
-      const slugifiedAnchor = slugifyForMkdocs(decodedAnchor)
 
-      if (allHeadingIds.has(slugifiedAnchor)) {
-        newHref = `#${slugifiedAnchor}`
+      return `href="${newHref}"`
+    })
+  }
+
+  // 分割 HTML 按 data-source-file 块处理
+  // 匹配模式：<div data-source-file="path">content</div>
+  // 注意：content 中可能有嵌套的 div，需要小心处理
+  // 使用简单方法：找到每个 data-source-file 的开始位置，然后向前找到对应的结束 </div>
+
+  let processedHtml = ''
+  let remainingHtml = combinedHtml
+
+  while (remainingHtml.length > 0) {
+    // 查找下一个 data-source-file 块
+    const blockMatch = remainingHtml.match(/<div data-source-file="([^"]+)">/)
+
+    if (!blockMatch) {
+      // 没有更多块，将剩余内容添加到结果（可能是章节标题等）
+      processedHtml += remainingHtml
+      break
+    }
+
+    const sourceFile = blockMatch[1]
+    const blockStartIndex = blockMatch.index!
+    const blockStartTagEnd = blockStartIndex + blockMatch[0].length
+
+    // 添加块之前的内容
+    processedHtml += remainingHtml.substring(0, blockStartIndex)
+
+    // 找到块的结束位置（匹配 </div>)
+    // 使用栈来匹配嵌套的 div
+    let depth = 1
+    let searchIndex = blockStartTagEnd
+    let blockEndIndex = -1
+
+    while (searchIndex < remainingHtml.length && depth > 0) {
+      const nextDivOpen = remainingHtml.indexOf('<div', searchIndex)
+      const nextDivClose = remainingHtml.indexOf('</div>', searchIndex)
+
+      if (nextDivClose === -1) {
+        // 没有找到结束标签，错误
+        break
+      }
+
+      if (nextDivOpen !== -1 && nextDivOpen < nextDivClose) {
+        // 先遇到开标签，深度增加
+        depth++
+        searchIndex = nextDivOpen + 4
       } else {
-        const targetIds = headingTextToIds.get(slugifiedAnchor)
-        if (targetIds && targetIds.length > 0) {
-          newHref = `#${targetIds[0]}`
+        // 先遇到关标签，深度减少
+        depth--
+        if (depth === 0) {
+          blockEndIndex = nextDivClose + 6  // </div> 长度
         }
+        searchIndex = nextDivClose + 6
       }
     }
 
-    // 返回处理后的 href，移除 target 属性（PDF 内部链接不需要）
-    return `href="${newHref}"`
-  })
+    if (blockEndIndex === -1) {
+      // 无法找到块结束，将剩余内容作为块内容
+      console.warn(`无法找到 data-source-file="${sourceFile}" 块的结束位置`)
+      const blockContent = remainingHtml.substring(blockStartTagEnd)
+      processedHtml += `<div data-source-file="${sourceFile}">${processLinksInBlock(blockContent, sourceFile)}</div>`
+      break
+    }
+
+    // 提取块内容（不含外层 div）
+    const blockContent = remainingHtml.substring(blockStartTagEnd, blockEndIndex - 6)
+
+    // 处理块内的链接
+    const processedBlock = processLinksInBlock(blockContent, sourceFile)
+
+    // 添加处理后的块（保留 div 标签）
+    processedHtml += `<div data-source-file="${sourceFile}">${processedBlock}</div>`
+
+    // 移除已处理的部分
+    remainingHtml = remainingHtml.substring(blockEndIndex)
+  }
+
+  combinedHtml = processedHtml
 
   // 提取 PDF 书签
   const pdfBookmarks = extractPdfBookmarks(chapters)
