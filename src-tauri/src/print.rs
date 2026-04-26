@@ -961,3 +961,318 @@ async fn load_html_and_print_stream(
         bookmarks,
     })
 }
+
+/// 链接 annotation 信息（用于调试）
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct LinkAnnotationInfo {
+    pub page: u32,           // 链接所在页码
+    pub link_rect: String,   // 链接矩形区域
+    pub dest_page: u32,      // 目标页码
+    pub dest_y: f32,         // 目标 Y 坐标（从底部计算）
+    pub dest_type: String,   // 目标类型（XYZ, Fit, FitH 等）
+}
+
+/// 提取 PDF 中的链接 annotation 信息（用于调试跳转偏移问题）
+#[tauri::command]
+pub async fn debug_pdf_links(pdf_path: String) -> Result<Vec<LinkAnnotationInfo>, String> {
+    use lopdf::Document;
+    use lopdf::Object;
+
+    let doc = Document::load(&pdf_path)
+        .map_err(|e| format!("无法加载 PDF: {}", e))?;
+
+    let pages = doc.get_pages();
+    let mut links: Vec<LinkAnnotationInfo> = Vec::new();
+
+    for (page_num, page_id) in pages.iter() {
+        // 获取页面对象
+        let page_obj = doc.get_object(*page_id)
+            .map_err(|e| format!("无法获取页面对象: {}", e))?;
+
+        if let Object::Dictionary(page_dict) = page_obj {
+            // 获取页面的 Annots 数组
+            let annots_result = page_dict.get(b"Annots");
+            if annots_result.is_err() {
+                continue;
+            }
+
+            let annots = match annots_result.unwrap() {
+                Object::Array(arr) => arr.clone(),
+                Object::Reference(ref_id) => {
+                    // 如果是引用，获取引用的对象
+                    match doc.get_object(*ref_id) {
+                        Ok(Object::Array(arr)) => arr.clone(),
+                        _ => continue,
+                    }
+                },
+                _ => continue,
+            };
+
+            for annot_ref in annots.iter() {
+                let annot_id = match annot_ref {
+                    Object::Reference(id) => *id,
+                    _ => continue,
+                };
+
+                let annot_obj = doc.get_object(annot_id);
+                if annot_obj.is_err() {
+                    continue;
+                }
+
+                if let Object::Dictionary(annot_dict) = annot_obj.unwrap() {
+                    // 检查是否是 Link 类型
+                    let subtype_result = annot_dict.get(b"Subtype");
+                    if subtype_result.is_err() {
+                        continue;
+                    }
+
+                    if *subtype_result.unwrap() != Object::Name(b"Link".to_vec()) {
+                        continue;
+                    }
+
+                    // 获取链接矩形区域
+                    let rect_str = match annot_dict.get(b"Rect") {
+                        Ok(Object::Array(rect_arr)) => {
+                            let x1 = get_object_float(rect_arr.get(0).unwrap_or(&Object::Integer(0)));
+                            let y1 = get_object_float(rect_arr.get(1).unwrap_or(&Object::Integer(0)));
+                            let x2 = get_object_float(rect_arr.get(2).unwrap_or(&Object::Integer(0)));
+                            let y2 = get_object_float(rect_arr.get(3).unwrap_or(&Object::Integer(0)));
+                            format!("{:.2}, {:.2}, {:.2}, {:.2}", x1, y1, x2, y2)
+                        },
+                        _ => "N/A".to_string()
+                    };
+
+                    // 获取目标 Dest
+                    let (dest_page, dest_y, dest_type) = match annot_dict.get(b"Dest") {
+                        Ok(Object::Array(dest_arr)) => {
+                            // Dest 格式: [page_ref, type, ...params]
+                            // 对于 XYZ 类型: [page_ref, /XYZ, left, top, zoom]
+                            let dest_page_num = match dest_arr.get(0) {
+                                Some(Object::Reference(ref_id)) => {
+                                    // 查找引用对应的页码
+                                    pages.iter()
+                                        .find(|(_, id)| *id == ref_id)
+                                        .map(|(num, _)| *num)
+                                        .unwrap_or(0)
+                                },
+                                _ => 0
+                            };
+
+                            let dest_type_str = match dest_arr.get(1) {
+                                Some(Object::Name(name)) => String::from_utf8_lossy(name).to_string(),
+                                _ => "Unknown".to_string()
+                            };
+
+                            // 对于 XYZ 类型，top 参数是 Y 坐标（从顶部计算）
+                            // 对于 FitH 类型，top 参数是 Y 坐标（从顶部计算）
+                            let dest_y = if dest_type_str == "XYZ" || dest_type_str == "FitH" {
+                                match dest_arr.get(2) {
+                                    Some(obj) => get_object_float(obj),
+                                    _ => 0.0
+                                }
+                            } else {
+                                0.0
+                            };
+
+                            (dest_page_num, dest_y, dest_type_str)
+                        },
+                        Ok(Object::Name(name)) => {
+                            // 简单命名目标
+                            (0, 0.0, String::from_utf8_lossy(name).to_string())
+                        },
+                        Ok(Object::String(s, _)) => {
+                            // 字符串命名目标
+                            (0, 0.0, String::from_utf8_lossy(s).to_string())
+                        },
+                        _ => (0, 0.0, "NoDest".to_string())
+                    };
+
+                    links.push(LinkAnnotationInfo {
+                        page: *page_num,
+                        link_rect: rect_str,
+                        dest_page,
+                        dest_y,
+                        dest_type,
+                    });
+                }
+            }
+        }
+    }
+
+    Ok(links)
+}
+
+/// 从 lopdf Object 获取浮点数值
+fn get_object_float(obj: &lopdf::Object) -> f32 {
+    match obj {
+        lopdf::Object::Integer(i) => *i as f32,
+        lopdf::Object::Real(r) => *r as f32,
+        _ => 0.0
+    }
+}
+
+/// URL 解码（将 %XX 格式转为对应字符，支持 UTF-8 多字节）
+fn url_decode(s: &str) -> String {
+    let mut bytes: Vec<u8> = Vec::new();
+    let s_bytes = s.as_bytes();
+    let mut i = 0;
+
+    while i < s_bytes.len() {
+        if s_bytes[i] == b'%' && i + 2 < s_bytes.len() {
+            // 尝试解析 %XX 格式
+            let hex = &s_bytes[i+1..i+3];
+            if let Ok(byte) = u8::from_str_radix(std::str::from_utf8(hex).unwrap_or("00"), 16) {
+                bytes.push(byte);
+                i += 3;
+            } else {
+                bytes.push(s_bytes[i]);
+                i += 1;
+            }
+        } else {
+            bytes.push(s_bytes[i]);
+            i += 1;
+        }
+    }
+
+    String::from_utf8_lossy(&bytes).into_owned()
+}
+
+/// 修复 PDF 中命名链接的目标坐标
+/// WebView2 生成的链接使用命名目标（如 "chapter-3.3.2"），需要转换为显式坐标
+///
+/// # Arguments
+/// * `pdf_path` - PDF 文件路径
+/// * `named_dest_positions` - 命名目标位置映射 (name -> (page_num, y_pt))
+#[tauri::command]
+pub async fn fix_pdf_link_destinations(
+    pdf_path: String,
+    named_dest_positions: std::collections::HashMap<String, (u32, f32)>,
+) -> Result<usize, String> {
+    use lopdf::Document;
+    use lopdf::Object;
+
+    let mut doc = Document::load(&pdf_path)
+        .map_err(|e| format!("无法加载 PDF: {}", e))?;
+
+    let pages = doc.get_pages();
+    let mut fixed_count = 0;
+
+    // 创建页面高度映射（用于坐标转换）
+    let page_heights: std::collections::HashMap<u32, f32> = pages.iter()
+        .map(|(page_num, page_id)| {
+            let page_obj = doc.get_object(*page_id);
+            let height = if let Ok(Object::Dictionary(page_dict)) = page_obj {
+                // 从 MediaBox 获取页面高度
+                if let Ok(Object::Array(media_box)) = page_dict.get(b"MediaBox") {
+                    // MediaBox: [x1, y1, x2, y2]，高度 = y2 - y1
+                    let y2 = media_box.get(3)
+                        .map(|obj| get_object_float(obj))
+                        .unwrap_or(842.0);
+                    y2
+                } else {
+                    842.0 // A4 默认高度
+                }
+            } else {
+                842.0
+            };
+            (*page_num, height)
+        })
+        .collect();
+
+    for (_page_num, page_id) in pages.iter() {
+        let page_obj = doc.get_object(*page_id)
+            .map_err(|e| format!("无法获取页面对象: {}", e))?;
+
+        if let Object::Dictionary(page_dict) = page_obj {
+            let annots_result = page_dict.get(b"Annots");
+            if annots_result.is_err() {
+                continue;
+            }
+
+            // 需要获取 Annots 数组的引用或直接数组
+            let annots_ref = annots_result.unwrap();
+            let annots_arr_id = match annots_ref {
+                Object::Array(arr) => arr.clone(),
+                Object::Reference(ref_id) => {
+                    // 引用，获取数组对象
+                    match doc.get_object(*ref_id) {
+                        Ok(Object::Array(arr)) => arr.clone(),
+                        _ => continue,
+                    }
+                },
+                _ => continue,
+            };
+
+            for annot_ref in annots_arr_id.iter() {
+                let annot_id = match annot_ref {
+                    Object::Reference(id) => *id,
+                    _ => continue,
+                };
+
+                let annot_obj = doc.get_object_mut(annot_id)
+                    .map_err(|e| format!("无法获取 annotation 对象: {}", e))?;
+
+                if let Object::Dictionary(annot_dict) = annot_obj {
+                    // 检查是否是 Link 类型
+                    let subtype = annot_dict.get(b"Subtype");
+                    if subtype.is_err() {
+                        continue;
+                    }
+                    if *subtype.unwrap() != Object::Name(b"Link".to_vec()) {
+                        continue;
+                    }
+
+                    // 获取 Dest
+                    let dest = annot_dict.get(b"Dest");
+                    if dest.is_err() {
+                        continue;
+                    }
+
+                    let dest_obj = dest.unwrap();
+                    let dest_name_raw = match dest_obj {
+                        Object::Name(name) => String::from_utf8_lossy(name).to_string(),
+                        Object::String(s, _) => String::from_utf8_lossy(s).to_string(),
+                        _ => continue,
+                    };
+
+                    // URL 解码目标名称（WebView2 会将中文等字符 URL 编码）
+                    let dest_name = url_decode(&dest_name_raw);
+
+                    // 查找命名目标的位置
+                    if let Some((target_page, target_y)) = named_dest_positions.get(&dest_name) {
+                        // 获取目标页面的引用
+                        let target_page_id = pages.get(target_page)
+                            .or_else(|| pages.values().nth((*target_page as usize).saturating_sub(1)));
+
+                        if let Some(target_page_obj_id) = target_page_id {
+                            // 创建新的显式坐标 Dest: [page_ref, /XYZ, left, top, zoom]
+                            // top 是从顶部计算的 Y 坐标（PDF 内部坐标，从底部往上）
+                            // 需要将 target_y（从顶部往下）转换为 PDF 坐标（从底部往上）
+                            let page_height = page_heights.get(target_page).unwrap_or(&842.0);
+                            let pdf_y = *page_height - *target_y + 15.0; // 添加15pt偏移，避免标题被遮挡
+
+                            let new_dest = Object::Array(vec![
+                                Object::Reference(*target_page_obj_id),
+                                Object::Name(b"XYZ".to_vec()),
+                                Object::Integer(0), // left
+                                Object::Real(pdf_y), // top
+                                Object::Integer(0), // zoom (0 = 保持当前)
+                            ]);
+
+                            // 替换 Dest
+                            annot_dict.set("Dest", new_dest);
+                            fixed_count += 1;
+                        }
+                    }
+                    // 未找到链接目标，保留原有命名链接（不做修改）
+                }
+            }
+        }
+    }
+
+    // 保存 PDF
+    doc.save(&pdf_path)
+        .map_err(|e| format!("无法保存 PDF: {}", e))?;
+
+    Ok(fixed_count)
+}

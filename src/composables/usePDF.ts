@@ -448,6 +448,27 @@ export function usePDF() {
         const pdfWithPageNumbers = await addPageNumbers(pdfBytes, metadata, firstH1?.text)
         await writeFile(printResult.path, pdfWithPageNumbers)
 
+        // Step 10: 修复链接目标（将命名链接转为显式坐标）
+        try {
+          // 构建命名目标位置映射: heading.id -> (page, y)
+          // 注意：使用 PDF 页码（包含封面页），不是正文页码
+          const namedDestPositions: Record<string, [number, number]> = {}
+          headings.forEach((h, i) => {
+            const pos = printResult.bookmarks.find(b => b.title === markers[i])
+            if (pos && h.id) {
+              // pos.page 是 PDF 页码（包含封面页），直接使用
+              namedDestPositions[h.id] = [pos.page, pos.y]
+            }
+          })
+
+          await invoke<number>('fix_pdf_link_destinations', {
+            pdfPath: printResult.path,
+            namedDestPositions
+          })
+        } catch (fixError) {
+          console.warn('修复链接目标失败:', fixError)
+        }
+
         await message(`PDF 已保存：${printResult.path}`, { title: '成功', kind: 'info' })
       } catch (pageNumberError) {
         handleWarning(pageNumberError, '添加页码')
@@ -686,14 +707,14 @@ async function addPageNumbers(
 }
 
 /**
- * 提取 h1-h5 标题（根据 id 去重）
+ * 提取 h1-h6 标题（根据 id 去重）
  */
 function extractHeadings(htmlContent: string): Array<{ level: number; text: string; id: string }> {
   const headings: Array<{ level: number; text: string; id: string }> = []
   const seenIds = new Set<string>()
-  // 匹配 h1-h5 标签：h 后跟数字，然后空格和属性，包含 id 属性
-  // PDF 书签显示 h1~h5，所以匹配 h1-h5
-  const headingRegex = /<h([1-5])\s[^>]*?id="([^"]*)"[^>]*>(.*?)<\/h\1>/g
+  // 匹配 h1-h6 标签：h 后跟数字，然后空格和属性，包含 id 属性
+  // 需要提取所有级别的标题用于链接修复
+  const headingRegex = /<h([1-6])\s[^>]*?id="([^"]*)"[^>]*>(.*?)<\/h\1>/g
   let match
 
   while ((match = headingRegex.exec(htmlContent)) !== null) {
