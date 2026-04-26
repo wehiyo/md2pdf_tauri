@@ -94,19 +94,12 @@ pub async fn subset_chinese_font(
     let font_bytes = std::fs::read(&font_path)
         .map_err(|e| format!("读取字体失败: {}", e))?;
 
-    // 检查字体格式
-    let format = FontFormat::detect(&font_bytes);
-    println!("字体格式: {:?}", format);
-
     // 构建需要保留的字符集合
     let chars: HashSet<char> = text.chars().collect();
-    println!("子集化字符: {} 个", chars.len());
 
-    // 执行子集化（空数组表示使用默认 OpenType 特性）
+    // 执行子集化（使用默认 OpenType 特性）
     let subset_bytes = subset_font_data(&font_bytes, &chars, &[])
         .map_err(|e| format!("子集化失败: {}", e))?;
-
-    println!("子集化成功: {} bytes (原始: {} bytes)", subset_bytes.len(), font_bytes.len());
 
     Ok(subset_bytes)
 }
@@ -115,8 +108,8 @@ pub async fn subset_chinese_font(
 fn get_font_path(app: &AppHandle) -> Result<String, String> {
     // 尝试开发模式的路径
     let dev_paths = [
-        "src-tauri/assets/fonts/NotoSansSC-Regular.ttf",
-        "./assets/fonts/NotoSansSC-Regular.ttf",
+        "src-tauri/assets/fonts/SourceHanSansSC-Regular.ttf",
+        "./assets/fonts/SourceHanSansSC-Regular.ttf",
     ];
 
     for path in dev_paths {
@@ -129,10 +122,10 @@ fn get_font_path(app: &AppHandle) -> Result<String, String> {
     let resource_dir = app.path().resource_dir()
         .map_err(|e| format!("获取资源目录失败: {}", e))?;
 
-    let font_path = resource_dir.join("assets/fonts/NotoSansSC-Regular.ttf");
+    let font_path = resource_dir.join("assets/fonts/SourceHanSansSC-Regular.ttf");
     if font_path.exists() {
         return Ok(font_path.to_string_lossy().to_string());
     }
 
-    Err("未找到中文字体文件 NotoSansSC-Regular.ttf".to_string())
+    Err("未找到中文字体文件 SourceHanSansSC-Regular.ttf".to_string())
 }

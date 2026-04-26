@@ -1,5 +1,5 @@
 import { message, save } from '@tauri-apps/plugin-dialog'
-import { PDFDocument, StandardFonts, rgb } from 'pdf-lib'
+import { PDFDocument, StandardFonts, rgb, PDFFont, PDFPage, RGB } from 'pdf-lib'
 import { readFile, writeFile } from '@tauri-apps/plugin-fs'
 import { invoke } from '@tauri-apps/api/core'
 import fontkit from '@pdf-lib/fontkit'
@@ -482,9 +482,7 @@ async function loadChineseFontSubset(text: string): Promise<Uint8Array | null> {
   try {
     // Tauri 返回 Vec<u8>，需要转换为 Uint8Array
     const result = await invoke<number[]>('subset_chinese_font', { text })
-    const subsetBytes = new Uint8Array(result)
-    console.log(`字体子集化成功: ${subsetBytes.length} bytes (原文: ${text.length} 字符)`)
-    return subsetBytes
+    return new Uint8Array(result)
   } catch (e) {
     console.warn('字体子集化失败:', e)
     return null
@@ -531,18 +529,87 @@ async function addPageNumbers(
 
   if (hasChinese) {
     try {
-      // 收集所有需要显示的文字（标题 + 密级 + "密级："）
-      const allText = headerTitle + securityLevel + '密级：'
-      const chineseFontBytes = await loadChineseFontSubset(allText)
-      if (chineseFontBytes) {
-        // 使用 Rust 子集化的字体，直接嵌入（已包含所需字符）
-        headerFont = await pdfDoc.embedFont(chineseFontBytes)
-      } else {
-        canShowHeader = false
+      // 收集所有需要显示的中文文字（排除 ASCII 字符：数字和英文字母）
+      // ASCII 字符将使用 Helvetica 渲染，避免子集化字体宽度问题
+      const chineseChars = (headerTitle + securityLevel + '密级：').replace(/[a-zA-Z0-9]/g, '')
+      if (chineseChars.length > 0) {
+        const chineseFontBytes = await loadChineseFontSubset(chineseChars)
+        if (chineseFontBytes) {
+          headerFont = await pdfDoc.embedFont(chineseFontBytes)
+        } else {
+          canShowHeader = false
+        }
       }
     } catch (e) {
       console.warn('无法加载中文字体，跳过页眉:', e)
       canShowHeader = false
+    }
+  }
+
+  /**
+   * 检查字符是否为 ASCII（数字或英文字母）
+   */
+  function isAsciiChar(char: string): boolean {
+    const code = char.charCodeAt(0)
+    return (code >= 48 && code <= 57) || (code >= 65 && code <= 90) || (code >= 97 && code <= 122)
+  }
+
+  /**
+   * 计算混合文字的总宽度：ASCII 字符用 Helvetica，中文用中文字体
+   */
+  function calculateMixedWidth(
+    text: string,
+    chineseFont: PDFFont,
+    helveticaFont: PDFFont,
+    fontSize: number
+  ): number {
+    let totalWidth = 0
+    for (const char of text) {
+      if (isAsciiChar(char)) {
+        totalWidth += helveticaFont.widthOfTextAtSize(char, fontSize)
+      } else {
+        totalWidth += chineseFont.widthOfTextAtSize(char, fontSize)
+      }
+    }
+    return totalWidth
+  }
+
+  /**
+   * 混合渲染页眉文字：中文用中文字体，ASCII（数字/英文）用 Helvetica
+   */
+  function drawMixedHeaderText(
+    page: PDFPage,
+    text: string,
+    startX: number,
+    y: number,
+    fontSize: number,
+    chineseFont: PDFFont,
+    helveticaFont: PDFFont,
+    color: RGB
+  ) {
+    let currentX = startX
+    for (const char of text) {
+      // ASCII 字符（数字和英文字母）使用 Helvetica
+      if (isAsciiChar(char)) {
+        page.drawText(char, {
+          x: currentX,
+          y,
+          size: fontSize,
+          font: helveticaFont,
+          color
+        })
+        currentX += helveticaFont.widthOfTextAtSize(char, fontSize)
+      } else {
+        // 其他字符（中文等）使用中文字体
+        page.drawText(char, {
+          x: currentX,
+          y,
+          size: fontSize,
+          font: chineseFont,
+          color
+        })
+        currentX += chineseFont.widthOfTextAtSize(char, fontSize)
+      }
     }
   }
 
@@ -562,30 +629,22 @@ async function addPageNumbers(
       const headerY = pageHeight - marginTop
 
       if (headerTitle) {
-        const headerTextWidth = headerFont.widthOfTextAtSize(headerTitle, headerFontSize)
+        // 计算混合文字宽度：中文用 headerFont，数字用 helveticaFont
+        const headerTextWidth = calculateMixedWidth(headerTitle, headerFont, helveticaFont, headerFontSize)
         const headerX = (pageWidth - headerTextWidth) / 2
 
-        page.drawText(headerTitle, {
-          x: headerX,
-          y: headerY,
-          size: headerFontSize,
-          font: headerFont,
-          color: rgb(0.42, 0.45, 0.5)
-        })
+        // 混合渲染：数字用 Helvetica，中文用中文字体
+        drawMixedHeaderText(page, headerTitle, headerX, headerY, headerFontSize, headerFont, helveticaFont, rgb(0.42, 0.45, 0.5))
       }
 
       if (securityLevel) {
         const securityText = `密级：${securityLevel}`
-        const securityTextWidth = headerFont.widthOfTextAtSize(securityText, headerFontSize)
+        // 计算混合文字宽度
+        const securityTextWidth = calculateMixedWidth(securityText, headerFont, helveticaFont, headerFontSize)
         const securityX = pageWidth - headerMargin - securityTextWidth
 
-        page.drawText(securityText, {
-          x: securityX,
-          y: headerY,
-          size: headerFontSize,
-          font: headerFont,
-          color: rgb(0.42, 0.45, 0.5)
-        })
+        // 混合渲染
+        drawMixedHeaderText(page, securityText, securityX, headerY, headerFontSize, headerFont, helveticaFont, rgb(0.42, 0.45, 0.5))
       }
 
       // 分割线
