@@ -13,7 +13,6 @@ pub struct BookmarkInput {
     pub page: usize,     // 0-indexed 页码（相对于正文，不包括封面）
     pub y: f32,          // PDF Y 坐标（从顶部开始，单位 pt，由 pdf-extract 提取）
     pub level: u32,      // 标题层级 (h1=1, h2=2, h3=3, h4=4)
-    pub page_height: f32, // 页面实际高度（单位 pt）
 }
 
 /// A4 页面高度 (72 DPI) - 用于默认值

@@ -25,7 +25,6 @@ pub struct BookmarkPosition {
     pub page: u32,
     pub y: f32,
     pub level: u32,
-    pub page_height: f32, // 页面实际高度（单位 pt）
 }
 
 /// 页面打印设置
@@ -59,8 +58,6 @@ pub struct PrintResultWithBookmarks {
     pub path: String,
     pub error: Option<String>,
     pub bookmarks: Vec<BookmarkPosition>,
-    pub link_targets: Vec<MarkerPosition>,   // LINKMARKxxx + ANCHORMARKxxx（非标题目标 + 自定义锚点）
-    pub link_positions: Vec<MarkerPosition>, // LINKPOSxxx（链接位置）
 }
 
 /// 静默打印 HTML 内容到 PDF，并提取书签位置
@@ -341,8 +338,6 @@ async fn print_and_extract_bookmarks(
         path: print_result.path,
         error: print_result.error,
         bookmarks,
-        link_targets: vec![],  // 此函数不支持链接提取
-        link_positions: vec![],  // 此函数不支持链接提取
     })
 }
 
@@ -940,61 +935,7 @@ async fn load_html_and_print_stream(
     let pdf_bytes = print_to_pdf_stream_internal(print_window, page_settings).await?;
 
     // Step 5: 从内存中的 PDF bytes 提取标记位置
-    // 分类标记：PDFMARKxxx（标题）、ANCHORMARKxxx（自定义锚点）、LINKMARKxxx（非标题目标）、LINKPOSxxx（链接位置）
-    println!("[print] ========== 提取标记位置 ========== ");
-    println!("[print] 输入标记总数: {}", markers.len());
-
-    let heading_markers: Vec<String> = markers.iter()
-        .filter(|m| m.starts_with("PDFMARK"))
-        .cloned()
-        .collect();
-    let anchor_markers: Vec<String> = markers.iter()
-        .filter(|m| m.starts_with("ANCHORMARK"))
-        .cloned()
-        .collect();
-    let link_target_markers: Vec<String> = markers.iter()
-        .filter(|m| m.starts_with("LINKMARK"))
-        .cloned()
-        .collect();
-    let link_position_markers: Vec<String> = markers.iter()
-        .filter(|m| m.starts_with("LINKPOS"))
-        .cloned()
-        .collect();
-
-    println!("[print] 标题标记(PDFMARK)数量: {}", heading_markers.len());
-    println!("[print] 自定义锚点标记(ANCHORMARK)数量: {}", anchor_markers.len());
-    println!("[print] 链接目标标记(LINKMARK)数量: {}", link_target_markers.len());
-    println!("[print] 链接位置标记(LINKPOS)数量: {}", link_position_markers.len());
-
-    // 提取各类标记的位置
-    println!("[print] 提取标题标记位置...");
-    let heading_positions = crate::pdf_extract::extract_marker_positions_from_bytes(&pdf_bytes, &heading_markers)?;
-    println!("[print] 标题标记位置结果:");
-    for (i, pos) in heading_positions.iter().enumerate() {
-        println!("[print]   PDFMARK{:03}: page={}, y={}",
-                 i, pos.page, pos.y);
-    }
-
-    println!("[print] 提取自定义锚点标记位置...");
-    let anchor_positions = crate::pdf_extract::extract_marker_positions_from_bytes(&pdf_bytes, &anchor_markers)?;
-    println!("[print] 自定义锚点标记位置结果:");
-    for pos in anchor_positions.iter() {
-        println!("[print]   {}: page={}, y={}", pos.marker, pos.page, pos.y);
-    }
-
-    println!("[print] 提取链接目标标记位置...");
-    let link_target_positions = crate::pdf_extract::extract_marker_positions_from_bytes(&pdf_bytes, &link_target_markers)?;
-    println!("[print] 链接目标标记位置结果:");
-    for pos in link_target_positions.iter() {
-        println!("[print]   {}: page={}, y={}", pos.marker, pos.page, pos.y);
-    }
-
-    println!("[print] 提取链接位置标记位置...");
-    let link_position_positions = crate::pdf_extract::extract_marker_positions_from_bytes(&pdf_bytes, &link_position_markers)?;
-    println!("[print] 链接位置标记位置结果:");
-    for pos in link_position_positions.iter() {
-        println!("[print]   {}: page={}, y={}", pos.marker, pos.page, pos.y);
-    }
+    let bookmark_positions = crate::pdf_extract::extract_marker_positions_from_bytes(&pdf_bytes, markers)?;
 
     // Step 6: 将 PDF bytes 写入磁盘文件
     // 发送进度事件：注入书签
@@ -1003,50 +944,20 @@ async fn load_html_and_print_stream(
     std::fs::write(save_path, &pdf_bytes)
         .map_err(|e| format!("写入 PDF 文件失败: {}", e))?;
 
-    println!("[print] PDF文件已写入: {}", save_path);
-
-    // 转换为 BookmarkPosition 格式（标题）
-    let bookmarks: Vec<BookmarkPosition> = heading_positions.iter()
+    // 转换为 BookmarkPosition 格式
+    let bookmarks: Vec<BookmarkPosition> = bookmark_positions.iter()
         .map(|mp| BookmarkPosition {
             title: mp.marker.clone(),
             page: mp.page,
             y: mp.y,
             level: 0, // 标记文本不包含层级信息，需要从标题 ID 推断
-            page_height: mp.page_height,
         })
         .collect();
-
-    // 转换为 MarkerPosition 格式（链接目标 + 自定义锚点）
-    let link_targets: Vec<MarkerPosition> = link_target_positions.iter()
-        .chain(anchor_positions.iter())
-        .map(|mp| MarkerPosition {
-            marker: mp.marker.clone(),
-            page: mp.page,
-            y: mp.y,
-            page_height: mp.page_height,
-        })
-        .collect();
-
-    // 转换为 MarkerPosition 格式（链接位置）
-    let link_positions: Vec<MarkerPosition> = link_position_positions.iter()
-        .map(|mp| MarkerPosition {
-            marker: mp.marker.clone(),
-            page: mp.page,
-            y: mp.y,
-            page_height: mp.page_height,
-        })
-        .collect();
-
-    println!("[print] ========== 标记提取完成 ========== ");
-    println!("[print] 返回: bookmarks={}, link_targets={} (含ANCHORMARK), link_positions={}",
-             bookmarks.len(), link_targets.len(), link_positions.len());
 
     Ok(PrintResultWithBookmarks {
         success: true,
         path: save_path.to_string(),
         error: None,
         bookmarks,
-        link_targets,
-        link_positions,
     })
 }

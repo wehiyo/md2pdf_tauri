@@ -1161,8 +1161,6 @@ async function importMkdocs() {
       // 从 nav 结构提取 md 文件（保留层级结构）
       if (config.nav && Array.isArray(config.nav)) {
         mdFiles.value = extractMdFilesFromNav(config.nav, docsPath)
-        // 更新无显式标题的文件名称（使用 md h1 标题）
-        await updateFileTreeTitles(mdFiles.value)
       } else {
         mdFiles.value = []
       }
@@ -1216,62 +1214,6 @@ function extractMdFilesFromNav(nav: any[], basePath: string): MdFile[] {
   }
 
   return files
-}
-
-// 从 Markdown 内容提取 h1 标题
-function extractH1TitleFromContent(content: string): string | undefined {
-  // 跳过 frontmatter
-  const lines = content.split('\n')
-  let startIndex = 0
-
-  if (lines[0] === '---') {
-    for (let i = 1; i < lines.length; i++) {
-      if (lines[i] === '---') {
-        startIndex = i + 1
-        break
-      }
-    }
-  }
-
-  // 查找 h1 标题
-  for (let i = startIndex; i < lines.length; i++) {
-    const line = lines[i]
-    // # 开头的 h1
-    if (line.startsWith('# ') && !line.startsWith('## ')) {
-      return line.substring(2).trim()
-    }
-    // === 下划线风格的 h1（上一行是标题）
-    if (line.match(/^={3,}$/) && i > startIndex && lines[i - 1].trim()) {
-      return lines[i - 1].trim()
-    }
-  }
-
-  return undefined
-}
-
-// 更新文件树中无显式标题的文件名称（使用 md h1 标题）
-async function updateFileTreeTitles(files: MdFile[]): Promise<void> {
-  for (const file of files) {
-    if (file.isFolder && file.children) {
-      // 递归处理子节点
-      await updateFileTreeTitles(file.children)
-    } else if (file.path && !file.hasExplicitTitle) {
-      // 无显式标题的文件，读取内容提取 h1
-      try {
-        const [text, _encoding] = await invoke<[string, string]>('read_file_with_encoding', {
-          path: file.path
-        })
-        const normalizedText = text.replace(/\r\n/g, '\n')
-        const h1Title = extractH1TitleFromContent(normalizedText)
-        if (h1Title) {
-          file.name = h1Title
-          console.log(`[Mkdocs] 文件 "${file.path}" 无 nav 标题，使用 h1: "${h1Title}"`)
-        }
-      } catch (error) {
-        console.warn(`[Mkdocs] 无法读取文件 "${file.path}" 提取 h1 标题:`, error)
-      }
-    }
-  }
 }
 
 // 从文件树打开文件（不提示保存）

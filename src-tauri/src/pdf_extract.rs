@@ -9,20 +9,17 @@ use pdf_extract::{Document, OutputDev, MediaBox, Transform, OutputError, ColorSp
 use std::collections::HashMap;
 
 /// 标记位置结果
-#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+#[derive(Debug, Clone, serde::Serialize)]
 pub struct MarkerPosition {
     pub marker: String,
     pub page: u32,      // 1-indexed 页码
     pub y: f32,         // PDF 坐标系 Y 位置（从底部计算）
-    pub page_height: f32, // 页面实际高度（MediaBox height，单位 pt）
 }
 
 /// 自定义 OutputDev，用于捕获文本及其位置
 struct MarkerFinder {
     /// 当前页码
     current_page: u32,
-    /// 当前页面高度（MediaBox height）
-    current_page_height: f64,
     /// 翻转变换矩阵（将 PDF 坐标转为从上往下的坐标系）
     flip_ctm: Transform,
     /// 当前累积的文本
@@ -31,8 +28,8 @@ struct MarkerFinder {
     char_positions: Vec<(usize, f64)>,
     /// 当前文本的 Y 坐标
     current_y: f64,
-    /// 找到的标记位置 (page, y, page_height)
-    found_markers: HashMap<String, (u32, f64, f64)>,
+    /// 找到的标记位置
+    found_markers: HashMap<String, (u32, f64)>,
     /// 标记列表（保持顺序）
     marker_list: Vec<String>,
     /// 是否已找到所有标记（用于提前终止）
@@ -45,7 +42,6 @@ impl MarkerFinder {
     fn new(markers: &[String]) -> Self {
         Self {
             current_page: 0,
-            current_page_height: 842.0, // 默认 A4 高度
             flip_ctm: Transform::identity(),
             current_text: String::new(),
             char_positions: Vec::new(),
@@ -112,7 +108,7 @@ impl MarkerFinder {
                 // 将字节位置转换为字符位置
                 let char_pos = clean_text[..byte_pos].chars().count();
                 let y = self.find_y_for_clean_position(char_pos);
-                self.found_markers.insert(marker.clone(), (self.current_page, y, self.current_page_height));
+                self.found_markers.insert(marker.clone(), (self.current_page, y));
 
                 // 更新搜索起点为当前标记末尾之后
                 search_start = byte_pos + marker.len();
@@ -191,14 +187,10 @@ impl OutputDev for MarkerFinder {
         }
 
         self.current_page = page_num;
-        // 记录页面高度（用于坐标转换）
-        self.current_page_height = media_box.ury - media_box.lly;
         // 创建翻转变换：将 PDF 坐标系（Y 从下往上）转为从上往下的坐标系
-        self.flip_ctm = Transform::row_major(1.0, 0.0, 0.0, -1.0, 0.0, self.current_page_height);
+        self.flip_ctm = Transform::row_major(1.0, 0.0, 0.0, -1.0, 0.0, media_box.ury - media_box.lly);
         self.current_text.clear();
         self.char_positions.clear();
-
-        println!("[pdf_extract] begin_page: page={}, height={}", page_num, self.current_page_height);
 
         Ok(())
     }
@@ -291,18 +283,16 @@ pub fn extract_marker_positions(
     let result: Vec<MarkerPosition> = markers.iter()
         .map(|m| {
             finder.found_markers.get(m)
-                .map(|(page, y, page_height)| MarkerPosition {
+                .map(|(page, y)| MarkerPosition {
                     marker: m.clone(),
                     page: *page,
                     y: *y as f32,
-                    page_height: *page_height as f32,
                 })
                 .unwrap_or_else(|| {
                     MarkerPosition {
                         marker: m.clone(),
                         page: 1,
                         y: 750.0,
-                        page_height: 842.0, // 默认 A4 高度
                     }
                 })
         })
@@ -360,18 +350,16 @@ pub fn extract_marker_positions_from_bytes(
     let result: Vec<MarkerPosition> = markers.iter()
         .map(|m| {
             finder.found_markers.get(m)
-                .map(|(page, y, page_height)| MarkerPosition {
+                .map(|(page, y)| MarkerPosition {
                     marker: m.clone(),
                     page: *page,
                     y: *y as f32,
-                    page_height: *page_height as f32,
                 })
                 .unwrap_or_else(|| {
                     MarkerPosition {
                         marker: m.clone(),
                         page: 1,
                         y: 750.0,
-                        page_height: 842.0, // 默认 A4 高度
                     }
                 })
         })
