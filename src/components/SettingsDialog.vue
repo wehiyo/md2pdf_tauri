@@ -17,6 +17,13 @@
           >
             排版设置
           </button>
+          <button
+            class="tab-btn"
+            :class="{ active: activeTab === 'page' }"
+            @click="activeTab = 'page'"
+          >
+            页面设置
+          </button>
         </div>
 
         <!-- 字体设置 Tab -->
@@ -260,6 +267,81 @@
           </div>
         </div>
 
+        <!-- 页面设置 Tab -->
+        <div v-if="activeTab === 'page'" class="settings-body">
+          <div class="settings-item">
+            <label>页面尺寸</label>
+            <div class="font-select-row">
+              <div class="custom-select" @click="togglePageSizeDropdown">
+                <span class="selected-font-name">{{ getPageSizeLabel(localConfig.pageSize) }}</span>
+                <svg class="select-arrow" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <polyline points="6 9 12 15 18 9"/>
+                </svg>
+              </div>
+              <div v-if="pageSizeDropdownOpen" class="dropdown-menu">
+                <div
+                  v-for="option in pageSizeOptions"
+                  :key="option.value"
+                  class="dropdown-item"
+                  :class="{ selected: localConfig.pageSize === option.value }"
+                  @click="selectPageSize(option.value)"
+                >
+                  {{ option.label }}
+                </div>
+              </div>
+            </div>
+          </div>
+          <div class="settings-item">
+            <label>页边距（mm）</label>
+            <div class="margin-inputs-row">
+              <div class="margin-input-group">
+                <span class="margin-label">上</span>
+                <input
+                  type="number"
+                  class="margin-input"
+                  :value="localConfig.marginTop"
+                  min="0"
+                  max="50"
+                  @input="updateMargin('marginTop', $event)"
+                />
+              </div>
+              <div class="margin-input-group">
+                <span class="margin-label">下</span>
+                <input
+                  type="number"
+                  class="margin-input"
+                  :value="localConfig.marginBottom"
+                  min="0"
+                  max="50"
+                  @input="updateMargin('marginBottom', $event)"
+                />
+              </div>
+              <div class="margin-input-group">
+                <span class="margin-label">左</span>
+                <input
+                  type="number"
+                  class="margin-input"
+                  :value="localConfig.marginLeft"
+                  min="0"
+                  max="50"
+                  @input="updateMargin('marginLeft', $event)"
+                />
+              </div>
+              <div class="margin-input-group">
+                <span class="margin-label">右</span>
+                <input
+                  type="number"
+                  class="margin-input"
+                  :value="localConfig.marginRight"
+                  min="0"
+                  max="50"
+                  @input="updateMargin('marginRight', $event)"
+                />
+              </div>
+            </div>
+          </div>
+        </div>
+
         <div class="settings-footer">
           <button class="save-btn" @click="handleSave">保存</button>
           <button class="cancel-btn" @click="emit('close')">取消</button>
@@ -308,7 +390,8 @@ import {
   LINE_HEIGHT_OPTIONS,
   PARAGRAPH_SPACING_OPTIONS,
   PREVIEW_WIDTH_OPTIONS,
-  PREVIEW_BACKGROUND_COLORS
+  PREVIEW_BACKGROUND_COLORS,
+  PAGE_SIZE_OPTIONS
 } from '../composables/useConfig'
 
 const props = defineProps<{
@@ -322,7 +405,7 @@ const emit = defineEmits<{
 }>()
 
 const localConfig = ref<FontConfig>({ ...props.config })
-const activeTab = ref<'font' | 'layout'>('font')
+const activeTab = ref<'font' | 'layout' | 'page'>('font')
 const fontPickerVisible = ref(false)
 const availableFonts = ref<CustomFont[]>([])
 const pickerType = ref<'chinese' | 'english' | 'code'>('chinese')
@@ -333,6 +416,7 @@ const fontSizeDropdownOpen = ref(false)
 const lineHeightDropdownOpen = ref(false)
 const paragraphSpacingDropdownOpen = ref(false)
 const previewWidthDropdownOpen = ref(false)
+const pageSizeDropdownOpen = ref(false)
 
 // 选项常量
 const fontSizeOptions = FONT_SIZE_OPTIONS
@@ -340,6 +424,7 @@ const lineHeightOptions = LINE_HEIGHT_OPTIONS
 const paragraphSpacingOptions = PARAGRAPH_SPACING_OPTIONS
 const previewWidthOptions = PREVIEW_WIDTH_OPTIONS
 const previewBgColorOptions = PREVIEW_BACKGROUND_COLORS
+const pageSizeOptions = PAGE_SIZE_OPTIONS
 
 // 内置字体列表
 const builtinChineseFonts = BUILTIN_CHINESE_FONTS.map(f => ({ id: f.id, name: f.name }))
@@ -357,7 +442,12 @@ watch(() => props.config, (newConfig) => {
     lineHeight: newConfig.lineHeight || 1.6,
     paragraphSpacing: newConfig.paragraphSpacing || 1,
     previewWidth: newConfig.previewWidth || 900,
-    previewBackgroundColor: newConfig.previewBackgroundColor || '#ffffff'
+    previewBackgroundColor: newConfig.previewBackgroundColor || '#ffffff',
+    pageSize: newConfig.pageSize || 'A4',
+    marginTop: newConfig.marginTop || 20,
+    marginBottom: newConfig.marginBottom || 20,
+    marginLeft: newConfig.marginLeft || 25,
+    marginRight: newConfig.marginRight || 25
   }
 }, { immediate: true })
 
@@ -387,6 +477,21 @@ onMounted(() => {
   if (!localConfig.value.previewBackgroundColor) {
     localConfig.value.previewBackgroundColor = '#ffffff'
   }
+  if (!localConfig.value.pageSize) {
+    localConfig.value.pageSize = 'A4'
+  }
+  if (!localConfig.value.marginTop) {
+    localConfig.value.marginTop = 20
+  }
+  if (!localConfig.value.marginBottom) {
+    localConfig.value.marginBottom = 20
+  }
+  if (!localConfig.value.marginLeft) {
+    localConfig.value.marginLeft = 25
+  }
+  if (!localConfig.value.marginRight) {
+    localConfig.value.marginRight = 25
+  }
 })
 
 function handleSave() {
@@ -399,7 +504,12 @@ function handleSave() {
     lineHeight: localConfig.value.lineHeight || 1.6,
     paragraphSpacing: localConfig.value.paragraphSpacing || 1,
     previewWidth: localConfig.value.previewWidth || 900,
-    previewBackgroundColor: localConfig.value.previewBackgroundColor || '#ffffff'
+    previewBackgroundColor: localConfig.value.previewBackgroundColor || '#ffffff',
+    pageSize: localConfig.value.pageSize || 'A4',
+    marginTop: localConfig.value.marginTop || 20,
+    marginBottom: localConfig.value.marginBottom || 20,
+    marginLeft: localConfig.value.marginLeft || 25,
+    marginRight: localConfig.value.marginRight || 25
   })
 }
 
@@ -474,6 +584,7 @@ function closeAllDropdowns() {
   lineHeightDropdownOpen.value = false
   paragraphSpacingDropdownOpen.value = false
   previewWidthDropdownOpen.value = false
+  pageSizeDropdownOpen.value = false
 }
 
 // 检查字体是否已添加到列表
@@ -578,6 +689,11 @@ function togglePreviewWidthDropdown() {
   closeOtherDropdowns('previewWidth')
 }
 
+function togglePageSizeDropdown() {
+  pageSizeDropdownOpen.value = !pageSizeDropdownOpen.value
+  closeOtherDropdowns('pageSize')
+}
+
 function closeOtherDropdowns(except: string) {
   if (except !== 'chineseFont') chineseFontDropdownOpen.value = false
   if (except !== 'englishFont') englishFontDropdownOpen.value = false
@@ -586,6 +702,7 @@ function closeOtherDropdowns(except: string) {
   if (except !== 'lineHeight') lineHeightDropdownOpen.value = false
   if (except !== 'paragraphSpacing') paragraphSpacingDropdownOpen.value = false
   if (except !== 'previewWidth') previewWidthDropdownOpen.value = false
+  if (except !== 'pageSize') pageSizeDropdownOpen.value = false
 }
 
 // 选择字体
@@ -628,6 +745,19 @@ function selectPreviewBackgroundColor(value: string) {
   localConfig.value.previewBackgroundColor = value
 }
 
+function selectPageSize(value: 'A4' | 'B5' | 'Letter') {
+  localConfig.value.pageSize = value
+  pageSizeDropdownOpen.value = false
+}
+
+function updateMargin(margin: 'marginTop' | 'marginBottom' | 'marginLeft' | 'marginRight', event: Event) {
+  const input = event.target as HTMLInputElement
+  const value = parseInt(input.value, 10)
+  if (!isNaN(value) && value >= 0 && value <= 50) {
+    localConfig.value[margin] = value
+  }
+}
+
 // 获取选项标签
 function getFontSizeLabel(size: number): string {
   const option = fontSizeOptions.find(o => o.value === size)
@@ -647,6 +777,11 @@ function getParagraphSpacingLabel(value: number): string {
 function getPreviewWidthLabel(value: number): string {
   const option = previewWidthOptions.find(o => o.value === value)
   return option ? option.label : `${value}px`
+}
+
+function getPageSizeLabel(value: 'A4' | 'B5' | 'Letter'): string {
+  const option = pageSizeOptions.find(o => o.value === value)
+  return option ? option.label : value
 }
 </script>
 
@@ -1032,5 +1167,37 @@ function getPreviewWidthLabel(value: number): string {
 .already-tag {
   font-size: 12px;
   color: #94a3b8;
+}
+
+.margin-inputs-row {
+  display: flex;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.margin-input-group {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.margin-label {
+  font-size: 14px;
+  color: #64748b;
+  min-width: 16px;
+}
+
+.margin-input {
+  width: 60px;
+  padding: 6px 10px;
+  border: 1px solid #e2e8f0;
+  border-radius: 6px;
+  font-size: 14px;
+  text-align: center;
+}
+
+.margin-input:focus {
+  border-color: #3b82f6;
+  outline: none;
 }
 </style>

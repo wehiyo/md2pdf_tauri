@@ -13,6 +13,37 @@ export interface CustomFont {
   filename: string // 字体文件名
 }
 
+// 预设页面尺寸（mm）
+export const PAGE_SIZE_PRESETS: Record<string, { width: number; height: number; label: string }> = {
+  A4: { width: 210, height: 297, label: 'A4 (210×297mm)' },
+  B5: { width: 176, height: 250, label: 'B5 (176×250mm)' },
+  Letter: { width: 216, height: 279, label: 'Letter (8.5×11in)' },
+}
+
+// 页面尺寸选项（用于 UI）
+export const PAGE_SIZE_OPTIONS: { value: 'A4' | 'B5' | 'Letter'; label: string }[] = [
+  { value: 'A4', label: 'A4 (210×297mm)' },
+  { value: 'B5', label: 'B5 (176×250mm)' },
+  { value: 'Letter', label: 'Letter (216×279mm)' },
+]
+
+// 页边距选项（mm）
+export const PAGE_MARGIN_OPTIONS = [
+  { value: 10, label: '10mm（紧凑）' },
+  { value: 15, label: '15mm（较紧凑）' },
+  { value: 20, label: '20mm（标准）' },
+  { value: 25, label: '25mm（宽松）' },
+  { value: 30, label: '30mm（较宽松）' },
+]
+
+export interface PageConfig {
+  pageSize: 'A4' | 'B5' | 'Letter'  // 页面尺寸预设
+  marginTop: number     // 上边距 mm
+  marginBottom: number  // 下边距 mm
+  marginLeft: number    // 左边距 mm
+  marginRight: number   // 右边距 mm
+}
+
 export interface FontConfig {
   chineseFont: string           // 中文字体ID（内置或自定义）
   englishFont: string           // 英文字体ID（内置或自定义）
@@ -26,6 +57,12 @@ export interface FontConfig {
   paragraphSpacing: number      // 段落间距（em），默认 1
   previewWidth: number          // 预览宽度（px），默认 900
   previewBackgroundColor: string  // 预览背景色，默认 '#ffffff'
+  // 页面设置
+  pageSize: 'A4' | 'B5' | 'Letter'  // 页面尺寸预设
+  marginTop: number     // 上边距 mm
+  marginBottom: number  // 下边距 mm
+  marginLeft: number    // 左边距 mm
+  marginRight: number   // 右边距 mm
 }
 
 const DEFAULT_CONFIG: FontConfig = {
@@ -39,7 +76,13 @@ const DEFAULT_CONFIG: FontConfig = {
   lineHeight: 1.6,
   paragraphSpacing: 1,
   previewWidth: 900,
-  previewBackgroundColor: '#ffffff'
+  previewBackgroundColor: '#ffffff',
+  // 页面设置默认值
+  pageSize: 'A4',
+  marginTop: 20,
+  marginBottom: 20,
+  marginLeft: 25,
+  marginRight: 25,
 }
 
 const CONFIG_FILE_NAME = 'config.json'
@@ -161,7 +204,13 @@ export async function loadConfig(): Promise<FontConfig> {
         lineHeight: config.lineHeight || DEFAULT_CONFIG.lineHeight,
         paragraphSpacing: config.paragraphSpacing || DEFAULT_CONFIG.paragraphSpacing,
         previewWidth: config.previewWidth || DEFAULT_CONFIG.previewWidth,
-        previewBackgroundColor: config.previewBackgroundColor || DEFAULT_CONFIG.previewBackgroundColor
+        previewBackgroundColor: config.previewBackgroundColor || DEFAULT_CONFIG.previewBackgroundColor,
+        // 页面设置（兼容旧配置）
+        pageSize: config.pageSize || DEFAULT_CONFIG.pageSize,
+        marginTop: config.marginTop || DEFAULT_CONFIG.marginTop,
+        marginBottom: config.marginBottom || DEFAULT_CONFIG.marginBottom,
+        marginLeft: config.marginLeft || DEFAULT_CONFIG.marginLeft,
+        marginRight: config.marginRight || DEFAULT_CONFIG.marginRight,
       }
     }
   } catch (e) {

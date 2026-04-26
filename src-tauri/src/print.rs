@@ -27,6 +27,30 @@ pub struct BookmarkPosition {
     pub level: u32,
 }
 
+/// 页面打印设置
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct PrintPageSettings {
+    pub page_width_mm: f64,   // 页面宽度 mm
+    pub page_height_mm: f64,  // 页面高度 mm
+    pub margin_top_mm: f64,
+    pub margin_bottom_mm: f64,
+    pub margin_left_mm: f64,
+    pub margin_right_mm: f64,
+}
+
+/// 默认 A4 页面设置
+impl Default for PrintPageSettings {
+    fn default() -> Self {
+        PrintPageSettings {
+            page_width_mm: 210.0,
+            page_height_mm: 297.0,
+            margin_top_mm: 20.0,
+            margin_bottom_mm: 20.0,
+            margin_left_mm: 25.0,
+            margin_right_mm: 25.0,
+        }
+    }
+}
 /// 带书签位置的打印结果
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct PrintResultWithBookmarks {
@@ -112,26 +136,44 @@ pub async fn print_to_pdf_with_bookmarks(
 /// 创建隐藏的打印窗口（复用已存在的窗口）
 #[cfg(windows)]
 fn create_print_window(app: &AppHandle) -> Result<WebviewWindow, String> {
-    // 检查是否已存在打印窗口，复用它
+    // 使用默认 A4 设置创建窗口
+    create_print_window_with_settings(app, &PrintPageSettings::default())
+}
+
+#[cfg(windows)]
+fn create_print_window_with_settings(app: &AppHandle, settings: &PrintPageSettings) -> Result<WebviewWindow, String> {
+    // 检查是否已存在打印窗口，复用它并调整大小
     if let Some(existing_window) = app.get_webview_window("print-window") {
         println!("复用已存在的打印窗口");
+        // 调整窗口大小以匹配新的页面尺寸
+        let width_px = settings.page_width_mm * 96.0 / 25.4;
+        let height_px = settings.page_height_mm * 96.0 / 25.4;
+        if let Err(e) = existing_window.set_size(tauri::Size::Physical(tauri::PhysicalSize {
+            width: width_px as u32,
+            height: height_px as u32,
+        })) {
+            println!("调整窗口大小失败: {:?}", e);
+        }
         return Ok(existing_window);
     }
 
     let blank_url = Url::parse("about:blank").expect("URL should be valid");
 
-    // A4 尺寸 @ 96 DPI: 210mm × 297mm ≈ 794px × 1123px
+    // 动态计算窗口尺寸 @ 96 DPI: mm × 96 / 25.4 = px
+    let width_px = settings.page_width_mm * 96.0 / 25.4;
+    let height_px = settings.page_height_mm * 96.0 / 25.4;
+
     let print_window = tauri::WebviewWindowBuilder::new(
         app,
         "print-window",
         WebviewUrl::External(blank_url)
     )
     .visible(false)
-    .inner_size(794.0, 1123.0)  // A4 @ 96 DPI
+    .inner_size(width_px as f64, height_px as f64)
     .build()
     .map_err(|e| format!("创建打印窗口失败: {}", e))?;
 
-    println!("创建新的打印窗口");
+    println!("创建新的打印窗口，尺寸: {:.0}px × {:.0}px", width_px, height_px);
     Ok(print_window)
 }
 
@@ -503,7 +545,7 @@ async fn print_content(
                     }
                 };
 
-                // A4 页面设置
+                // A4 页面设置（硬编码，用于旧版打印命令）
                 settings.SetOrientation(COREWEBVIEW2_PRINT_ORIENTATION(0)).ok();
                 settings.SetPageWidth(8.27).ok();
                 settings.SetPageHeight(11.69).ok();
@@ -606,6 +648,7 @@ pub async fn check_print_support(window: WebviewWindow) -> Result<bool, String> 
 #[cfg(windows)]
 async fn print_to_pdf_stream_internal(
     print_window: &WebviewWindow,
+    page_settings: &PrintPageSettings,
 ) -> Result<Vec<u8>, String> {
     use tauri::webview::PlatformWebview;
     use webview2_com::Microsoft::Web::WebView2::Win32::*;
@@ -616,6 +659,14 @@ async fn print_to_pdf_stream_internal(
     let result_clone = result.clone();
     let completed = Arc::new(AtomicBool::new(false));
     let completed_clone = completed.clone();
+
+    // 计算打印参数（mm 转 inch）
+    let page_width_inch = page_settings.page_width_mm / 25.4;
+    let page_height_inch = page_settings.page_height_mm / 25.4;
+    let margin_top_inch = page_settings.margin_top_mm / 25.4;
+    let margin_bottom_inch = page_settings.margin_bottom_mm / 25.4;
+    let margin_left_inch = page_settings.margin_left_mm / 25.4;
+    let margin_right_inch = page_settings.margin_right_mm / 25.4;
 
     print_window
         .with_webview(move |webview: PlatformWebview| {
@@ -659,14 +710,14 @@ async fn print_to_pdf_stream_internal(
                     }
                 };
 
-                // A4 页面设置
+                // 动态页面设置（mm 转 inch）
                 settings.SetOrientation(COREWEBVIEW2_PRINT_ORIENTATION(0)).ok();
-                settings.SetPageWidth(8.27).ok();
-                settings.SetPageHeight(11.69).ok();
-                settings.SetMarginTop(0.79).ok();
-                settings.SetMarginBottom(0.79).ok();
-                settings.SetMarginLeft(0.98).ok();
-                settings.SetMarginRight(0.98).ok();
+                settings.SetPageWidth(page_width_inch).ok();
+                settings.SetPageHeight(page_height_inch).ok();
+                settings.SetMarginTop(margin_top_inch).ok();
+                settings.SetMarginBottom(margin_bottom_inch).ok();
+                settings.SetMarginLeft(margin_left_inch).ok();
+                settings.SetMarginRight(margin_right_inch).ok();
 
                 let result_for_closure = result_clone.clone();
                 let completed_for_closure = completed_clone.clone();
@@ -761,6 +812,7 @@ pub async fn print_to_pdf_stream_with_markers(
     html: String,
     save_path: String,
     markers: Vec<String>,
+    page_settings: Option<PrintPageSettings>,
 ) -> Result<PrintResultWithBookmarks, String> {
     #[cfg(windows)]
     {
@@ -771,11 +823,14 @@ pub async fn print_to_pdf_stream_with_markers(
             return Err("保存路径为空".to_string());
         }
 
-        // 创建隐藏的打印窗口
-        let print_window = create_print_window(&app)?;
+        // 使用传入的页面设置或默认 A4
+        let settings = page_settings.unwrap_or_default();
 
-        // 加载 HTML 并打印
-        let result = load_html_and_print_stream(&print_window, &html, &save_path, &markers).await;
+        // 创建隐藏的打印窗口（使用动态尺寸）
+        let print_window = create_print_window_with_settings(&app, &settings)?;
+
+        // 加载 HTML 并打印（传入页面设置）
+        let result = load_html_and_print_stream(&print_window, &html, &save_path, &markers, &settings).await;
 
         // 不关闭窗口，避免中断 IPC 通信或 WebView2 内部回调
         // 隐藏窗口在应用退出时会自动清理
@@ -786,7 +841,7 @@ pub async fn print_to_pdf_stream_with_markers(
 
     #[cfg(not(windows))]
     {
-        let _ = (app, window, html, save_path, markers);
+        let _ = (app, window, html, save_path, markers, page_settings);
         Err("PDF silent print is only supported on Windows".to_string())
     }
 }
@@ -798,6 +853,7 @@ async fn load_html_and_print_stream(
     html: &str,
     save_path: &str,
     markers: &[String],
+    page_settings: &PrintPageSettings,
 ) -> Result<PrintResultWithBookmarks, String> {
     use tauri::webview::PlatformWebview;
     use windows_core::HSTRING;
@@ -876,7 +932,7 @@ async fn load_html_and_print_stream(
     // 发送进度事件：提取书签位置
     let _ = app.emit("export-progress", "提取书签位置...");
 
-    let pdf_bytes = print_to_pdf_stream_internal(print_window).await?;
+    let pdf_bytes = print_to_pdf_stream_internal(print_window, page_settings).await?;
 
     // Step 5: 从内存中的 PDF bytes 提取标记位置
     let bookmark_positions = crate::pdf_extract::extract_marker_positions_from_bytes(&pdf_bytes, markers)?;
