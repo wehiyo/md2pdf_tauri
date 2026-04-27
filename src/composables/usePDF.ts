@@ -785,8 +785,8 @@ function escapeHtml(text: string): string {
 
 export function getMarkdownStyles(fontConfig?: FontConfig): string {
   const bodyFontSizePx = fontConfig?.bodyFontSize || 16
-  // PDF 使用 pt 单位，px 转 pt 比例为 0.75（96dpi → 72dpi）
-  const bodyFontSizePt = bodyFontSizePx * 0.75
+  // PDF 使用 pt 单位，px 转 pt 比例为 9/16（配置 16px 时 PDF 为 9pt）
+  const bodyFontSizePt = bodyFontSizePx * (9 / 16)
   const chineseFont = fontConfig?.chineseFont || 'DengXian'
   const englishFont = fontConfig?.englishFont || 'Arial'
   const codeFont = fontConfig?.codeFont || 'SourceCodePro'
