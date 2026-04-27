@@ -107,7 +107,7 @@ import ExportProgress from './components/ExportProgress.vue'
 import MkdocsPreviewDialog from './components/MkdocsPreviewDialog.vue'
 import { useMarkdown, slugifyForMkdocs } from './composables/useMarkdown'
 import type { Metadata } from './composables/useMarkdown'
-import { usePDF, getMarkdownStyles } from './composables/usePDF'
+import { usePDF, getHtmlMarkdownStyles } from './composables/usePDF'
 import { useScrollSync } from './composables/useScrollSync'
 import { useErrorHandling } from './composables/useErrorHandling'
 import { loadConfig, type FontConfig } from './composables/useConfig'
@@ -550,7 +550,7 @@ async function exportHTML() {
       const title = currentMetadata.value.title || extractH1Title(content.value) || 'Exported Document'
 
       // 使用配置中的字体和排版设置
-      const markdownStyles = getMarkdownStyles(fontConfig.value)
+      const markdownStyles = getHtmlMarkdownStyles(fontConfig.value)
       const previewWidth = fontConfig.value.previewWidth || 900
       const previewBgColor = fontConfig.value.previewBackgroundColor || '#ffffff'
 
