@@ -50,15 +50,15 @@ const CODE_FONT_MAP: Record<string, string> = {
 }
 
 // 获取字体 CSS 字符串
-function getChineseFontCss(fontId: string): string {
+export function getChineseFontCss(fontId: string): string {
   return CHINESE_FONT_MAP[fontId] || `'${fontId}'`
 }
 
-function getEnglishFontCss(fontId: string): string {
+export function getEnglishFontCss(fontId: string): string {
   return ENGLISH_FONT_MAP[fontId] || `'${fontId}'`
 }
 
-function getCodeFontCss(fontId: string): string {
+export function getCodeFontCss(fontId: string): string {
   return CODE_FONT_MAP[fontId] || `'${fontId}', monospace`
 }
 
@@ -783,7 +783,7 @@ function escapeHtml(text: string): string {
   return text.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#039;')
 }
 
-function getMarkdownStyles(fontConfig?: FontConfig): string {
+export function getMarkdownStyles(fontConfig?: FontConfig): string {
   const bodyFontSize = fontConfig?.bodyFontSize || 16
   const chineseFont = fontConfig?.chineseFont || 'DengXian'
   const englishFont = fontConfig?.englishFont || 'Arial'

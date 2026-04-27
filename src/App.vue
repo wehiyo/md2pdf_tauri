@@ -107,7 +107,7 @@ import ExportProgress from './components/ExportProgress.vue'
 import MkdocsPreviewDialog from './components/MkdocsPreviewDialog.vue'
 import { useMarkdown, slugifyForMkdocs } from './composables/useMarkdown'
 import type { Metadata } from './composables/useMarkdown'
-import { usePDF } from './composables/usePDF'
+import { usePDF, getMarkdownStyles } from './composables/usePDF'
 import { useScrollSync } from './composables/useScrollSync'
 import { useErrorHandling } from './composables/useErrorHandling'
 import { loadConfig, type FontConfig } from './composables/useConfig'
@@ -549,6 +549,11 @@ async function exportHTML() {
       // 使用 metadata.title 或从 h1 提取标题
       const title = currentMetadata.value.title || extractH1Title(content.value) || 'Exported Document'
 
+      // 使用配置中的字体和排版设置
+      const markdownStyles = getMarkdownStyles(fontConfig.value)
+      const previewWidth = fontConfig.value.previewWidth || 900
+      const previewBgColor = fontConfig.value.previewBackgroundColor || '#ffffff'
+
       const fullHtml = `<!DOCTYPE html>
 <html lang="zh-CN">
 <head>
@@ -558,12 +563,12 @@ async function exportHTML() {
   <style>
     ${katexStyles}
     ${highlightStyles}
-    ${document.querySelector('style[data-vite-dev-id*="markdown"]')?.textContent || ''}
+    ${markdownStyles}
     body {
-      max-width: 900px;
+      max-width: ${previewWidth}px;
       margin: 0 auto;
       padding: 2rem;
-      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      background-color: ${previewBgColor};
     }
   </style>
 </head>
