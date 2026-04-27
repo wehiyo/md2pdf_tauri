@@ -972,7 +972,7 @@ function getFullHtml(
       fontConfig?.marginRight || 25
     )}
 
-    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; font-size: 11pt; line-height: 1.6; color: #1f2937; margin: 0; padding: 0; }
+    body { margin: 0; padding: 0; }
 
     .cover-page {
       display: flex; flex-direction: column; justify-content: center; align-items: center;
