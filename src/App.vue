@@ -245,12 +245,19 @@ const mkdocsConfig = ref<MkdocsConfig>({
 
 // 全局搜索结果（传递给 LeftSidebar 显示）
 const globalSearchText = ref('')
+const globalSearchMode = ref<'current' | 'global'>('current')
+const globalCurrentIndex = ref(-1)  // 全局搜索当前位置（跨文件累计）
 interface GlobalSearchResult {
   path: string
   matches: number
   context?: string
 }
 const globalSearchResults = ref<GlobalSearchResult[]>([])
+
+// 计算全局搜索总匹配数
+const globalTotalMatches = computed(() => {
+  return globalSearchResults.value.reduce((sum, r) => sum + r.matches, 0)
+})
 
 // 检测是否有未保存的改动（基于当前打开的文件）
 const hasUnsavedChanges = computed(() => {
@@ -1551,10 +1558,14 @@ function scrollToAnchor(anchor: string) {
 
 // 搜索处理
 async function handleSearch(text: string, mode: 'current' | 'global') {
+  globalSearchMode.value = mode
   if (mode === 'global') {
     // 全局搜索 - 搜索所有文件
     globalSearchText.value = text
     globalSearchResults.value = await searchInAllFiles(text, mdFiles.value)
+    globalCurrentIndex.value = globalTotalMatches.value > 0 ? 0 : -1
+    // 更新 LeftSidebar 显示全局总数
+    sidebarRef.value?.updateResults(globalTotalMatches.value, globalCurrentIndex.value)
   } else {
     // 当前文件搜索 - 在 Preview 中高亮
     if (previewRef.value) {
@@ -1570,14 +1581,68 @@ async function handleSearch(text: string, mode: 'current' | 'global') {
 }
 
 function handleSearchJump(direction: 'prev' | 'next') {
-  // 通过 Preview 组件处理，然后更新 LeftSidebar 显示
-  if (previewRef.value) {
-    previewRef.value.jumpToSearchResult(direction === 'prev' ? -1 : 1)
-    // 更新 LeftSidebar 的搜索索引显示
-    const currentIndex = previewRef.value.getSearchIndex()
-    const totalResults = previewRef.value.getSearchTotal()
-    sidebarRef.value?.updateResults(totalResults, currentIndex)
+  if (globalSearchMode.value === 'global') {
+    // 全局搜索模式：跨文件跳转
+    if (globalTotalMatches.value === 0) return
+
+    // 计算新的全局索引（支持循环）
+    let newGlobalIndex = globalCurrentIndex.value + (direction === 'next' ? 1 : -1)
+    if (newGlobalIndex < 0) {
+      newGlobalIndex = globalTotalMatches.value - 1
+    } else if (newGlobalIndex >= globalTotalMatches.value) {
+      newGlobalIndex = 0
+    }
+    globalCurrentIndex.value = newGlobalIndex
+
+    // 找到该索引落在哪个文件
+    const target = findFileForGlobalIndex(newGlobalIndex)
+    if (!target) return
+
+    // 检查是否需要切换文件
+    const currentPath = currentFilePath.value
+    if (currentPath !== target.path) {
+      // 切换到目标文件
+      openFileFromTree(target.path)
+      // 等待渲染完成后高亮并跳转
+      setTimeout(() => {
+        if (previewRef.value && globalSearchText.value) {
+          previewRef.value.highlightSearchResults(globalSearchText.value)
+          previewRef.value.jumpToSearchResult(target.localIndex)
+        }
+      }, 300)
+    } else {
+      // 同一文件内跳转
+      if (previewRef.value) {
+        previewRef.value.jumpToSearchResult(direction === 'next' ? 1 : -1)
+      }
+    }
+
+    // 更新 LeftSidebar 显示
+    sidebarRef.value?.updateResults(globalTotalMatches.value, globalCurrentIndex.value)
+  } else {
+    // 当前文件搜索模式
+    if (previewRef.value) {
+      previewRef.value.jumpToSearchResult(direction === 'prev' ? -1 : 1)
+      const currentIndex = previewRef.value.getSearchIndex()
+      const totalResults = previewRef.value.getSearchTotal()
+      sidebarRef.value?.updateResults(totalResults, currentIndex)
+    }
   }
+}
+
+// 根据全局索引找到对应文件和文件内位置
+function findFileForGlobalIndex(globalIndex: number): { path: string; localIndex: number } | null {
+  let cumulative = 0
+  for (const result of globalSearchResults.value) {
+    if (cumulative + result.matches > globalIndex) {
+      return {
+        path: result.path,
+        localIndex: globalIndex - cumulative
+      }
+    }
+    cumulative += result.matches
+  }
+  return null
 }
 
 function handleSearchClear() {
@@ -1587,6 +1652,8 @@ function handleSearchClear() {
   }
   globalSearchText.value = ''
   globalSearchResults.value = []
+  globalSearchMode.value = 'current'
+  globalCurrentIndex.value = -1
 }
 
 // 处理字体配置变化
@@ -1615,18 +1682,31 @@ function handleOutlineScroll(id: string) {
 
 // 选择搜索结果，跳转到对应文件（不提示保存）
 async function handleSearchResultSelect(path: string) {
+  // 计算该文件在全局结果中的起始索引
+  let startIndex = 0
+  for (const result of globalSearchResults.value) {
+    if (result.path === path) {
+      break
+    }
+    startIndex += result.matches
+  }
+
   // 打开选中的文件
   await openFileFromTree(path)
+
+  // 更新全局当前索引
+  globalCurrentIndex.value = startIndex
 
   // 等待渲染完成后，在 Preview 中高亮搜索文本并跳转到第一个结果
   await nextTick()
   setTimeout(() => {
     if (previewRef.value && globalSearchText.value) {
       const highlights = previewRef.value.highlightSearchResults(globalSearchText.value)
-      // highlightSearchResults 已自动更新工具栏显示，再跳转到第一个结果
       if (highlights.length > 0) {
         previewRef.value.jumpToSearchResult(0)
       }
+      // 更新 LeftSidebar 显示
+      sidebarRef.value?.updateResults(globalTotalMatches.value, globalCurrentIndex.value)
     }
   }, 300)
 }
