@@ -236,12 +236,12 @@ async fn print_in_hidden_window(
         return Err(err);
     }
 
-    // 等待导航完成
+    // 等待导航完成（大文档需要更长时间）
     let start = std::time::Instant::now();
-    let timeout = Duration::from_secs(30);
+    let timeout = Duration::from_secs(120);
 
     while !nav_completed.load(Ordering::SeqCst) && start.elapsed() < timeout {
-        std::thread::sleep(Duration::from_millis(50));
+        std::thread::sleep(Duration::from_millis(100));
     }
 
     if !nav_completed.load(Ordering::SeqCst) {
@@ -312,20 +312,20 @@ async fn print_and_extract_bookmarks(
         return Err(err);
     }
 
-    // Step 2: 等待导航完成
+    // Step 2: 等待导航完成（MkDocs 大文档需要更长时间）
     let start = std::time::Instant::now();
-    let timeout = Duration::from_secs(30);
+    let timeout = Duration::from_secs(120);
 
     while !nav_completed.load(Ordering::SeqCst) && start.elapsed() < timeout {
-        std::thread::sleep(Duration::from_millis(50));
+        std::thread::sleep(Duration::from_millis(100));
     }
 
     if !nav_completed.load(Ordering::SeqCst) {
         return Err("等待打印窗口渲染超时".to_string());
     }
 
-    // Step 3: 等待图表渲染（Mermaid 和 PlantUML 需要时间）
-    std::thread::sleep(Duration::from_millis(1500));
+    // Step 3: 等待图表渲染（Mermaid 和 PlantUML 需要时间，大文档需要更长）
+    std::thread::sleep(Duration::from_millis(3000));
 
     // Step 4: 执行 JavaScript 获取标题位置
     let bookmarks = extract_bookmark_positions(print_window, heading_ids).await?;
@@ -913,20 +913,20 @@ async fn load_html_and_print_stream(
         return Err(err);
     }
 
-    // Step 2: 等待导航完成
+    // Step 2: 等待导航完成（MkDocs 大文档需要更长时间）
     let start = std::time::Instant::now();
-    let timeout = Duration::from_secs(30);
+    let timeout = Duration::from_secs(120);
 
     while !nav_completed.load(Ordering::SeqCst) && start.elapsed() < timeout {
-        std::thread::sleep(Duration::from_millis(50));
+        std::thread::sleep(Duration::from_millis(100));
     }
 
     if !nav_completed.load(Ordering::SeqCst) {
         return Err("等待打印窗口渲染超时".to_string());
     }
 
-    // Step 3: 等待图表渲染（Mermaid 和 PlantUML 需要时间）
-    std::thread::sleep(Duration::from_millis(1500));
+    // Step 3: 等待图表渲染（Mermaid 和 PlantUML 需要时间，大文档需要更长）
+    std::thread::sleep(Duration::from_millis(3000));
 
     // Step 4: 使用 PrintToPdfStream 获取 PDF bytes
     // 发送进度事件：提取书签位置
