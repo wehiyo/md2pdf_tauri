@@ -801,11 +801,13 @@ export function getMarkdownStyles(fontConfig?: FontConfig): string {
 
   return `
 .markdown-body { line-height: ${lineHeight}; color: #1f2937; font-size: ${bodyFontSizePt}pt; font-family: ${bodyFontCss}; }
-.markdown-body h1, .markdown-body h2, .markdown-body h3, .markdown-body h4 { margin-top: 1.5em; margin-bottom: 0.75em; font-weight: 600; line-height: 1.25; color: #111827; clear: both; }
+.markdown-body h1, .markdown-body h2, .markdown-body h3, .markdown-body h4, .markdown-body h5, .markdown-body h6 { margin-top: 1.5em; margin-bottom: 0.75em; font-weight: 600; line-height: 1.25; color: #111827; clear: both; }
 .markdown-body h1 { font-size: 2em; border-bottom: 2px solid #e5e7eb; padding-bottom: 0.3em; }
 .markdown-body h2 { font-size: 1.5em; border-bottom: 1px solid #e5e7eb; padding-bottom: 0.3em; }
 .markdown-body h3 { font-size: 1.25em; }
-.markdown-body h4 { font-size: 1.1em; }
+.markdown-body h4 { font-size: 1.2em; }
+.markdown-body h5 { font-size: 1.1em; }
+.markdown-body h6 { font-size: 1em; }
 .markdown-body p { margin-top: 0; margin-bottom: ${paragraphSpacing}em; }
 .markdown-body a { color: #3b82f6; text-decoration: none; }
 .markdown-body a:hover { text-decoration: underline; }
@@ -918,11 +920,13 @@ export function getHtmlMarkdownStyles(fontConfig?: FontConfig): string {
 
   return `
 .markdown-body { line-height: ${lineHeight}; color: #1f2937; font-size: ${bodyFontSize}px; font-family: ${bodyFontCss}; }
-.markdown-body h1, .markdown-body h2, .markdown-body h3, .markdown-body h4 { margin-top: 1.5em; margin-bottom: 0.75em; font-weight: 600; line-height: 1.25; color: #111827; clear: both; }
+.markdown-body h1, .markdown-body h2, .markdown-body h3, .markdown-body h4, .markdown-body h5, .markdown-body h6 { margin-top: 1.5em; margin-bottom: 0.75em; font-weight: 600; line-height: 1.25; color: #111827; clear: both; }
 .markdown-body h1 { font-size: 2em; border-bottom: 2px solid #e5e7eb; padding-bottom: 0.3em; }
 .markdown-body h2 { font-size: 1.5em; border-bottom: 1px solid #e5e7eb; padding-bottom: 0.3em; }
 .markdown-body h3 { font-size: 1.25em; }
-.markdown-body h4 { font-size: 1.1em; }
+.markdown-body h4 { font-size: 1.2em; }
+.markdown-body h5 { font-size: 1.1em; }
+.markdown-body h6 { font-size: 1em; }
 .markdown-body p { margin-top: 0; margin-bottom: ${paragraphSpacing}em; }
 .markdown-body a { color: #3b82f6; text-decoration: none; }
 .markdown-body a:hover { text-decoration: underline; }
