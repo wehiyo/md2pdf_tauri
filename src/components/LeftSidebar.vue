@@ -83,14 +83,29 @@
       <!-- 搜索 Tab -->
       <div v-show="activeTab === 'search'" class="tab-panel search-panel">
         <div class="search-controls">
-          <input
-            v-model="searchText"
-            type="text"
-            placeholder="搜索..."
-            class="search-input"
-            @keyup.enter="handleSearch"
-            @keyup.escape="clearSearch"
-          />
+          <div class="search-input-wrapper">
+            <input
+              v-model="searchText"
+              type="text"
+              placeholder="搜索..."
+              class="search-input"
+              @keyup.enter="handleSearch"
+              @keyup.escape="clearSearch"
+              @focus="onFocusSearchInput"
+              @blur="onBlurSearchInput"
+            />
+            <!-- 搜索历史下拉 -->
+            <div v-if="showSearchHistory && searchHistory.length > 0" class="search-history-dropdown">
+              <div
+                v-for="item in searchHistory"
+                :key="item"
+                class="history-item"
+                @click="selectHistoryItem(item)"
+              >
+                {{ item }}
+              </div>
+            </div>
+          </div>
           <button class="search-btn" title="搜索" @click="handleSearch">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
               <circle cx="11" cy="11" r="8"/>
@@ -145,7 +160,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, watch } from 'vue'
+import { ref, computed, watch, onMounted } from 'vue'
 import FileTreeItem from './FileTreeItem.vue'
 
 interface MdFile {
@@ -200,6 +215,8 @@ const currentIndex = ref(0)
 const totalResults = ref(0)
 const hasSearched = ref(false)
 const sidebarWidth = ref(240)
+const showSearchHistory = ref(false)  // 显示搜索历史下拉
+const searchHistory = ref<string[]>([])  // 最近5次搜索词
 
 // 计算属性
 const folderName = computed(() => {
@@ -213,7 +230,49 @@ function handleSearch() {
   if (searchText.value.trim()) {
     hasSearched.value = true
     emit('search', searchText.value.trim(), searchMode.value)
+    // 保存到搜索历史
+    addToSearchHistory(searchText.value.trim())
+    showSearchHistory.value = false
   }
+}
+
+function addToSearchHistory(term: string) {
+  // 移除已存在的相同项
+  const filtered = searchHistory.value.filter(h => h !== term)
+  // 添加到开头，最多保留5条
+  searchHistory.value = [term, ...filtered].slice(0, 5)
+  // 保存到 localStorage
+  localStorage.setItem('markrefine-search-history', JSON.stringify(searchHistory.value))
+}
+
+function loadSearchHistory() {
+  try {
+    const saved = localStorage.getItem('markrefine-search-history')
+    if (saved) {
+      searchHistory.value = JSON.parse(saved)
+    }
+  } catch {
+    searchHistory.value = []
+  }
+}
+
+function selectHistoryItem(term: string) {
+  searchText.value = term
+  showSearchHistory.value = false
+  handleSearch()
+}
+
+function onFocusSearchInput() {
+  if (searchHistory.value.length > 0) {
+    showSearchHistory.value = true
+  }
+}
+
+function onBlurSearchInput() {
+  // 延迟隐藏，允许点击历史项
+  setTimeout(() => {
+    showSearchHistory.value = false
+  }, 200)
 }
 
 function clearSearch() {
@@ -244,6 +303,11 @@ watch(searchMode, () => {
   if (searchText.value.trim() && hasSearched.value) {
     emit('search', searchText.value.trim(), searchMode.value)
   }
+})
+
+// 初始化加载搜索历史
+onMounted(() => {
+  loadSearchHistory()
 })
 
 // 暴露方法
@@ -543,6 +607,36 @@ defineExpose({
 
 .search-input:focus {
   border-color: #3b82f6;
+}
+
+.search-input-wrapper {
+  flex: 1;
+  position: relative;
+}
+
+.search-history-dropdown {
+  position: absolute;
+  top: 100%;
+  left: 0;
+  right: 0;
+  background: #ffffff;
+  border: 1px solid #e2e8f0;
+  border-radius: 4px;
+  margin-top: 2px;
+  z-index: 100;
+  max-height: 150px;
+  overflow-y: auto;
+}
+
+.history-item {
+  padding: 6px 8px;
+  font-size: 12px;
+  cursor: pointer;
+  color: #374151;
+}
+
+.history-item:hover {
+  background-color: #f3f4f6;
 }
 
 .search-btn {
