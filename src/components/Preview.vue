@@ -117,7 +117,9 @@ defineExpose({
   getPreviewRef: (): HTMLElement | null => previewRef.value ?? null,
   highlightSearchResults,
   clearSearchHighlights,
-  jumpToSearchResult
+  jumpToSearchResult,
+  getSearchIndex: () => currentSearchIndex.value,
+  getSearchTotal: () => searchHighlights.value.length
 })
 
 // 高亮搜索结果
@@ -200,18 +202,28 @@ function clearSearchHighlights() {
     }
   })
   searchHighlights.value = []
+  currentSearchIndex.value = -1
 }
 
-// 跳转到指定搜索结果
-function jumpToSearchResult(index: number) {
-  if (searchHighlights.value.length === 0 || index < 0 || index >= searchHighlights.value.length) return
+// 跳转到指定搜索结果（delta: -1 表示上一个，1 表示下一个）
+function jumpToSearchResult(delta: number) {
+  if (searchHighlights.value.length === 0) return
 
-  const target = searchHighlights.value[index]
+  // 计算新的索引（支持循环）
+  let newIndex = currentSearchIndex.value + delta
+  if (newIndex < 0) {
+    newIndex = searchHighlights.value.length - 1  // 从第一个跳到最后一个
+  } else if (newIndex >= searchHighlights.value.length) {
+    newIndex = 0  // 从最后一个跳到第一个
+  }
+
+  currentSearchIndex.value = newIndex
+  const target = searchHighlights.value[newIndex]
   target.scrollIntoView({ behavior: 'smooth', block: 'center' })
 
   // 更新当前高亮的样式
   searchHighlights.value.forEach((mark, i) => {
-    if (i === index) {
+    if (i === newIndex) {
       mark.classList.add('search-highlight-current')
     } else {
       mark.classList.remove('search-highlight-current')

@@ -1573,6 +1573,10 @@ function handleSearchJump(direction: 'prev' | 'next') {
   // 通过 Preview 组件处理，然后更新 LeftSidebar 显示
   if (previewRef.value) {
     previewRef.value.jumpToSearchResult(direction === 'prev' ? -1 : 1)
+    // 更新 LeftSidebar 的搜索索引显示
+    const currentIndex = previewRef.value.getSearchIndex()
+    const totalResults = previewRef.value.getSearchTotal()
+    sidebarRef.value?.updateResults(totalResults, currentIndex)
   }
 }
 
