@@ -785,8 +785,8 @@ function escapeHtml(text: string): string {
 
 export function getMarkdownStyles(fontConfig?: FontConfig): string {
   const bodyFontSizePx = fontConfig?.bodyFontSize || 16
-  // PDF 使用 pt 单位，px 转 pt 比例为 9/16（配置 16px 时 PDF 为 9pt）
-  const bodyFontSizePt = bodyFontSizePx * (9 / 16)
+  // PDF 使用 pt 单位，px 转 pt 比例为 0.75（96dpi → 72dpi）
+  const bodyFontSizePt = bodyFontSizePx * 0.75
   const chineseFont = fontConfig?.chineseFont || 'DengXian'
   const englishFont = fontConfig?.englishFont || 'Arial'
   const codeFont = fontConfig?.codeFont || 'SourceCodePro'
@@ -812,15 +812,15 @@ export function getMarkdownStyles(fontConfig?: FontConfig): string {
 .markdown-body strong { font-weight: 600; }
 .markdown-body em { font-style: italic; }
 .markdown-body code { padding: 0.2em 0.4em; margin: 0; font-size: 85%; background-color: #f3f4f6; border-radius: 3px; font-family: ${codeFontCss}; }
-.markdown-body pre { margin-top: 0; margin-bottom: ${paragraphSpacing}em; padding: 1em; overflow: auto; font-size: 85%; line-height: 1.45; background-color: #f3f4f6; border-radius: 6px; font-family: ${codeFontCss}; }
+.markdown-body pre { margin-top: 0; margin-bottom: ${paragraphSpacing}em; padding: 1em; overflow: auto; font-size: 85%; line-height: 1.45; background-color: #f3f4f6; border-radius: 6px; font-family: ${codeFontCss}; break-inside: auto; }
 .markdown-body pre code { padding: 0; background-color: transparent; border-radius: 0; font-size: 100%; white-space: pre; word-break: normal; word-wrap: normal; display: block; }
-.markdown-body .code-lines-container { display: table; width: 100%; border-collapse: collapse; }
+.markdown-body .code-lines-container { display: table; width: 100%; border-collapse: collapse; break-inside: auto; }
 .markdown-body .code-lines-container.line-num-width-1 .line-number { width: 1.5em; }
 .markdown-body .code-lines-container.line-num-width-2 .line-number { width: 2.5em; }
 .markdown-body .code-lines-container.line-num-width-3 .line-number { width: 3.5em; }
 .markdown-body .code-lines-container.line-num-width-4 .line-number { width: 4.5em; }
 .markdown-body .code-lines-container.line-num-width-5 .line-number { width: 5.5em; }
-.markdown-body .code-line { display: table-row; }
+.markdown-body .code-line { display: table-row; break-inside: avoid; }
 .markdown-body .code-line .line-number::before { content: attr(data-num); }
 .markdown-body .code-line .code-line-content { display: table-cell; padding-left: 0.75em; white-space: pre; }
 .markdown-body blockquote { margin: 0 0 ${paragraphSpacing}em; padding: 0 1em; color: #6b7280; border-left: 0.25em solid #e5e7eb; }
@@ -828,10 +828,12 @@ export function getMarkdownStyles(fontConfig?: FontConfig): string {
 .markdown-body ul { list-style-type: disc; }
 .markdown-body ol { list-style-type: decimal; }
 .markdown-body li { margin-bottom: 0.25em; }
-.markdown-body table { margin-top: 0; margin-bottom: ${paragraphSpacing}em; width: 100%; border-collapse: collapse; border-spacing: 0; font-size: 0.85em; }
+.markdown-body table { margin-top: 0; margin-bottom: ${paragraphSpacing}em; width: 100%; border-collapse: collapse; border-spacing: 0; font-size: 0.85em; break-inside: auto; }
+.markdown-body table thead { display: table-header-group; }
+.markdown-body table tbody { display: table-row-group; }
 .markdown-body table th { font-weight: 600; background-color: #c2dfff; }
 .markdown-body table th, .markdown-body table td { padding: 0.5em 1em; border: 1px solid #d1d5db; }
-.markdown-body table tr { background-color: #fff; border-top: 1px solid #e5e7eb; }
+.markdown-body table tr { background-color: #fff; border-top: 1px solid #e5e7eb; break-inside: avoid; }
 .markdown-body table tr:nth-child(2n) { background-color: #f9fafb; }
 .markdown-body hr { height: 0.25em; padding: 0; margin: 1.5em 0; background-color: #e5e7eb; border: 0; }
 .markdown-body img { max-width: 100%; box-sizing: content-box; border-style: none; display: block; margin-left: auto; margin-right: auto; }
@@ -927,15 +929,15 @@ export function getHtmlMarkdownStyles(fontConfig?: FontConfig): string {
 .markdown-body strong { font-weight: 600; }
 .markdown-body em { font-style: italic; }
 .markdown-body code { padding: 0.2em 0.4em; margin: 0; font-size: 85%; background-color: #f3f4f6; border-radius: 3px; font-family: ${codeFontCss}; }
-.markdown-body pre { margin-top: 0; margin-bottom: ${paragraphSpacing}em; padding: 1em; overflow: auto; font-size: 85%; line-height: 1.45; background-color: #f3f4f6; border-radius: 6px; font-family: ${codeFontCss}; }
+.markdown-body pre { margin-top: 0; margin-bottom: ${paragraphSpacing}em; padding: 1em; overflow: auto; font-size: 85%; line-height: 1.45; background-color: #f3f4f6; border-radius: 6px; font-family: ${codeFontCss}; break-inside: auto; }
 .markdown-body pre code { padding: 0; background-color: transparent; border-radius: 0; font-size: 100%; white-space: pre; word-break: normal; word-wrap: normal; display: block; }
-.markdown-body .code-lines-container { display: table; width: 100%; border-collapse: collapse; }
+.markdown-body .code-lines-container { display: table; width: 100%; border-collapse: collapse; break-inside: auto; }
 .markdown-body .code-lines-container.line-num-width-1 .line-number { width: 1.5em; }
 .markdown-body .code-lines-container.line-num-width-2 .line-number { width: 2.5em; }
 .markdown-body .code-lines-container.line-num-width-3 .line-number { width: 3.5em; }
 .markdown-body .code-lines-container.line-num-width-4 .line-number { width: 4.5em; }
 .markdown-body .code-lines-container.line-num-width-5 .line-number { width: 5.5em; }
-.markdown-body .code-line { display: table-row; }
+.markdown-body .code-line { display: table-row; break-inside: avoid; }
 .markdown-body .code-line .line-number::before { content: attr(data-num); }
 .markdown-body .code-line .code-line-content { display: table-cell; padding-left: 0.75em; white-space: pre; }
 .markdown-body blockquote { margin: 0 0 ${paragraphSpacing}em; padding: 0 1em; color: #6b7280; border-left: 0.25em solid #e5e7eb; }
@@ -943,10 +945,12 @@ export function getHtmlMarkdownStyles(fontConfig?: FontConfig): string {
 .markdown-body ul { list-style-type: disc; }
 .markdown-body ol { list-style-type: decimal; }
 .markdown-body li { margin-bottom: 0.25em; }
-.markdown-body table { margin-top: 0; margin-bottom: ${paragraphSpacing}em; width: 100%; border-collapse: collapse; border-spacing: 0; font-size: 0.85em; }
+.markdown-body table { margin-top: 0; margin-bottom: ${paragraphSpacing}em; width: 100%; border-collapse: collapse; border-spacing: 0; font-size: 0.85em; break-inside: auto; }
+.markdown-body table thead { display: table-header-group; }
+.markdown-body table tbody { display: table-row-group; }
 .markdown-body table th { font-weight: 600; background-color: #c2dfff; }
 .markdown-body table th, .markdown-body table td { padding: 0.5em 1em; border: 1px solid #d1d5db; }
-.markdown-body table tr { background-color: #fff; border-top: 1px solid #e5e7eb; }
+.markdown-body table tr { background-color: #fff; border-top: 1px solid #e5e7eb; break-inside: avoid; }
 .markdown-body table tr:nth-child(2n) { background-color: #f9fafb; }
 .markdown-body hr { height: 0.25em; padding: 0; margin: 1.5em 0; background-color: #e5e7eb; border: 0; }
 .markdown-body img { max-width: 100%; box-sizing: content-box; border-style: none; display: block; margin-left: auto; margin-right: auto; }
