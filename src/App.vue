@@ -596,6 +596,11 @@ ${tabbedClickScript}
 
 // 导出 PDF
 async function exportPDF() {
+  // 清除搜索状态，避免高亮带入导出
+  if (previewRef.value) {
+    previewRef.value.clearSearchHighlights()
+  }
+
   if (workState.value === 'mkdocs') {
     // MkDocs 模式：组合导出所有 nav 条目
     try {
