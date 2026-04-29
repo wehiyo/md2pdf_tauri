@@ -812,8 +812,8 @@ export function getMarkdownStyles(fontConfig?: FontConfig): string {
 .markdown-body strong { font-weight: 600; }
 .markdown-body em { font-style: italic; }
 .markdown-body code { padding: 0.2em 0.4em; margin: 0; font-size: 85%; background-color: #f3f4f6; border-radius: 3px; font-family: ${codeFontCss}; }
-.markdown-body pre { margin-top: 0; margin-bottom: ${paragraphSpacing}em; padding: 1em; overflow: auto; font-size: 85%; line-height: 1.45; background-color: #f3f4f6; border-radius: 6px; font-family: ${codeFontCss}; break-inside: auto; }
-.markdown-body pre code { padding: 0; background-color: transparent; border-radius: 0; font-size: 100%; white-space: pre; word-break: normal; word-wrap: normal; display: block; }
+.markdown-body pre { margin-top: 0; margin-bottom: ${paragraphSpacing}em; padding: 1em; font-size: 85%; line-height: 1.45; background-color: #f3f4f6; border-radius: 6px; font-family: ${codeFontCss}; break-inside: auto; }
+.markdown-body pre code { padding: 0; background-color: transparent; border-radius: 0; font-size: 100%; white-space: pre-wrap; word-break: break-all; word-wrap: break-word; display: block; }
 .markdown-body .code-lines-container { display: table; width: 100%; border-collapse: collapse; break-inside: auto; }
 .markdown-body .code-lines-container.line-num-width-1 .line-number { width: 1.5em; }
 .markdown-body .code-lines-container.line-num-width-2 .line-number { width: 2.5em; }
@@ -822,7 +822,7 @@ export function getMarkdownStyles(fontConfig?: FontConfig): string {
 .markdown-body .code-lines-container.line-num-width-5 .line-number { width: 5.5em; }
 .markdown-body .code-line { display: table-row; break-inside: avoid; }
 .markdown-body .code-line .line-number::before { content: attr(data-num); }
-.markdown-body .code-line .code-line-content { display: table-cell; padding-left: 0.75em; white-space: pre; }
+.markdown-body .code-line .code-line-content { display: table-cell; padding-left: 0.75em; white-space: pre-wrap; word-break: break-all; }
 .markdown-body blockquote { margin: 0 0 ${paragraphSpacing}em; padding: 0 1em; color: #6b7280; border-left: 0.25em solid #e5e7eb; }
 .markdown-body ul, .markdown-body ol { margin-top: 0; margin-bottom: ${paragraphSpacing}em; padding-left: 2em; }
 .markdown-body ul { list-style-type: disc; }
@@ -929,8 +929,8 @@ export function getHtmlMarkdownStyles(fontConfig?: FontConfig): string {
 .markdown-body strong { font-weight: 600; }
 .markdown-body em { font-style: italic; }
 .markdown-body code { padding: 0.2em 0.4em; margin: 0; font-size: 85%; background-color: #f3f4f6; border-radius: 3px; font-family: ${codeFontCss}; }
-.markdown-body pre { margin-top: 0; margin-bottom: ${paragraphSpacing}em; padding: 1em; overflow: auto; font-size: 85%; line-height: 1.45; background-color: #f3f4f6; border-radius: 6px; font-family: ${codeFontCss}; break-inside: auto; }
-.markdown-body pre code { padding: 0; background-color: transparent; border-radius: 0; font-size: 100%; white-space: pre; word-break: normal; word-wrap: normal; display: block; }
+.markdown-body pre { margin-top: 0; margin-bottom: ${paragraphSpacing}em; padding: 1em; font-size: 85%; line-height: 1.45; background-color: #f3f4f6; border-radius: 6px; font-family: ${codeFontCss}; break-inside: auto; }
+.markdown-body pre code { padding: 0; background-color: transparent; border-radius: 0; font-size: 100%; white-space: pre-wrap; word-break: break-all; word-wrap: break-word; display: block; }
 .markdown-body .code-lines-container { display: table; width: 100%; border-collapse: collapse; break-inside: auto; }
 .markdown-body .code-lines-container.line-num-width-1 .line-number { width: 1.5em; }
 .markdown-body .code-lines-container.line-num-width-2 .line-number { width: 2.5em; }
@@ -939,7 +939,7 @@ export function getHtmlMarkdownStyles(fontConfig?: FontConfig): string {
 .markdown-body .code-lines-container.line-num-width-5 .line-number { width: 5.5em; }
 .markdown-body .code-line { display: table-row; break-inside: avoid; }
 .markdown-body .code-line .line-number::before { content: attr(data-num); }
-.markdown-body .code-line .code-line-content { display: table-cell; padding-left: 0.75em; white-space: pre; }
+.markdown-body .code-line .code-line-content { display: table-cell; padding-left: 0.75em; white-space: pre-wrap; word-break: break-all; }
 .markdown-body blockquote { margin: 0 0 ${paragraphSpacing}em; padding: 0 1em; color: #6b7280; border-left: 0.25em solid #e5e7eb; }
 .markdown-body ul, .markdown-body ol { margin-top: 0; margin-bottom: ${paragraphSpacing}em; padding-left: 2em; }
 .markdown-body ul { list-style-type: disc; }
