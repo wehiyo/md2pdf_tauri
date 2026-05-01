@@ -1,51 +1,38 @@
-import MarkdownIt from 'markdown-it'
-import footnote from 'markdown-it-footnote'
-import sup from 'markdown-it-sup'
-import sub from 'markdown-it-sub'
-import abbr from 'markdown-it-abbr'
-import deflist from 'markdown-it-deflist'
-import anchor from 'markdown-it-anchor'
-import { full as emoji } from 'markdown-it-emoji'
-import hljs from 'highlight.js'
-import katex from 'katex'
+/**
+ * Markdown 渲染 composable
+ *
+ * 在 markdownParser.ts 的 md 实例上叠加标题编号、图片属性后处理、
+ * frontmatter 解析和面向消费者的 API（render, renderBody 等）。
+ */
 import { parse as parseYaml } from 'yaml'
+import MarkdownIt from 'markdown-it'
+import { md, registerAdmonitionParser, registerTabbedParser } from './markdownParser'
 
-// KaTeX 宏定义，支持常见的 LaTeX 命令扩展
-// 参考 KaTeX 官网：% \f is defined as #1f(#2) using the macro
-const KATEX_MACROS: Record<string, string> = {
-  '\\f': '#1f(#2)',   // \f{#1}{#2} -> #1f(#2)
-  '\\relax': '',      // \relax 不做任何事情
-}
+// ── Types ──────────────────────────────────────────
 
-// Metadata 类型定义
 export interface Metadata {
-  title?: string           // 文档标题（用于 PDF 文件名和封面）
-  author?: string          // 作者（封面右下角显示）
-  date?: string            // 日期
-  coverTitle?: string      // 封面主标题（优先用于封面）
-  coverSubtitle?: string   // 封面副标题
-  copyright?: string       // 版权信息（封面右下角显示）
+  title?: string
+  author?: string
+  date?: string
+  coverTitle?: string
+  coverSubtitle?: string
+  copyright?: string
   [key: string]: any
 }
 
-// 解析结果类型
 export interface ParseResult {
   metadata: Metadata
   body: string
 }
 
-// 支持的 admonition 类型
-const ADMONITION_TYPES = ['note', 'tip', 'warning', 'danger', 'info', 'success', 'failure', 'bug', 'example', 'quote', 'abstract', 'question', 'attention', 'hint', 'caution', 'error']
+// ── Frontmatter parsing ─────────────────────────────
 
-// 解析 YAML frontmatter
 function parseFrontmatter(content: string): ParseResult {
   const frontmatterRegex = /^---\s*\n([\s\S]*?)\n---\s*\n/
   const match = content.match(frontmatterRegex)
-
   if (match) {
     const yamlContent = match[1]
     const body = content.slice(match[0].length)
-
     try {
       const metadata = parseYaml(yamlContent) as Metadata
       return { metadata: metadata || {}, body }
@@ -54,23 +41,16 @@ function parseFrontmatter(content: string): ParseResult {
       return { metadata: {}, body: content }
     }
   }
-
   return { metadata: {}, body: content }
 }
 
-/**
- * 解析 frontmatter 并返回行数偏移
- */
 function parseFrontmatterWithLineCount(content: string): ParseResult & { frontmatterLineCount: number } {
   const frontmatterRegex = /^---\s*\n([\s\S]*?)\n---\s*\n/
   const match = content.match(frontmatterRegex)
-
   if (match) {
     const yamlContent = match[1]
     const body = content.slice(match[0].length)
-    // 计算 frontmatter 占用的行数（从文件开头到 body 开始）
     const frontmatterLineCount = match[0].split('\n').length - 1
-
     try {
       const metadata = parseYaml(yamlContent) as Metadata
       return { metadata: metadata || {}, body, frontmatterLineCount }
@@ -79,1075 +59,11 @@ function parseFrontmatterWithLineCount(content: string): ParseResult & { frontma
       return { metadata: {}, body: content, frontmatterLineCount: 0 }
     }
   }
-
   return { metadata: {}, body: content, frontmatterLineCount: 0 }
 }
 
-// 配置 highlight.js
-const highlight = (str: string, lang?: string): string => {
-  if (lang && hljs.getLanguage(lang)) {
-    try {
-      return hljs.highlight(str, { language: lang }).value
-    } catch (__) {}
-  }
-  return ''
-}
+// ── Image attributes ───────────────────────────────
 
-// 创建 markdown-it 实例
-const md = new MarkdownIt({
-  html: true,
-  linkify: true,
-  typographer: true,
-  highlight
-})
-
-// 禁用缩进代码块语法（4空格或制表符缩进不再解析为代码块）
-md.block.ruler.disable('code')
-
-// 禁用 typographer 的商标符号转换，避免公式中 (r) 等被错误渲染
-// 保留其他排版功能（智能引号、破折号等）
-md.core.ruler.at('replacements', function replacements(state) {
-  const typographerReplacements = [
-    ['+-', '±'],
-    ['...', '…'],
-    ['--', '–'],
-    ['---', '—']
-    // 移除商标符号替换：(c), (r), (tm) 等可能出现在公式中
-    // ['(c)', '©'],
-    // ['(r)', '®'],
-    // ['(tm)', '™'],
-    // ['(C)', '©'],
-    // ['(R)', '®'],
-    // ['(TM)', '™']
-  ]
-
-  for (let i = 0; i < state.tokens.length; i++) {
-    const block = state.tokens[i]
-    if (block.type !== 'inline' || !block.children) continue
-
-    for (let j = 0; j < block.children.length; j++) {
-      const token = block.children[j]
-      if (token.type !== 'text') continue
-
-      let content = token.content
-
-      // 执行 typographer 替换
-      for (const [pattern, replacement] of typographerReplacements) {
-        content = content.replace(pattern, replacement)
-      }
-
-      token.content = content
-    }
-  }
-})
-
-// 使用插件
-md.use(footnote)
-// 暂时禁用 task-lists 插件
-// md.use(taskLists, { enabled: true })
-md.use(sup)
-md.use(sub)
-md.use(abbr)
-md.use(deflist)
-md.use(emoji)
-// markdown-it-anchor：只启用级别过滤，禁用 permalink 和 slugify
-// ID 由自定义 heading_open 渲染规则生成
-md.use(anchor, {
-  permalink: false,
-  level: [1, 2, 3, 4],
-  slugify: (s: string) => s  // 禁用默认 slugify，保留原文
-})
-// toc 插件已禁用
-// md.use(toc, {
-//   includeLevel: [1, 2, 3],
-//   containerClass: 'table-of-contents'
-// })
-
-// 添加 inline 规则处理 \(...\) 格式的行内公式（在 escape 规则之前）
-md.inline.ruler.before('escape', 'math_inline_bracket', function math_inline_bracket(state, silent) {
-  const pos = state.pos
-  const max = state.posMax
-
-  // 检查是否以 \( 开头
-  if (pos + 2 > max || state.src.substring(pos, pos + 2) !== '\\(') {
-    return false
-  }
-
-  // 查找结束标记 \)
-  let endPos = -1
-  for (let i = pos + 2; i < max - 1; i++) {
-    if (state.src.substring(i, i + 2) === '\\)') {
-      endPos = i
-      break
-    }
-  }
-
-  if (endPos < 0) {
-    return false
-  }
-
-  if (!silent) {
-    const content = state.src.substring(pos + 2, endPos)
-    const token = state.push('math_inline_bracket', 'span', 0)
-    token.content = content
-    state.pos = endPos + 2
-    return true
-  }
-
-  state.pos = endPos + 2
-  return true
-})
-
-// 渲染 math_inline_bracket
-md.renderer.rules.math_inline_bracket = (tokens, idx) => {
-  const content = tokens[idx].content
-  try {
-    return katex.renderToString(content, {
-      displayMode: false,
-      throwOnError: false,
-      macros: KATEX_MACROS
-    })
-  } catch (error) {
-    return `(${content})`
-  }
-}
-
-// 自定义标题定义列表解析器：支持 #标题作为定义术语
-// 格式：#### Markdown :   定义内容
-// 必须在 heading 规则之前运行，否则 heading 规则会先处理标题行
-md.block.ruler.before('heading', 'heading_deflist', function heading_deflist(state, startLine, endLine, silent) {
-  const pos = state.bMarks[startLine] + state.tShift[startLine]
-  const max = state.eMarks[startLine]
-
-  // 检查是否以 # 开头（ATX 标题）
-  if (pos >= max || state.src.charCodeAt(pos) !== 0x23 /* # */) {
-    return false
-  }
-
-  // 计算标题级别
-  let level = 0
-  let p = pos
-  while (p < max && state.src.charCodeAt(p) === 0x23) {
-    level++
-    p++
-  }
-
-  // 标题级别应该是 1-6
-  if (level < 1 || level > 6) {
-    return false
-  }
-
-  // 跳过 # 后的空格
-  while (p < max && state.src.charCodeAt(p) === 0x20 /* space */) {
-    p++
-  }
-
-  // 提取标题文本
-  const titleText = state.src.substring(p, max).trim()
-  if (!titleText) {
-    return false // 空标题不处理
-  }
-
-  // 检查下一行是否是定义行（以 : 开头，后跟空格）
-  const nextLine = startLine + 1
-  if (nextLine >= endLine) {
-    return false // 没有下一行
-  }
-
-  const nextPos = state.bMarks[nextLine] + state.tShift[nextLine]
-  const nextMax = state.eMarks[nextLine]
-
-  // 检查是否以 : 开头（后跟空格或 Tab）
-  if (nextPos >= nextMax || state.src.charCodeAt(nextPos) !== 0x3A /* : */) {
-    return false
-  }
-
-  // 检查冒号后是否至少有一个空格或 Tab
-  let defPos = nextPos + 1
-  if (defPos < nextMax) {
-    const charAfterColon = state.src.charCodeAt(defPos)
-    if (charAfterColon !== 0x20 /* space */ && charAfterColon !== 0x09 /* tab */) {
-      // 冒号后必须有空格或 Tab 才是有效的定义行
-      return false
-    }
-  }
-
-  // 如果是 silent 模式，只做检测，不生成 token
-  if (silent) {
-    return true
-  }
-
-  // 定义文本：收集所有同样缩进的内容，包括代码块、表格等
-  // 参考 markdown-it-deflist 的处理逻辑
-
-  // 计算定义内容的缩进量（冒号后的空格/tab数量）
-  // 标准格式是 ":    内容"，有4个空格缩进
-  let defIndent = 0
-  let indentPos = defPos
-  while (indentPos < nextMax && state.src.charCodeAt(indentPos) === 0x20) {
-    defIndent++
-    indentPos++
-  }
-  // 如果没有空格，至少假设有1个（冒号后直接是内容）
-  if (defIndent === 0 && indentPos < nextMax && state.src.charCodeAt(indentPos) !== 0x0A) {
-    defIndent = 1
-  }
-
-  // 收集定义内容行
-  let defLines: string[] = []
-  let currentLine = nextLine
-
-  // 获取第一行定义内容（去掉冒号后的缩进空格）
-  // 注意：保留内容的原始格式，只去掉定义缩进
-  let firstLineStart = defPos
-  // 跳过缩进空格（但保留其他内容）
-  while (firstLineStart < nextMax && state.src.charCodeAt(firstLineStart) === 0x20) {
-    firstLineStart++
-  }
-  let firstLineContent = state.src.substring(firstLineStart, nextMax)
-  defLines.push(firstLineContent)
-
-  currentLine++
-
-  // 检查后续行：必须保持至少与定义相同的缩进
-  // 续行去掉定义缩进量，保留相对缩进（用于代码块等）
-  while (currentLine < endLine) {
-    // 获取行的原始起始位置（包含缩进空格）
-    const lineOrigStart = state.bMarks[currentLine]
-    const lineStart = lineOrigStart + state.tShift[currentLine]  // 去掉缩进后的内容起始
-    const lineEnd = state.eMarks[currentLine]
-
-    // 空行处理：空行也是定义的一部分（特别是在代码块中）
-    if (lineStart >= lineEnd) {
-      defLines.push('')
-      currentLine++
-      continue
-    }
-
-    // 使用 tShift 作为原始缩进量
-    const lineIndent = state.tShift[currentLine]
-
-    // 缩进量必须 >= 定义缩进量才能作为续行
-    if (lineIndent >= defIndent) {
-      // 从原始位置移除定义缩进量的空格，保留相对缩进
-      const contentStart = lineOrigStart + defIndent
-      const lineContent = state.src.substring(contentStart, lineEnd)
-      defLines.push(lineContent)
-      currentLine++
-    } else {
-      // 缩进不足，定义结束
-      break
-    }
-  }
-
-  // 定义文本
-  const defText = defLines.join('\n')
-
-  // 使用 markdown-it 解析定义内容（支持代码块、表格等）
-  const defMd = new MarkdownIt({
-    html: true,
-    linkify: true,
-    typographer: true,
-    highlight
-  })
-  defMd.use(footnote)
-  defMd.use(sup)
-  defMd.use(sub)
-  defMd.use(abbr)
-  defMd.use(deflist)
-  defMd.use(emoji)
-
-  // 禁用缩进代码块语法（与主 md 实例一致）
-  defMd.block.ruler.disable('code')
-
-  // 添加 admonition 支持（复制主实例的解析规则）
-  defMd.block.ruler.before('fence', 'admonition_block', function admonition_block(state, startLine, endLine, silent) {
-    const pos = state.bMarks[startLine] + state.tShift[startLine]
-    const max = state.eMarks[startLine]
-
-    // 检查是否以 !!! 开头
-    if (pos + 3 > max || state.src.substring(pos, pos + 3) !== '!!!') {
-      return false
-    }
-
-    // 解析类型和标题
-    const params = state.src.substring(pos + 3, max).trim()
-    if (!params) {
-      return false
-    }
-
-    // 提取类型（第一个单词）
-    const typeMatch = params.match(/^(\w+)/)
-    if (!typeMatch) {
-      return false
-    }
-    const admonitionType = typeMatch[1].toLowerCase()
-
-    // 检查类型是否有效
-    if (!ADMONITION_TYPES.includes(admonitionType)) {
-      return false
-    }
-
-    // 解析标题：支持引号括起来的多词标题
-    let admonitionTitle = ''
-    let showTitle = true
-
-    const remaining = params.substring(typeMatch[0].length).trim()
-
-    if (remaining) {
-      const quotedTitleMatch = remaining.match(/^"([^"]*)"|^'([^']*)'/)
-      if (quotedTitleMatch) {
-        const quotedTitle = quotedTitleMatch[1] !== undefined ? quotedTitleMatch[1] : quotedTitleMatch[2]
-        if (quotedTitle === '') {
-          showTitle = false
-        } else {
-          admonitionTitle = quotedTitle
-        }
-      } else {
-        admonitionTitle = remaining
-      }
-    } else {
-      admonitionTitle = admonitionType
-    }
-
-    // 收集内容
-    let nextLine = startLine + 1
-    const contentLines: string[] = []
-    const minIndent = 4
-    let hasIndentedContent = false
-    let autoClosed = false
-
-    while (nextLine < endLine) {
-      const linePos = state.bMarks[nextLine] + state.tShift[nextLine]
-      const lineMax = state.eMarks[nextLine]
-      const lineIndent = state.sCount[nextLine]
-
-      const lineText = state.src.substring(linePos, lineMax).trim()
-      if (lineText === '!!!') {
-        autoClosed = true
-        nextLine++
-        break
-      }
-
-      if (linePos >= lineMax) {
-        if (hasIndentedContent) {
-          contentLines.push('')
-        }
-        nextLine++
-        continue
-      }
-
-      if (lineIndent >= minIndent) {
-        hasIndentedContent = true
-        const lineContent = state.src.substring(linePos, lineMax)
-        contentLines.push(lineContent)
-        nextLine++
-      } else if (!hasIndentedContent) {
-        contentLines.push(lineText)
-        nextLine++
-      } else {
-        break
-      }
-    }
-
-    if (contentLines.length === 0 && !autoClosed) {
-      return false
-    }
-
-    if (!silent) {
-      const openToken = state.push('admonition_open', 'div', 1)
-      openToken.attrPush(['class', `admonition ${admonitionType}`])
-      openToken.map = [startLine, nextLine]
-
-      if (showTitle) {
-        const titleOpenToken = state.push('admonition_title_open', 'p', 1)
-        titleOpenToken.attrPush(['class', 'admonition-title'])
-        titleOpenToken.map = [startLine, startLine]
-
-        const titleContentToken = state.push('inline', '', 0)
-        titleContentToken.content = admonitionTitle
-        titleContentToken.children = []
-
-        state.push('admonition_title_close', 'p', -1)
-      }
-
-      const content = contentLines.join('\n')
-      if (content.trim()) {
-        const contentToken = state.push('admonition_content', 'div', 0)
-        contentToken.content = content
-      }
-
-      const closeToken = state.push('admonition_close', 'div', -1)
-      closeToken.map = [startLine, nextLine]
-    }
-
-    state.line = nextLine
-    return true
-  })
-
-  // 渲染 admonition 内容（递归渲染）
-  defMd.renderer.rules.admonition_content = (tokens, idx) => {
-    const content = tokens[idx].content
-    return defMd.render(content)
-  }
-
-  // 解析定义内容并渲染
-  const defHtml = defMd.render(defText)
-
-  // 使用自定义 token，在渲染阶段处理编号
-  // 这样可以避免 deflist 插件重复处理
-  // 存储 defHtml 而不是 defText，因为内容已经解析完成
-  let token = state.push('heading_deflist_block', '', 0)
-  token.content = JSON.stringify({ level, titleText, defHtml })
-  token.map = [startLine, currentLine]
-
-  // 更新行位置（消耗标题行和所有定义行）
-  state.line = currentLine
-
-  return true
-})
-
-// 自定义渲染规则：处理 heading_deflist_block token
-// 在渲染阶段统一处理编号，确保顺序正确
-md.renderer.rules.heading_deflist_block = (tokens, idx) => {
-  const token = tokens[idx]
-  const data = JSON.parse(token.content)
-  const originalLevel = data.level as number  // 原始标题层级 (1-6)
-  const titleText = data.titleText as string
-  const defHtml = data.defHtml as string
-
-  // 判断是否使用外部编号上下文（MkDocs 模式）
-  if (isMkdocsExportMode) {
-    // MkDocs 组合导出模式：使用外部编号上下文
-
-    // 调整层级：h1 保持不变（但会被跳过渲染），h2+ 相对于 nav 标题保持层级差
-    // adjustedLevel = navLevel + originalLevel
-    let adjustedLevel = originalLevel
-    if (originalLevel >= 2) {
-      adjustedLevel = Math.min(externalNavLevel + originalLevel, 6)
-    }
-
-    // h2-h6 都更新计数器（用于 ID 生成）
-    // h2-h4 显示编号，h5-h6 不显示编号但 ID 仍带前缀
-    let number = ''  // 显示编号（仅 h2-h4）
-    let numberPrefixForId = ''  // 用于 ID 的编号前缀（连字符格式）
-
-    if (originalLevel >= 2 && originalLevel <= 6) {
-      // 更新计数器
-      if (originalLevel === 2) {
-        chapterCounters.h2++
-        chapterCounters.h3 = 0
-        chapterCounters.h4 = 0
-        chapterCounters.h5 = 0
-        chapterCounters.h6 = 0
-      } else if (originalLevel === 3) {
-        chapterCounters.h3++
-        chapterCounters.h4 = 0
-        chapterCounters.h5 = 0
-        chapterCounters.h6 = 0
-      } else if (originalLevel === 4) {
-        chapterCounters.h4++
-        chapterCounters.h5 = 0
-        chapterCounters.h6 = 0
-      } else if (originalLevel === 5) {
-        chapterCounters.h5++
-        chapterCounters.h6 = 0
-      } else if (originalLevel === 6) {
-        chapterCounters.h6++
-      }
-
-      // 生成 ID 前缀（h2-h6 都生成）
-      const prefixParts = externalNumberPrefix.replace(/\.$/, '').split('.')
-      if (originalLevel === 2) {
-        if (adjustedLevel <= 4) {
-          number = `${externalNumberPrefix}${chapterCounters.h2}. `
-        }
-        numberPrefixForId = prefixParts.join('-') + '-' + chapterCounters.h2 + '-'
-      } else if (originalLevel === 3) {
-        if (adjustedLevel <= 4) {
-          number = `${externalNumberPrefix}${chapterCounters.h2}.${chapterCounters.h3}. `
-        }
-        numberPrefixForId = prefixParts.join('-') + '-' + chapterCounters.h2 + '-' + chapterCounters.h3 + '-'
-      } else if (originalLevel === 4) {
-        if (adjustedLevel <= 4) {
-          number = `${externalNumberPrefix}${chapterCounters.h2}.${chapterCounters.h3}.${chapterCounters.h4}. `
-        }
-        numberPrefixForId = prefixParts.join('-') + '-' + chapterCounters.h2 + '-' + chapterCounters.h3 + '-' + chapterCounters.h4 + '-'
-      } else if (originalLevel === 5) {
-        // h5：不显示编号，但 ID 带前缀
-        numberPrefixForId = prefixParts.join('-') + '-' + chapterCounters.h2 + '-' + chapterCounters.h3 + '-' + chapterCounters.h4 + '-' + chapterCounters.h5 + '-'
-      } else if (originalLevel === 6) {
-        // h6：不显示编号，但 ID 带前缀
-        numberPrefixForId = prefixParts.join('-') + '-' + chapterCounters.h2 + '-' + chapterCounters.h3 + '-' + chapterCounters.h4 + '-' + chapterCounters.h5 + '-' + chapterCounters.h6 + '-'
-      }
-    }
-
-    // 生成带编号前缀的 ID（MkDocs 模式：编号前缀 + 标题 slug）
-    const baseSlug = slugifyForMkdocs(titleText)
-    const headingId = numberPrefixForId ? `${numberPrefixForId}${baseSlug}` : baseSlug
-
-    // 渲染标题 inline 内容
-    const headingContent = titleText
-      .replace(/\[([^\]]+)\]\(([^)]+)\)/g, '<a href="$2">$1</a>')
-      .replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>')
-      .replace(/\*([^*]+)\*/g, '<em>$1</em>')
-      .replace(/`([^`]+)`/g, '<code>$1</code>')
-
-    // 输出 HTML
-    const numberSpan = number ? `<span class="heading-number">${number}</span>` : ''
-    return `<h${adjustedLevel} id="${headingId}">${numberSpan}${headingContent}</h${adjustedLevel}><dd>${defHtml}</dd>`
-
-  } else {
-    // 普通模式：使用标准编号逻辑
-    const level = originalLevel
-
-    // 更新计数器
-    let number = ''
-    let numberPrefix = ''
-    if (level === 2) {
-      headingCounters.h2++
-      headingCounters.h3 = 0
-      headingCounters.h4 = 0
-      number = `${headingCounters.h2}. `
-      numberPrefix = `${headingCounters.h2}-`
-    } else if (level === 3) {
-      headingCounters.h3++
-      headingCounters.h4 = 0
-      number = `${headingCounters.h2}.${headingCounters.h3}. `
-      numberPrefix = `${headingCounters.h2}-${headingCounters.h3}-`
-    } else if (level === 4) {
-      headingCounters.h4++
-      number = `${headingCounters.h2}.${headingCounters.h3}.${headingCounters.h4}. `
-      numberPrefix = `${headingCounters.h2}-${headingCounters.h3}-${headingCounters.h4}-`
-    }
-
-    // 生成带编号前缀的 ID
-    const baseSlug = slugify(titleText)
-    const headingId = numberPrefix ? `${numberPrefix}${baseSlug}` : baseSlug
-
-    // 存储映射
-    if (baseSlug) {
-      headingIdMap.set(baseSlug, headingId)
-    }
-
-    // 渲染标题 inline 内容
-    const headingContent = titleText
-      .replace(/\[([^\]]+)\]\(([^)]+)\)/g, '<a href="$2">$1</a>')
-      .replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>')
-      .replace(/\*([^*]+)\*/g, '<em>$1</em>')
-      .replace(/`([^`]+)`/g, '<code>$1</code>')
-
-    // 输出 HTML
-    const numberSpan = number ? `<span class="heading-number">${number}</span>` : ''
-    return `<h${level} id="${headingId}">${numberSpan}${headingContent}</h${level}><dd>${defHtml}</dd>`
-  }
-}
-
-// 自定义 Admonition 解析器（支持缩进语法和结束标记语法）
-md.block.ruler.before('fence', 'admonition_block', function admonition_block(state, startLine, endLine, silent) {
-  const pos = state.bMarks[startLine] + state.tShift[startLine]
-  const max = state.eMarks[startLine]
-
-  // 检查是否以 !!! 开头
-  if (pos + 3 > max || state.src.substring(pos, pos + 3) !== '!!!') {
-    return false
-  }
-
-  // 解析类型和标题
-  const params = state.src.substring(pos + 3, max).trim()
-  if (!params) {
-    return false
-  }
-
-  // 提取类型（第一个单词）
-  const typeMatch = params.match(/^(\w+)/)
-  if (!typeMatch) {
-    return false
-  }
-  const admonitionType = typeMatch[1].toLowerCase()
-
-  // 检查类型是否有效
-  if (!ADMONITION_TYPES.includes(admonitionType)) {
-    return false
-  }
-
-  // 解析标题：支持引号括起来的多词标题
-  let admonitionTitle = ''
-  let showTitle = true
-
-  const remaining = params.substring(typeMatch[0].length).trim()
-
-  if (remaining) {
-    // 检查是否是引号括起来的标题："Title" 或 'Title'
-    const quotedTitleMatch = remaining.match(/^"([^"]*)"|^'([^']*)'/)
-    if (quotedTitleMatch) {
-      const quotedTitle = quotedTitleMatch[1] !== undefined ? quotedTitleMatch[1] : quotedTitleMatch[2]
-      if (quotedTitle === '') {
-        showTitle = false  // 空引号 "" 表示无标题
-      } else {
-        admonitionTitle = quotedTitle
-      }
-    } else {
-      // 没有引号，按原方式处理（整个剩余部分作为标题）
-      admonitionTitle = remaining
-    }
-  } else {
-    // 无标题参数时，使用类型作为默认标题
-    admonitionTitle = admonitionType
-  }
-
-  // 收集内容，同时支持两种语法
-  let nextLine = startLine + 1
-  const contentLines: string[] = []
-  const minIndent = 4  // 最小缩进空格数
-  let hasIndentedContent = false  // 是否有缩进内容（用于判断语法类型）
-  let autoClosed = false  // 是否通过 !!! 结束
-
-  while (nextLine < endLine) {
-    const linePos = state.bMarks[nextLine] + state.tShift[nextLine]
-    const lineMax = state.eMarks[nextLine]
-    const lineIndent = state.sCount[nextLine]
-
-    // 检查是否为结束标记 !!!（整行只有 !!!）
-    const lineText = state.src.substring(linePos, lineMax).trim()
-    if (lineText === '!!!') {
-      autoClosed = true
-      nextLine++
-      break
-    }
-
-    // 空行处理
-    if (linePos >= lineMax) {
-      // 如果已经有缩进内容，空行也加入
-      if (hasIndentedContent) {
-        contentLines.push('')
-      }
-      nextLine++
-      continue
-    }
-
-    // 检查缩进
-    if (lineIndent >= minIndent) {
-      // 缩进语法：提取内容（保留相对缩进）
-      hasIndentedContent = true
-      const lineContent = state.src.substring(linePos, lineMax)
-      contentLines.push(lineContent)
-      nextLine++
-    } else if (!hasIndentedContent) {
-      // 非缩进语法：如果还没有缩进内容，直接加入内容行
-      contentLines.push(lineText)
-      nextLine++
-    } else {
-      // 缩进语法遇到非缩进行，结束
-      break
-    }
-  }
-
-  // 至少需要一行内容（或结束标记存在）
-  if (contentLines.length === 0 && !autoClosed) {
-    return false
-  }
-
-  if (!silent) {
-    // 创建 admonition_open token
-    const openToken = state.push('admonition_open', 'div', 1)
-    openToken.attrPush(['class', `admonition ${admonitionType}`])
-    openToken.map = [startLine, nextLine]
-
-    // 创建标题 token（仅当需要显示标题时）
-    if (showTitle) {
-      const titleOpenToken = state.push('admonition_title_open', 'p', 1)
-      titleOpenToken.attrPush(['class', 'admonition-title'])
-      titleOpenToken.map = [startLine, startLine]
-
-      const titleContentToken = state.push('inline', '', 0)
-      titleContentToken.content = admonitionTitle
-      titleContentToken.children = []
-
-      state.push('admonition_title_close', 'p', -1)
-    }
-
-    // 解析内容（递归解析 Markdown）
-    const content = contentLines.join('\n')
-    if (content.trim()) {
-      // 创建内容容器
-      const contentToken = state.push('admonition_content', 'div', 0)
-      contentToken.content = content
-    }
-
-    // 创建 admonition_close token
-    const closeToken = state.push('admonition_close', 'div', -1)
-    closeToken.map = [startLine, nextLine]
-  }
-
-  state.line = nextLine
-  return true
-})
-
-// 渲染 admonition 内容
-md.renderer.rules.admonition_content = (tokens, idx) => {
-  const content = tokens[idx].content
-  // 递归渲染内容为 Markdown
-  return md.render(content)
-}
-
-// 自定义 Tabbed 解析器（Material for MkDocs 风格）
-md.block.ruler.before('fence', 'tabbed_block', function tabbed_block(state, startLine, endLine, silent) {
-  const pos = state.bMarks[startLine] + state.tShift[startLine]
-  const max = state.eMarks[startLine]
-
-  // 检查是否以 === 开头
-  if (pos + 3 > max || state.src.substring(pos, pos + 3) !== '===') {
-    return false
-  }
-
-  // 解析标题：=== "Tab Title"
-  const params = state.src.substring(pos + 3, max).trim()
-
-  // 检查标题格式："Title" 或 'Title'
-  const titleMatch = params.match(/^"([^"]*)"|'([^']*)'/)
-  if (!titleMatch) {
-    return false
-  }
-
-  const tabTitle = titleMatch[1] || titleMatch[2]
-
-  // 收集所有标签页（一个 tabbed-set 可能包含多个 === 块）
-  const tabs: { title: string; content: string[] }[] = []
-  let currentTab = { title: tabTitle, content: [] as string[] }
-  let nextLine = startLine + 1
-  const minIndent = 4  // 内容最小缩进
-
-  // 收集当前标签的内容
-  while (nextLine < endLine) {
-    const linePos = state.bMarks[nextLine] + state.tShift[nextLine]
-    const lineMax = state.eMarks[nextLine]
-    const lineIndent = state.sCount[nextLine]
-    const lineText = state.src.substring(linePos, lineMax)
-
-    // 检查是否是新的标签 === "Title"
-    if (lineText.startsWith('===')) {
-      const newParams = lineText.substring(3).trim()
-      const newTitleMatch = newParams.match(/^"([^"]*)"|'([^']*)'/)
-      if (newTitleMatch) {
-        // 保存当前标签，开始新标签
-        tabs.push(currentTab)
-        currentTab = { title: newTitleMatch[1] || newTitleMatch[2], content: [] }
-        nextLine++
-        continue
-      }
-    }
-
-    // 空行处理
-    if (linePos >= lineMax) {
-      if (currentTab.content.length > 0) {
-        currentTab.content.push('')
-      }
-      nextLine++
-      continue
-    }
-
-    // 检查缩进
-    if (lineIndent >= minIndent) {
-      // 从原始行开始位置提取内容，保留相对缩进
-      // 找到实际内容开始位置（跳过 minIndent 个空格）
-      const rawLineStart = state.bMarks[nextLine]
-      let contentStart = rawLineStart
-      let spacesToSkip = minIndent
-      while (spacesToSkip > 0 && contentStart < lineMax) {
-        if (state.src[contentStart] === ' ') {
-          contentStart++
-          spacesToSkip--
-        } else if (state.src[contentStart] === '\t') {
-          contentStart++
-          spacesToSkip -= 4  // 制表符算作4个空格
-        } else {
-          break
-        }
-      }
-      // 提取内容，保留代码块等的内部缩进
-      const lineContent = state.src.substring(contentStart, lineMax)
-      currentTab.content.push(lineContent)
-      nextLine++
-    } else {
-      // 非缩进内容，结束当前 tabbed-set
-      break
-    }
-  }
-
-  // 添加最后一个标签
-  if (currentTab.content.length > 0 || tabs.length > 0) {
-    tabs.push(currentTab)
-  }
-
-  // 至少需要两个标签
-  if (tabs.length < 2) {
-    return false
-  }
-
-  if (!silent) {
-    // 创建 tabbed-set 容器
-    const openToken = state.push('tabbed_set_open', 'div', 1)
-    openToken.attrPush(['class', 'tabbed-set'])
-    // 存储 tabs 数据供渲染器使用
-    ;(openToken as any).tabsData = tabs.map((t, i) => ({ title: t.title, index: i }))
-    openToken.map = [startLine, nextLine]
-
-    // 创建标签内容
-    for (let i = 0; i < tabs.length; i++) {
-      const tab = tabs[i]
-      const contentToken = state.push('tabbed_content', 'div', 0)
-      contentToken.content = tab.content.join('\n')
-      ;(contentToken as any).tabTitle = tab.title
-      ;(contentToken as any).tabIndex = i
-    }
-
-    // 创建 tabbed-set 关闭
-    const closeToken = state.push('tabbed_set_close', 'div', -1)
-    closeToken.map = [startLine, nextLine]
-  }
-
-  state.line = nextLine
-  return true
-})
-
-// 渲染 tabbed 内容（生成完整的 HTML 结构）
-md.renderer.rules.tabbed_content = (tokens, idx) => {
-  const token = tokens[idx] as any
-  const content = token.content
-  const tabTitle = token.tabTitle || ''
-  const tabIndex = token.tabIndex
-
-  // 递归渲染内容为 Markdown
-  const renderedContent = md.render(content)
-
-  // 包装为 tabbed-block
-  // 预览区：第一个标签显示，其他隐藏
-  // PDF：所有标签显示，标题作为 HTML 元素（不依赖 CSS 伪元素）
-  const isActive = tabIndex === 0 ? ' active' : ''
-  const titleHtml = `<div class="tabbed-block-title">${tabTitle}</div>`
-  return `<div class="tabbed-block${isActive}" data-tab-index="${tabIndex}">${titleHtml}${renderedContent}</div>`
-}
-
-// 自定义 tabbed_set_open 渲染（生成标签头部）
-md.renderer.rules.tabbed_set_open = (tokens, idx) => {
-  // 收集后续的 tabbed_content tokens 来生成标签头部
-  const token = tokens[idx]
-  const tabsData = (token as any).tabsData || []
-
-  // 生成标签头部
-  let labelsHtml = '<div class="tabbed-labels">'
-  for (const tab of tabsData) {
-    const isActive = tab.index === 0 ? ' active' : ''
-    labelsHtml += `<button class="tabbed-label${isActive}" data-tab-index="${tab.index}">${tab.title}</button>`
-  }
-  labelsHtml += '</div>'
-
-  return `<div class="tabbed-set">${labelsHtml}<div class="tabbed-content">`
-}
-
-// 自定义 tabbed_set_close 渲染
-md.renderer.rules.tabbed_set_close = () => {
-  return '</div></div>'
-}
-
-// 添加 $$ 块级公式解析规则
-md.block.ruler.before('fence', 'math_block', function math_block(state, startLine, endLine, silent) {
-  const pos = state.bMarks[startLine] + state.tShift[startLine]
-  const max = state.eMarks[startLine]
-
-  // 检查当前行是否以 $$ 或 \[ 开头
-  const dollarMarker = '$$'
-  const bracketMarker = '\\['
-
-  let marker = ''
-  let endMarker = ''
-
-  if (pos + dollarMarker.length <= max && state.src.substring(pos, pos + dollarMarker.length) === dollarMarker) {
-    marker = dollarMarker
-    endMarker = dollarMarker
-  } else if (pos + bracketMarker.length <= max && state.src.substring(pos, pos + bracketMarker.length) === bracketMarker) {
-    marker = bracketMarker
-    endMarker = '\\]'
-  } else {
-    return false
-  }
-
-  // 查找结束标记
-  let nextLine = startLine + 1
-  let contentEnd = -1
-
-  while (nextLine < endLine) {
-    const linePos = state.bMarks[nextLine] + state.tShift[nextLine]
-    const lineMax = state.eMarks[nextLine]
-
-    if (linePos < lineMax && state.src.substring(linePos, linePos + endMarker.length) === endMarker) {
-      contentEnd = nextLine
-      break
-    }
-    nextLine++
-  }
-
-  if (contentEnd < 0) {
-    return false
-  }
-
-  if (!silent) {
-    const token = state.push('math_block', 'div', 0)
-    token.content = state.src.substring(
-      state.bMarks[startLine] + state.tShift[startLine] + marker.length,
-      state.bMarks[contentEnd] + state.tShift[contentEnd]
-    ).trim()
-    token.map = [startLine, contentEnd + 1]
-  }
-
-  state.line = contentEnd + 1
-  return true
-})
-
-// 渲染 math_block
-md.renderer.rules.math_block = (tokens, idx) => {
-  const content = tokens[idx].content
-  try {
-    return katex.renderToString(content, {
-      displayMode: true,
-      throwOnError: false,
-      macros: KATEX_MACROS
-    })
-  } catch (error) {
-    return `<pre class="error">${content}</pre>`
-  }
-}
-
-// 自定义 fence 渲染器处理 Mermaid、PlantUML 和代码块
-md.renderer.rules.fence = (tokens, idx, _options, _env, _self) => {
-  const token = tokens[idx]
-  const info = token.info ? token.info.trim() : ''
-  const lang = info.split(/\s+/g)[0]
-
-  if (lang === 'mermaid') {
-    return `<div class="mermaid">${token.content}</div>`
-  }
-
-  // PlantUML 图表
-  if (lang === 'plantuml') {
-    // 编码内容避免 HTML 转义问题
-    const encoded = encodeURIComponent(token.content)
-    return `<div class="plantuml" data-plantuml="${encoded}">Loading PlantUML...</div>`
-  }
-
-  // WaveDrom 时序图
-  if (lang === 'wavedrom') {
-    return `<div class="wavedrom">${token.content}</div>`
-  }
-
-  // 数学公式代码块
-  if (lang === 'math' || lang === 'latex') {
-    try {
-      const rendered = katex.renderToString(token.content, {
-        displayMode: true,
-        throwOnError: false,
-        macros: KATEX_MACROS
-      })
-      return `<div class="katex-display">${rendered}</div>`
-    } catch (error) {
-      return `<pre class="error">${token.content}</pre>`
-    }
-  }
-
-  // 代码块带行号
-  const codeContent = token.content
-  const lines = codeContent.split('\n')
-
-  // 解析行号起始值，支持 linenum=xx 或 linenums=xx，带引号或不带引号
-  // 当值为 0 时，不显示行号
-  let startLineNum = 1
-  let showLineNumbers = true
-  const lineNumMatch = info.match(/(?:linenum|linenums)=(?:"(\d+)"|(\d+))/i)
-  if (lineNumMatch) {
-    startLineNum = parseInt(lineNumMatch[1] || lineNumMatch[2], 10)
-    if (startLineNum === 0) {
-      showLineNumbers = false
-    }
-  }
-
-  // 计算最大行号并确定行号列宽度类
-  const maxLineNum = startLineNum + lines.length - 1
-  const digitCount = String(maxLineNum).length
-  const widthClass = showLineNumbers ? `line-num-width-${Math.min(digitCount, 5)}` : ''
-
-  let linesHtml = ''
-
-  if (lang && hljs.getLanguage(lang)) {
-    try {
-      const highlighted = hljs.highlight(codeContent, { language: lang }).value
-      const lineNodes = highlighted.split('\n')
-
-      for (let i = 0; i < lineNodes.length; i++) {
-        const lineNum = startLineNum + i
-        const lineNumberHtml = showLineNumbers ? `<span class="line-number" data-num="${lineNum}"></span>` : ''
-        linesHtml += `<div class="code-line">${lineNumberHtml}<span class="code-line-content">${lineNodes[i] || ''}</span></div>\n`
-      }
-    } catch (__) {
-      // 高亮失败，使用普通文本
-      lines.forEach((line, i) => {
-        const lineNum = startLineNum + i
-        const lineNumberHtml = showLineNumbers ? `<span class="line-number" data-num="${lineNum}"></span>` : ''
-        linesHtml += `<div class="code-line">${lineNumberHtml}<span class="code-line-content">${escapeHtml(line)}</span></div>\n`
-      })
-    }
-  } else {
-    // 无语言或语言不支持
-    lines.forEach((line, i) => {
-      const lineNum = startLineNum + i
-      const lineNumberHtml = showLineNumbers ? `<span class="line-number" data-num="${lineNum}"></span>` : ''
-      linesHtml += `<div class="code-line">${lineNumberHtml}<span class="code-line-content">${escapeHtml(line)}</span></div>\n`
-    })
-  }
-
-  const langClass = lang ? ` class="language-${lang}"` : ''
-  return `<pre${langClass}><code${langClass}><div class="code-lines-container ${widthClass}">${linesHtml}</div></code></pre>`
-}
-
-// 处理行内数学公式（支持 $...$ 格式）
-md.renderer.rules.text = (tokens, idx, _options, _env, _self) => {
-  let content = tokens[idx].content
-
-  // 匹配 $...$ 格式的行内公式
-  content = content.replace(/\$([^$]+)\$/g, (match, formula) => {
-    try {
-      return katex.renderToString(formula, {
-        displayMode: false,
-        throwOnError: false,
-        macros: KATEX_MACROS
-      })
-    } catch (error) {
-      return match
-    }
-  })
-
-  return content
-}
-
-// HTML 转义辅助函数
-function escapeHtml(html: string): string {
-  return html
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;')
-    .replace(/'/g, '&#039;')
-}
-
-/**
- * 解析图片属性标注 {width=... align=...}
- * 支持格式：
- * - {width=300}
- * - {width="300"}
- * - {align=center/left/right}
- * - {width=300 align=center}
- * - {align=center width=300}
- */
 interface ImageAttributes {
   width?: string
   align?: 'left' | 'center' | 'right'
@@ -1155,478 +71,357 @@ interface ImageAttributes {
 
 function parseImageAttributes(attrString: string): ImageAttributes {
   const attrs: ImageAttributes = {}
-
-  // 匹配 width=值（支持多种引号格式）
-  // ASCII 双引号: " (\x22)
-  // Unicode 左双引号: " (\u201C)
-  // Unicode 右双引号: " (\u201D)
-  // 先匹配带引号的格式 width="300" 或 width="300"
-  // 注意：必须使用 Unicode 转义序列，不能直接使用 Unicode 字符
-  const widthMatchQuoted = attrString.match(/width\s*=\s*["\u201C\u201D]([^"\u201C\u201D]*)["\u201C\u201D]/i)
+  const widthMatchQuoted = attrString.match(/width\s*=\s*["“”]([^"“”]*)["“”]/i)
   if (widthMatchQuoted) {
     attrs.width = widthMatchQuoted[1]
   } else {
-    // 再匹配不带引号的格式 width=300 或 width=50%
     const widthMatchUnquoted = attrString.match(/width\s*=\s*(\d+[a-z%]*)/i)
-    if (widthMatchUnquoted) {
-      attrs.width = widthMatchUnquoted[1]
-    }
+    if (widthMatchUnquoted) attrs.width = widthMatchUnquoted[1]
   }
-
-  // 匹配 align=值（支持多种引号格式）
-  const alignMatchQuoted = attrString.match(/align\s*=\s*["\u201C\u201D]([^"\u201C\u201D]*)["\u201C\u201D]/i)
+  const alignMatchQuoted = attrString.match(/align\s*=\s*["“”]([^"“”]*)["“”]/i)
   if (alignMatchQuoted) {
-    const alignValue = alignMatchQuoted[1].toLowerCase()
-    if (alignValue === 'left' || alignValue === 'center' || alignValue === 'right') {
-      attrs.align = alignValue
-    }
+    const v = alignMatchQuoted[1].toLowerCase()
+    if (v === 'left' || v === 'center' || v === 'right') attrs.align = v
   } else {
     const alignMatchUnquoted = attrString.match(/align\s*=\s*(\w+)/i)
     if (alignMatchUnquoted) {
-      const alignValue = alignMatchUnquoted[1].toLowerCase()
-      if (alignValue === 'left' || alignValue === 'center' || alignValue === 'right') {
-        attrs.align = alignValue
-      }
+      const v = alignMatchUnquoted[1].toLowerCase()
+      if (v === 'left' || v === 'center' || v === 'right') attrs.align = v
     }
   }
-
   return attrs
 }
 
-/**
- * 根据属性生成 img 标签的 style
- */
 function buildImageStyle(attrs: ImageAttributes): string {
-  const styles: string[] = []
-
-  if (attrs.width) {
-    // 如果 width 是纯数字，自动添加 px 单位
-    const widthValue = /^\d+$/.test(attrs.width) ? `${attrs.width}px` : attrs.width
-    styles.push(`width: ${widthValue};`)
-  }
-
-  return styles.join(' ')
+  if (!attrs.width) return ''
+  const w = /^\d+$/.test(attrs.width) ? `${attrs.width}px` : attrs.width
+  return `width: ${w};`
 }
 
-/**
- * 根据 align 属性生成包裹标签
- * 使用 float 实现文字环绕效果
- */
 function wrapImageByAlign(imgTag: string, align?: 'left' | 'center' | 'right'): string {
   if (!align) return imgTag
-
-  // 使用 float 实现文字环绕
-  if (align === 'center') {
-    return `<div style="display: block; text-align: center;">${imgTag}</div>`
-  } else if (align === 'left') {
-    return `<div class="img-float-left">${imgTag}</div>`
-  } else if (align === 'right') {
-    return `<div class="img-float-right">${imgTag}</div>`
-  }
-
+  if (align === 'center') return `<div style="display: block; text-align: center;">${imgTag}</div>`
+  if (align === 'left')  return `<div class="img-float-left">${imgTag}</div>`
+  if (align === 'right') return `<div class="img-float-right">${imgTag}</div>`
   return imgTag
 }
 
-// 标题编号计数器（模块级别）
+// ── Slugify ────────────────────────────────────────
+
+function slugify(text: string): string {
+  return text.toLowerCase().replace(/\s+/g, '-').replace(/[^\w一-龥-]/g, '')
+}
+
+export function slugifyForMkdocs(text: string): string {
+  return text.toLowerCase().replace(/\s+/g, '-').replace(/[^\w一-龥-]/g, '')
+}
+
+// ── Heading state (module-level) ───────────────────
+
 const headingCounters = { h2: 0, h3: 0, h4: 0 }
-
-// 标题 ID 映射：原始 slug -> 带编号的 ID（用于链接跳转）
 const headingIdMap = new Map<string, string>()
-
-// 标题行号映射：标题 ID -> 源文本行号（用于编辑器定位）
 const headingLineMap = new Map<string, number>()
-
-// Frontmatter 行数偏移（用于修正行号）
 let frontmatterLineOffset = 0
 
-// MkDocs 组合导出时的外部编号上下文（模块级别）
 let externalNumberPrefix = ''
 let externalNavLevel = 0
-let isMkdocsExportMode = false  // 标识是否处于 MkDocs 组合导出模式
+let isMkdocsExportMode = false
 let globalHeadingIndex = 0
 const chapterCounters = { h2: 0, h3: 0, h4: 0, h5: 0, h6: 0 }
-let lastAdjustedLevel = 0  // 存储最近的调整后层级（用于 heading_close）
+let lastAdjustedLevel = 0
 
-/**
- * 重置全局标题索引计数器（用于 MkDocs 组合导出）
- */
-export function resetGlobalHeadingIndex(): void {
-  globalHeadingIndex = 0
+// ── Global heading index (for MkDocs export) ───────
+
+export function resetGlobalHeadingIndex(): void { globalHeadingIndex = 0 }
+export function getGlobalHeadingIndex(): number { return globalHeadingIndex }
+export function incrementGlobalHeadingIndex(): void { globalHeadingIndex++ }
+
+// ── Post-processing helpers ────────────────────────
+
+/** Figure + image-attribute post-processing, shared by renderBody and renderWithNumberPrefix */
+function applyImagePostProcessing(html: string): string {
+  html = html.replace(/<figure\s+markdown="span">([\s\S]*?)<\/figure>/g, (_match, content) => {
+    let figcaption = ''
+    let imgMarkdown = content
+    const figcaptionMatch = content.match(/<figcaption>([\s\S]*?)<\/figcaption>/)
+    if (figcaptionMatch) {
+      figcaption = figcaptionMatch[1]
+      imgMarkdown = content.replace(/<figcaption>[\s\S]*?<\/figcaption>/, '').trim()
+    }
+    imgMarkdown = imgMarkdown.split('\n').map((l: string) => l.trim()).join('\n').trim()
+    imgMarkdown = imgMarkdown.replace(/!\[([^\]]*)\]\(([^)]+)\)\s*\{([^}]*)\}/g,
+      (_m: string, alt: string, src: string, attrStr: string) => {
+        const attrs = parseImageAttributes(attrStr)
+        const style = buildImageStyle(attrs)
+        return wrapImageByAlign(`<img src="${src}" alt="${alt}"${style ? ` style="${style}"` : ''}>`, attrs.align)
+      }
+    )
+    let imgContent = md.render(imgMarkdown)
+    imgContent = imgContent.replace(/<p>(<img[^>]*>)<\/p>/g, '$1')
+    imgContent = imgContent.replace(/<p>(<div[^>]*><img[^>]*><\/div>)<\/p>/g, '$1')
+    return `<figure class="figure-span">${imgContent}${figcaption ? `<figcaption>${figcaption}</figcaption>` : ''}</figure>`
+  })
+
+  html = html.replace(/<p><img([^>]*)>\s*\{([^}]*)\}<\/p>/g, (_m, imgAttrs: string, attrStr: string) => {
+    const attrs = parseImageAttributes(attrStr)
+    const style = buildImageStyle(attrs)
+    return wrapImageByAlign(`<img${imgAttrs}${style ? ` style="${style}"` : ''}>`, attrs.align)
+  })
+  html = html.replace(/<img([^>]*)>\s*\{([^}]*)\}/g, (_m, imgAttrs: string, attrStr: string) => {
+    const attrs = parseImageAttributes(attrStr)
+    const style = buildImageStyle(attrs)
+    return wrapImageByAlign(`<img${imgAttrs}${style ? ` style="${style}"` : ''}>`, attrs.align)
+  })
+
+  // Replace anchor links with numbered IDs
+  html = html.replace(/href="#([^"]+)"/g, (_match, slug) => {
+    const decodedSlug = decodeURIComponent(slug)
+    const numberedId = headingIdMap.get(decodedSlug)
+    return numberedId ? `href="#${numberedId}"` : _match
+  })
+
+  return html
 }
 
-/**
- * 获取当前全局标题索引（用于书签树ID匹配）
- */
-export function getGlobalHeadingIndex(): number {
-  return globalHeadingIndex
-}
+// ── Heading deflist parser ─────────────────────────
+// Uses registerAdmonitionParser from markdownParser to avoid code duplication
 
-/**
- * 增加全局标题索引计数器（用于书签树ID生成）
- */
-export function incrementGlobalHeadingIndex(): void {
-  globalHeadingIndex++
-}
+md.block.ruler.before('heading', 'heading_deflist', function heading_deflist(state, startLine, endLine, silent) {
+  const pos = state.bMarks[startLine] + state.tShift[startLine]
+  const max = state.eMarks[startLine]
+  if (pos >= max || state.src.charCodeAt(pos) !== 0x23) return false
 
-// 将标题文本转为 slug（与 markdown-it-anchor 一致的逻辑）
-function slugify(text: string): string {
-  return text
-    .toLowerCase()
-    .replace(/\s+/g, '-')
-    .replace(/[^\w\u4e00-\u9fa5-]/g, '')  // 保留中文、字母、数字、连字符
-}
+  let level = 0
+  let p = pos
+  while (p < max && state.src.charCodeAt(p) === 0x23) { level++; p++ }
+  if (level < 1 || level > 6) return false
+  while (p < max && state.src.charCodeAt(p) === 0x20) { p++ }
 
+  const titleText = state.src.substring(p, max).trim()
+  if (!titleText) return false
 
-// MkDocs 模式专用 slugify：中文保留，英文大写转小写，空格转连字符
-export function slugifyForMkdocs(text: string): string {
-  return text
-    .toLowerCase()  // 英文大写转小写（中文不受影响）
-    .replace(/\s+/g, '-')  // 空格转连字符
-    .replace(/[^\w一-龥-]/g, '')  // 保留中文、字母、数字、连字符
-}
-// 重写 heading_open 渲染规则，为 h2-h4 添加编号，并将编号加入ID
-// 支持外部编号上下文（用于 MkDocs 组合导出）
-md.renderer.rules.heading_open = (tokens, idx) => {
-  const token = tokens[idx]
-  const originalLevel = parseInt(token.tag.substring(1)) // 1-6
+  const nextLine = startLine + 1
+  if (nextLine >= endLine) return false
+  const nextPos = state.bMarks[nextLine] + state.tShift[nextLine]
+  const nextMax = state.eMarks[nextLine]
+  if (nextPos >= nextMax || state.src.charCodeAt(nextPos) !== 0x3A) return false
+  let defPos = nextPos + 1
+  if (defPos < nextMax) {
+    const c = state.src.charCodeAt(defPos)
+    if (c !== 0x20 && c !== 0x09) return false
+  }
+  if (silent) return true
 
-  // 获取标题文本（下一个 inline token 的内容）
-  let titleText = ''
-  if (tokens[idx + 1] && tokens[idx + 1].type === 'inline') {
-    titleText = tokens[idx + 1].content || ''
+  let defIndent = 0
+  let indentPos = defPos
+  while (indentPos < nextMax && state.src.charCodeAt(indentPos) === 0x20) { defIndent++; indentPos++ }
+  if (defIndent === 0 && indentPos < nextMax && state.src.charCodeAt(indentPos) !== 0x0A) defIndent = 1
+
+  const defLines: string[] = []
+  let firstLineStart = defPos
+  while (firstLineStart < nextMax && state.src.charCodeAt(firstLineStart) === 0x20) firstLineStart++
+  defLines.push(state.src.substring(firstLineStart, nextMax))
+
+  let currentLine = nextLine + 1
+  while (currentLine < endLine) {
+    const lineOrigStart = state.bMarks[currentLine]
+    const lineStart = lineOrigStart + state.tShift[currentLine]
+    const lineEnd = state.eMarks[currentLine]
+    if (lineStart >= lineEnd) { defLines.push(''); currentLine++; continue }
+    const lineIndent = state.tShift[currentLine]
+    if (lineIndent >= defIndent) {
+      const contentStart = lineOrigStart + defIndent
+      defLines.push(state.src.substring(contentStart, lineEnd))
+      currentLine++
+    } else {
+      break
+    }
   }
 
-  // 判断是否使用外部编号上下文
+  const defText = defLines.join('\n')
+
+  // Use a sub-md instance (reuses admonition parser from markdownParser)
+  const defMd = new MarkdownIt({ html: true, linkify: true, typographer: true, highlight: (_s: string, _l?: string) => '' })
+  defMd.block.ruler.disable('code')
+  registerAdmonitionParser(defMd)
+  registerTabbedParser(defMd)
+
+  const defHtml = defMd.render(defText)
+
+  const token = state.push('heading_deflist_block', '', 0)
+  token.content = JSON.stringify({ level, titleText, defHtml })
+  token.map = [startLine, currentLine]
+  state.line = currentLine
+  return true
+})
+
+// ── Heading deflist renderer ───────────────────────
+
+md.renderer.rules.heading_deflist_block = (tokens, idx) => {
+  const token = tokens[idx]
+  const data = JSON.parse(token.content)
+  const originalLevel = data.level as number
+  const titleText = data.titleText as string
+  const defHtml = data.defHtml as string
+
   if (isMkdocsExportMode) {
-    // MkDocs 组合导出模式：使用外部编号上下文
-
-    // 调整层级：h1 保持不变（但会被跳过渲染），h2+ 相对于 nav 标题保持层级差
-    // nav 标题是 h(navLevel+1) 级，文件 h2 是其子标题，应显示为 h(navLevel+2) 级
-    // adjustedLevel = navLevel + originalLevel
-    // nav level 0, h2 → level 2; nav level 1, h2 → level 3
     let adjustedLevel = originalLevel
-    if (originalLevel >= 2) {
-      adjustedLevel = Math.min(externalNavLevel + originalLevel, 6)
-    }
-
-    // h2-h6 都更新计数器（用于 ID 生成）
-    // h2-h4 显示编号，h5-h6 不显示编号但 ID 仍带前缀
-    let number = ''  // 显示编号（仅 h2-h4）
-    let numberPrefixForId = ''  // 用于 ID 的编号前缀（连字符格式）
+    if (originalLevel >= 2) adjustedLevel = Math.min(externalNavLevel + originalLevel, 6)
+    let number = ''
+    let numberPrefixForId = ''
 
     if (originalLevel >= 2 && originalLevel <= 6) {
-      // 更新计数器
-      if (originalLevel === 2) {
-        chapterCounters.h2++
-        chapterCounters.h3 = 0
-        chapterCounters.h4 = 0
-        chapterCounters.h5 = 0
-        chapterCounters.h6 = 0
-      } else if (originalLevel === 3) {
-        chapterCounters.h3++
-        chapterCounters.h4 = 0
-        chapterCounters.h5 = 0
-        chapterCounters.h6 = 0
-      } else if (originalLevel === 4) {
-        chapterCounters.h4++
-        chapterCounters.h5 = 0
-        chapterCounters.h6 = 0
-      } else if (originalLevel === 5) {
-        chapterCounters.h5++
-        chapterCounters.h6 = 0
-      } else if (originalLevel === 6) {
-        chapterCounters.h6++
-      }
+      if (originalLevel === 2) { chapterCounters.h2++; chapterCounters.h3 = 0; chapterCounters.h4 = 0; chapterCounters.h5 = 0; chapterCounters.h6 = 0 }
+      else if (originalLevel === 3) { chapterCounters.h3++; chapterCounters.h4 = 0; chapterCounters.h5 = 0; chapterCounters.h6 = 0 }
+      else if (originalLevel === 4) { chapterCounters.h4++; chapterCounters.h5 = 0; chapterCounters.h6 = 0 }
+      else if (originalLevel === 5) { chapterCounters.h5++; chapterCounters.h6 = 0 }
+      else if (originalLevel === 6) { chapterCounters.h6++ }
 
-      // 生成 ID 前缀（h2-h6 都生成）
       const prefixParts = externalNumberPrefix.replace(/\.$/, '').split('.')
-      if (originalLevel === 2) {
-        if (adjustedLevel <= 4) {
-          number = `${externalNumberPrefix}${chapterCounters.h2}. `
-        }
-        numberPrefixForId = prefixParts.join('-') + '-' + chapterCounters.h2 + '-'
-      } else if (originalLevel === 3) {
-        if (adjustedLevel <= 4) {
-          number = `${externalNumberPrefix}${chapterCounters.h2}.${chapterCounters.h3}. `
-        }
-        numberPrefixForId = prefixParts.join('-') + '-' + chapterCounters.h2 + '-' + chapterCounters.h3 + '-'
-      } else if (originalLevel === 4) {
-        if (adjustedLevel <= 4) {
-          number = `${externalNumberPrefix}${chapterCounters.h2}.${chapterCounters.h3}.${chapterCounters.h4}. `
-        }
-        numberPrefixForId = prefixParts.join('-') + '-' + chapterCounters.h2 + '-' + chapterCounters.h3 + '-' + chapterCounters.h4 + '-'
-      } else if (originalLevel === 5) {
-        // h5：不显示编号，但 ID 带前缀
-        numberPrefixForId = prefixParts.join('-') + '-' + chapterCounters.h2 + '-' + chapterCounters.h3 + '-' + chapterCounters.h4 + '-' + chapterCounters.h5 + '-'
-      } else if (originalLevel === 6) {
-        // h6：不显示编号，但 ID 带前缀
-        numberPrefixForId = prefixParts.join('-') + '-' + chapterCounters.h2 + '-' + chapterCounters.h3 + '-' + chapterCounters.h4 + '-' + chapterCounters.h5 + '-' + chapterCounters.h6 + '-'
-      }
+      if (originalLevel === 2) { if (adjustedLevel <= 4) number = `${externalNumberPrefix}${chapterCounters.h2}. `; numberPrefixForId = prefixParts.join('-') + '-' + chapterCounters.h2 + '-' }
+      else if (originalLevel === 3) { if (adjustedLevel <= 4) number = `${externalNumberPrefix}${chapterCounters.h2}.${chapterCounters.h3}. `; numberPrefixForId = prefixParts.join('-') + '-' + chapterCounters.h2 + '-' + chapterCounters.h3 + '-' }
+      else if (originalLevel === 4) { if (adjustedLevel <= 4) number = `${externalNumberPrefix}${chapterCounters.h2}.${chapterCounters.h3}.${chapterCounters.h4}. `; numberPrefixForId = prefixParts.join('-') + '-' + chapterCounters.h2 + '-' + chapterCounters.h3 + '-' + chapterCounters.h4 + '-' }
+      else if (originalLevel === 5) numberPrefixForId = prefixParts.join('-') + '-' + chapterCounters.h2 + '-' + chapterCounters.h3 + '-' + chapterCounters.h4 + '-' + chapterCounters.h5 + '-'
+      else if (originalLevel === 6) numberPrefixForId = prefixParts.join('-') + '-' + chapterCounters.h2 + '-' + chapterCounters.h3 + '-' + chapterCounters.h4 + '-' + chapterCounters.h5 + '-' + chapterCounters.h6 + '-'
     }
 
-    // 生成带编号前缀的 ID（MkDocs 模式：编号前缀 + 标题 slug）
     const baseSlug = slugifyForMkdocs(titleText)
-    const adjustedId = numberPrefixForId ? `${numberPrefixForId}${baseSlug}` : baseSlug
-
-    // 渲染调整后的层级标签
-    const adjustedTag = `h${adjustedLevel}`
-    lastAdjustedLevel = adjustedLevel  // 存储供 heading_close 使用
+    const headingId = numberPrefixForId ? `${numberPrefixForId}${baseSlug}` : baseSlug
+    const headingContent = titleText
+      .replace(/\[([^\]]+)\]\(([^)]+)\)/g, '<a href="$2">$1</a>')
+      .replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>')
+      .replace(/\*([^*]+)\*/g, '<em>$1</em>')
+      .replace(/`([^`]+)`/g, '<code>$1</code>')
     const numberSpan = number ? `<span class="heading-number">${number}</span>` : ''
-    return `<${adjustedTag} id="${adjustedId}">${numberSpan}`
-
+    return `<h${adjustedLevel} id="${headingId}">${numberSpan}${headingContent}</h${adjustedLevel}><dd>${defHtml}</dd>`
   } else {
-    // 普通模式：使用标准编号逻辑
-    const level = token.tag as 'h1' | 'h2' | 'h3' | 'h4'
-    lastAdjustedLevel = parseInt(level.substring(1))  // 存储供 heading_close 使用
-
-    // 更新计数器
-    if (level === 'h2') {
-      headingCounters.h2++
-      headingCounters.h3 = 0
-      headingCounters.h4 = 0
-    } else if (level === 'h3') {
-      headingCounters.h3++
-      headingCounters.h4 = 0
-    } else if (level === 'h4') {
-      headingCounters.h4++
-    }
-
-    // 生成编号（仅 h2-h4）
+    const level = originalLevel
     let number = ''
     let numberPrefix = ''
-    if (level === 'h2') {
-      number = `${headingCounters.h2}. `
-      numberPrefix = `${headingCounters.h2}-`
-    } else if (level === 'h3') {
-      number = `${headingCounters.h2}.${headingCounters.h3}. `
-      numberPrefix = `${headingCounters.h2}-${headingCounters.h3}-`
-    } else if (level === 'h4') {
-      number = `${headingCounters.h2}.${headingCounters.h3}.${headingCounters.h4}. `
-      numberPrefix = `${headingCounters.h2}-${headingCounters.h3}-${headingCounters.h4}-`
+    if (level === 2) { headingCounters.h2++; headingCounters.h3 = 0; headingCounters.h4 = 0; number = `${headingCounters.h2}. `; numberPrefix = `${headingCounters.h2}-` }
+    else if (level === 3) { headingCounters.h3++; headingCounters.h4 = 0; number = `${headingCounters.h2}.${headingCounters.h3}. `; numberPrefix = `${headingCounters.h2}-${headingCounters.h3}-` }
+    else if (level === 4) { headingCounters.h4++; number = `${headingCounters.h2}.${headingCounters.h3}.${headingCounters.h4}. `; numberPrefix = `${headingCounters.h2}-${headingCounters.h3}-${headingCounters.h4}-` }
+
+    const baseSlug = slugify(titleText)
+    const headingId = numberPrefix ? `${numberPrefix}${baseSlug}` : baseSlug
+    if (baseSlug) headingIdMap.set(baseSlug, headingId)
+
+    const headingContent = titleText
+      .replace(/\[([^\]]+)\]\(([^)]+)\)/g, '<a href="$2">$1</a>')
+      .replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>')
+      .replace(/\*([^*]+)\*/g, '<em>$1</em>')
+      .replace(/`([^`]+)`/g, '<code>$1</code>')
+    const numberSpan = number ? `<span class="heading-number">${number}</span>` : ''
+    return `<h${level} id="${headingId}">${numberSpan}${headingContent}</h${level}><dd>${defHtml}</dd>`
+  }
+}
+
+// ── Heading open/close renderers ───────────────────
+
+md.renderer.rules.heading_open = (tokens, idx) => {
+  const token = tokens[idx]
+  const originalLevel = parseInt(token.tag.substring(1))
+  let titleText = ''
+  if (tokens[idx + 1]?.type === 'inline') titleText = tokens[idx + 1].content || ''
+
+  if (isMkdocsExportMode) {
+    let adjustedLevel = originalLevel
+    if (originalLevel >= 2) adjustedLevel = Math.min(externalNavLevel + originalLevel, 6)
+    let number = ''
+    let numberPrefixForId = ''
+
+    if (originalLevel >= 2 && originalLevel <= 6) {
+      if (originalLevel === 2) { chapterCounters.h2++; chapterCounters.h3 = 0; chapterCounters.h4 = 0; chapterCounters.h5 = 0; chapterCounters.h6 = 0 }
+      else if (originalLevel === 3) { chapterCounters.h3++; chapterCounters.h4 = 0; chapterCounters.h5 = 0; chapterCounters.h6 = 0 }
+      else if (originalLevel === 4) { chapterCounters.h4++; chapterCounters.h5 = 0; chapterCounters.h6 = 0 }
+      else if (originalLevel === 5) { chapterCounters.h5++; chapterCounters.h6 = 0 }
+      else if (originalLevel === 6) { chapterCounters.h6++ }
+
+      const prefixParts = externalNumberPrefix.replace(/\.$/, '').split('.')
+      if (originalLevel === 2) { if (adjustedLevel <= 4) number = `${externalNumberPrefix}${chapterCounters.h2}. `; numberPrefixForId = prefixParts.join('-') + '-' + chapterCounters.h2 + '-' }
+      else if (originalLevel === 3) { if (adjustedLevel <= 4) number = `${externalNumberPrefix}${chapterCounters.h2}.${chapterCounters.h3}. `; numberPrefixForId = prefixParts.join('-') + '-' + chapterCounters.h2 + '-' + chapterCounters.h3 + '-' }
+      else if (originalLevel === 4) { if (adjustedLevel <= 4) number = `${externalNumberPrefix}${chapterCounters.h2}.${chapterCounters.h3}.${chapterCounters.h4}. `; numberPrefixForId = prefixParts.join('-') + '-' + chapterCounters.h2 + '-' + chapterCounters.h3 + '-' + chapterCounters.h4 + '-' }
+      else if (originalLevel === 5) numberPrefixForId = prefixParts.join('-') + '-' + chapterCounters.h2 + '-' + chapterCounters.h3 + '-' + chapterCounters.h4 + '-' + chapterCounters.h5 + '-'
+      else if (originalLevel === 6) numberPrefixForId = prefixParts.join('-') + '-' + chapterCounters.h2 + '-' + chapterCounters.h3 + '-' + chapterCounters.h4 + '-' + chapterCounters.h5 + '-' + chapterCounters.h6 + '-'
     }
 
-    // 生成带编号前缀的 ID
+    const baseSlug = slugifyForMkdocs(titleText)
+    const adjustedId = numberPrefixForId ? `${numberPrefixForId}${baseSlug}` : baseSlug
+    const adjustedTag = `h${adjustedLevel}`
+    lastAdjustedLevel = adjustedLevel
+    const numberSpan = number ? `<span class="heading-number">${number}</span>` : ''
+    return `<${adjustedTag} id="${adjustedId}">${numberSpan}`
+  } else {
+    const level = token.tag as 'h1' | 'h2' | 'h3' | 'h4'
+    lastAdjustedLevel = parseInt(level.substring(1))
+    if (level === 'h2') { headingCounters.h2++; headingCounters.h3 = 0; headingCounters.h4 = 0 }
+    else if (level === 'h3') { headingCounters.h3++; headingCounters.h4 = 0 }
+    else if (level === 'h4') { headingCounters.h4++ }
+
+    let number = ''
+    let numberPrefix = ''
+    if (level === 'h2') { number = `${headingCounters.h2}. `; numberPrefix = `${headingCounters.h2}-` }
+    else if (level === 'h3') { number = `${headingCounters.h2}.${headingCounters.h3}. `; numberPrefix = `${headingCounters.h2}-${headingCounters.h3}-` }
+    else if (level === 'h4') { number = `${headingCounters.h2}.${headingCounters.h3}.${headingCounters.h4}. `; numberPrefix = `${headingCounters.h2}-${headingCounters.h3}-${headingCounters.h4}-` }
+
     const baseSlug = slugify(titleText)
     const numberedId = numberPrefix ? `${numberPrefix}${baseSlug}` : baseSlug
+    if (baseSlug) headingIdMap.set(baseSlug, numberedId)
 
-    // 存储映射：原始 slug -> 带编号的 ID
-    if (baseSlug) {
-      headingIdMap.set(baseSlug, numberedId)
-    }
-
-    // 存储行号映射：标题 ID -> 源文本行号（用于编辑器定位）
-    // token.map 包含 [startLine, endLine]，行号从 0 开始（相对于 body）
-    // 加上 frontmatterLineOffset 得到相对于完整文件的行号
     const line = token.map ? token.map[0] + frontmatterLineOffset : frontmatterLineOffset
     headingLineMap.set(numberedId, line)
 
-    // 渲染开标签
     const numberSpan = number ? `<span class="heading-number">${number}</span>` : ''
     return `<${level} id="${numberedId}">${numberSpan}`
   }
 }
 
-// 重写 heading_close 渲染规则
 md.renderer.rules.heading_close = (tokens, idx) => {
-  // 在组合导出模式下，使用调整后的层级
-  if (externalNumberPrefix !== '' && lastAdjustedLevel > 0) {
-    return `</h${lastAdjustedLevel}>`
-  }
+  if (externalNumberPrefix !== '' && lastAdjustedLevel > 0) return `</h${lastAdjustedLevel}>`
   return `</${tokens[idx].tag}>`
 }
 
+// ── Composable ─────────────────────────────────────
+
 export function useMarkdown() {
-  /**
-   * 解析 Markdown 内容，提取 metadata 和 body
-   */
   function parse(content: string): ParseResult {
     return parseFrontmatter(content)
   }
 
-  /**
-   * 渲染 Markdown body 为 HTML
-   */
   function renderBody(body: string): string {
-    if (!body.trim()) {
-      return '<div class="empty-preview">开始输入 Markdown...</div>'
-    }
-
-    // 重置计数器和映射
-    headingCounters.h2 = 0
-    headingCounters.h3 = 0
-    headingCounters.h4 = 0
+    if (!body.trim()) return '<div class="empty-preview">开始输入 Markdown...</div>'
+    headingCounters.h2 = 0; headingCounters.h3 = 0; headingCounters.h4 = 0
     headingIdMap.clear()
     headingLineMap.clear()
-
     try {
-      let html = md.render(body)
-
-      // 后处理：处理 figure 标签（必须在图片属性处理之前）
-      // 匹配 <figure markdown="span">...</figure> 并添加居中样式
-      html = html.replace(/<figure\s+markdown="span">([\s\S]*?)<\/figure>/g, (_match, content) => {
-        // 提取 figcaption
-        let figcaption = ''
-        let imgMarkdown = content
-
-        // 检查是否有 figcaption 标签
-        const figcaptionMatch = content.match(/<figcaption>([\s\S]*?)<\/figcaption>/)
-        if (figcaptionMatch) {
-          figcaption = figcaptionMatch[1]
-          // 从原始内容中移除 figcaption
-          imgMarkdown = content.replace(/<figcaption>[\s\S]*?<\/figcaption>/, '').trim()
-        }
-
-        // 移除每行前导空白，避免被解析为代码块
-        imgMarkdown = imgMarkdown.split('\n').map((line: string) => line.trim()).join('\n').trim()
-
-        // 先处理图片属性语法 {width=... align=...}，在 Markdown 源码层面替换
-        imgMarkdown = imgMarkdown.replace(/!\[([^\]]*)\]\(([^)]+)\)\s*\{([^}]*)\}/g,
-          (_m: string, alt: string, src: string, attrStr: string) => {
-            const attrs = parseImageAttributes(attrStr)
-            const style = buildImageStyle(attrs)
-            const imgTag = `<img src="${src}" alt="${alt}"${style ? ` style="${style}"` : ''}>`
-            return wrapImageByAlign(imgTag, attrs.align)
-          }
-        )
-
-        // 渲染剩余的 Markdown
-        let imgContent = md.render(imgMarkdown)
-
-        // 移除图片周围的 <p> 标签
-        imgContent = imgContent.replace(/<p>(<img[^>]*>)<\/p>/g, '$1')
-        imgContent = imgContent.replace(/<p>(<div[^>]*><img[^>]*><\/div>)<\/p>/g, '$1')
-
-        return `<figure class="figure-span">${imgContent}${figcaption ? `<figcaption>${figcaption}</figcaption>` : ''}</figure>`
-      })
-
-      // 后处理：处理普通图片属性语法 ![alt](src){width=... align=...}
-      // 在 Markdown 源码渲染后的 HTML 中处理
-      // 处理被 <p> 包裹的情况
-      html = html.replace(/<p><img([^>]*)>\s*\{([^}]*)\}<\/p>/g,
-        (_match, imgAttrs, attrStr: string) => {
-          const attrs = parseImageAttributes(attrStr)
-          const style = buildImageStyle(attrs)
-          const imgTag = `<img${imgAttrs}${style ? ` style="${style}"` : ''}>`
-          return wrapImageByAlign(imgTag, attrs.align)
-        }
-      )
-      // 处理未被 <p> 包裹的情况
-      html = html.replace(/<img([^>]*)>\s*\{([^}]*)\}/g,
-        (_match, imgAttrs, attrStr: string) => {
-          const attrs = parseImageAttributes(attrStr)
-          const style = buildImageStyle(attrs)
-          const imgTag = `<img${imgAttrs}${style ? ` style="${style}"` : ''}>`
-          return wrapImageByAlign(imgTag, attrs.align)
-        }
-      )
-
-      // 后处理：将锚点链接中的原始 slug 替换为带编号的 ID
-      html = html.replace(/href="#([^"]+)"/g, (_match, slug) => {
-        // URL 解码 slug（markdown-it-anchor 会对中文进行编码）
-        const decodedSlug = decodeURIComponent(slug)
-        const numberedId = headingIdMap.get(decodedSlug)
-        if (numberedId) {
-          return `href="#${numberedId}"`
-        }
-        return _match
-      })
-
-      return html
+      return applyImagePostProcessing(md.render(body))
     } catch (error) {
       console.error('Markdown render error:', error)
       return `<div class="render-error">渲染错误: ${String(error)}</div>`
     }
   }
 
-  /**
-   * 解析并渲染 Markdown，返回 metadata 和 HTML
-   */
   function render(content: string): { html: string; metadata: Metadata } {
     const { metadata, body, frontmatterLineCount } = parseFrontmatterWithLineCount(content)
     frontmatterLineOffset = frontmatterLineCount
     const html = renderBody(body)
-    frontmatterLineOffset = 0  // 重置
+    frontmatterLineOffset = 0
     return { html, metadata }
   }
 
-  /**
-   * MkDocs 组合导出专用：使用外部编号前缀渲染 Markdown
-   * @param body Markdown 内容（不含 frontmatter）
-   * @param numberPrefix 编号前缀（如 "1.2."）
-   * @param navLevel nav 层级深度（用于标题层级调整）
-   */
   function renderWithNumberPrefix(body: string, numberPrefix: string, navLevel: number): string {
-    if (!body.trim()) {
-      return ''
-    }
-
-    // 设置外部编号上下文
+    if (!body.trim()) return ''
     externalNumberPrefix = numberPrefix
     externalNavLevel = navLevel
-    isMkdocsExportMode = true  // 标记为 MkDocs 组合导出模式
-    chapterCounters.h2 = 0
-    chapterCounters.h3 = 0
-    chapterCounters.h4 = 0
-    chapterCounters.h5 = 0
-    chapterCounters.h6 = 0
-    lastAdjustedLevel = 0
-
+    isMkdocsExportMode = true
+    chapterCounters.h2 = 0; chapterCounters.h3 = 0; chapterCounters.h4 = 0
+    chapterCounters.h5 = 0; chapterCounters.h6 = 0; lastAdjustedLevel = 0
     try {
-      let html = md.render(body)
-
-      // 后处理：处理 figure 标签（与 renderBody 相同）
-      html = html.replace(/<figure\s+markdown="span">([\s\S]*?)<\/figure>/g, (_match, content) => {
-        let figcaption = ''
-        let imgMarkdown = content
-
-        const figcaptionMatch = content.match(/<figcaption>([\s\S]*?)<\/figcaption>/)
-        if (figcaptionMatch) {
-          figcaption = figcaptionMatch[1]
-          imgMarkdown = content.replace(/<figcaption>[\s\S]*?<\/figcaption>/, '').trim()
-        }
-
-        imgMarkdown = imgMarkdown.split('\n').map((line: string) => line.trim()).join('\n').trim()
-
-        imgMarkdown = imgMarkdown.replace(/!\[([^\]]*)\]\(([^)]+)\)\s*\{([^}]*)\}/g,
-          (_m: string, alt: string, src: string, attrStr: string) => {
-            const attrs = parseImageAttributes(attrStr)
-            const style = buildImageStyle(attrs)
-            const imgTag = `<img src="${src}" alt="${alt}"${style ? ` style="${style}"` : ''}>`
-            return wrapImageByAlign(imgTag, attrs.align)
-          }
-        )
-
-        let imgContent = md.render(imgMarkdown)
-        imgContent = imgContent.replace(/<p>(<img[^>]*>)<\/p>/g, '$1')
-        imgContent = imgContent.replace(/<p>(<div[^>]*><img[^>]*><\/div>)<\/p>/g, '$1')
-
-        return `<figure class="figure-span">${imgContent}${figcaption ? `<figcaption>${figcaption}</figcaption>` : ''}</figure>`
-      })
-
-      // 后处理：处理图片属性语法（与 renderBody 相同）
-      html = html.replace(/<p><img([^>]*)>\s*\{([^}]*)\}<\/p>/g,
-        (_match, imgAttrs, attrStr: string) => {
-          const attrs = parseImageAttributes(attrStr)
-          const style = buildImageStyle(attrs)
-          const imgTag = `<img${imgAttrs}${style ? ` style="${style}"` : ''}>`
-          return wrapImageByAlign(imgTag, attrs.align)
-        }
-      )
-      html = html.replace(/<img([^>]*)>\s*\{([^}]*)\}/g,
-        (_match, imgAttrs, attrStr: string) => {
-          const attrs = parseImageAttributes(attrStr)
-          const style = buildImageStyle(attrs)
-          const imgTag = `<img${imgAttrs}${style ? ` style="${style}"` : ''}>`
-          return wrapImageByAlign(imgTag, attrs.align)
-        }
-      )
-
-      return html
+      return applyImagePostProcessing(md.render(body))
     } catch (error) {
       console.error('Markdown render error:', error)
       return `<div class="render-error">渲染错误: ${String(error)}</div>`
     } finally {
-      // 清除外部编号上下文
       externalNumberPrefix = ''
       externalNavLevel = 0
       isMkdocsExportMode = false
@@ -1634,40 +429,15 @@ export function useMarkdown() {
     }
   }
 
-  /**
-   * MkDocs 组合导出专用：跳过 h1 标题，渲染 h2+ 标题（使用外部编号）
-   * @param body Markdown 内容（不含 frontmatter）
-   * @param numberPrefix 编号前缀（如 "1.2."）
-   * @param navLevel nav 层级深度（用于标题层级调整）
-   */
   function renderContentSkipH1(body: string, numberPrefix: string, navLevel: number): string {
-    if (!body.trim()) {
-      return ''
-    }
-
-    // 移除 h1 标题行（章节标题已由 nav 条目提供）
+    if (!body.trim()) return ''
     const bodyWithoutH1 = body.replace(/^#\s+.+$\n?/gm, '').trim()
-
-    // 使用 renderWithNumberPrefix 渲染剩余内容
     return renderWithNumberPrefix(bodyWithoutH1, numberPrefix, navLevel)
   }
 
-  /**
-   * 获取标题对应的源文本行号
-   * @param id 标题 ID（带编号的）
-   * @returns 行号（从 0 开始），若不存在返回 undefined
-   */
   function getHeadingLine(id: string): number | undefined {
     return headingLineMap.get(id)
   }
 
-  return {
-    parse,
-    renderBody,
-    render,
-    renderWithNumberPrefix,
-    renderContentSkipH1,
-    getHeadingLine,
-    md  // 导出 md 实例供外部解析使用
-  }
+  return { parse, renderBody, render, renderWithNumberPrefix, renderContentSkipH1, getHeadingLine, md }
 }
