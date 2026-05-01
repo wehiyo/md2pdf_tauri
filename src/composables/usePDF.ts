@@ -783,24 +783,40 @@ function escapeHtml(text: string): string {
   return text.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#039;')
 }
 
-export function getMarkdownStyles(fontConfig?: FontConfig): string {
+/** 合并的 Markdown 样式，支持 pt（PDF）和 px（HTML）两种输出格式 */
+export function getMarkdownStyles(fontConfig?: FontConfig, format: 'pt' | 'px' = 'pt'): string {
   const bodyFontSizePx = fontConfig?.bodyFontSize || 16
-  // PDF 使用 pt 单位，px 转 pt 比例为 0.75（96dpi → 72dpi）
-  const bodyFontSizePt = bodyFontSizePx * 0.75
+  const fontSize = format === 'pt' ? `${bodyFontSizePx * 0.75}pt` : `${bodyFontSizePx}px`
   const chineseFont = fontConfig?.chineseFont || 'DengXian'
   const englishFont = fontConfig?.englishFont || 'Arial'
   const codeFont = fontConfig?.codeFont || 'SourceCodePro'
   const lineHeight = fontConfig?.lineHeight || 1.6
   const paragraphSpacing = fontConfig?.paragraphSpacing || 1
 
-  // 英文字体优先，中文字体fallback
   const chineseFontCss = getChineseFontCss(chineseFont)
   const englishFontCss = getEnglishFontCss(englishFont)
   const bodyFontCss = `${englishFontCss}, ${chineseFontCss}, sans-serif`
   const codeFontCss = getCodeFontCss(codeFont)
 
+  // PDF 模式下的分页控制样式
+  const breakRules = format === 'pt' ? `
+.markdown-body pre { break-inside: auto; }
+.markdown-body .code-lines-container { break-inside: auto; }
+.markdown-body .code-line { break-inside: avoid; }
+.markdown-body table { break-inside: auto; }
+.markdown-body table thead { display: table-header-group; }
+.markdown-body table tbody { display: table-row-group; }
+.markdown-body table tr { break-inside: avoid; }
+.markdown-body .admonition { page-break-inside: avoid; }` : ''
+
+  // HTML 模式下的额外样式
+  const htmlExtras = format === 'px' ? `
+.markdown-body figure.figure-span { display: flex; flex-direction: column; align-items: center; margin: 1.5em 0; text-align: center; page-break-inside: avoid; }
+.markdown-body figure.figure-span img { max-width: 100%; height: auto; }
+.markdown-body figure.figure-span figcaption { margin-top: 0.5em; font-size: 0.9em; color: #6b7280; text-align: center; }` : ''
+
   return `
-.markdown-body { line-height: ${lineHeight}; color: #1f2937; font-size: ${bodyFontSizePt}pt; font-family: ${bodyFontCss}; }
+.markdown-body { line-height: ${lineHeight}; color: #1f2937; font-size: ${fontSize}; font-family: ${bodyFontCss}; }
 .markdown-body h1, .markdown-body h2, .markdown-body h3, .markdown-body h4, .markdown-body h5, .markdown-body h6 { margin-top: 1.5em; margin-bottom: 0.75em; font-weight: 600; line-height: 1.25; color: #111827; clear: both; }
 .markdown-body h1 { font-size: 2em; border-bottom: 2px solid #e5e7eb; padding-bottom: 0.3em; }
 .markdown-body h2 { font-size: 1.5em; border-bottom: 1px solid #e5e7eb; padding-bottom: 0.3em; }
@@ -814,15 +830,15 @@ export function getMarkdownStyles(fontConfig?: FontConfig): string {
 .markdown-body strong { font-weight: 600; }
 .markdown-body em { font-style: italic; }
 .markdown-body code { padding: 0.2em 0.4em; margin: 0; font-size: 85%; background-color: #f3f4f6; border-radius: 3px; font-family: ${codeFontCss}; }
-.markdown-body pre { margin-top: 0; margin-bottom: ${paragraphSpacing}em; padding: 1em; font-size: 85%; line-height: 1.45; background-color: #f3f4f6; border-radius: 6px; font-family: ${codeFontCss}; break-inside: auto; }
+.markdown-body pre { margin-top: 0; margin-bottom: ${paragraphSpacing}em; padding: 1em; font-size: 85%; line-height: 1.45; background-color: #f3f4f6; border-radius: 6px; font-family: ${codeFontCss}; }
 .markdown-body pre code { padding: 0; background-color: transparent; border-radius: 0; font-size: 100%; white-space: pre-wrap; word-break: break-all; word-wrap: break-word; display: block; }
-.markdown-body .code-lines-container { display: table; width: 100%; border-collapse: collapse; break-inside: auto; }
+.markdown-body .code-lines-container { display: table; width: 100%; border-collapse: collapse; }
 .markdown-body .code-lines-container.line-num-width-1 .line-number { width: 1.5em; }
 .markdown-body .code-lines-container.line-num-width-2 .line-number { width: 2.5em; }
 .markdown-body .code-lines-container.line-num-width-3 .line-number { width: 3.5em; }
 .markdown-body .code-lines-container.line-num-width-4 .line-number { width: 4.5em; }
 .markdown-body .code-lines-container.line-num-width-5 .line-number { width: 5.5em; }
-.markdown-body .code-line { display: table-row; break-inside: avoid; }
+.markdown-body .code-line { display: table-row; }
 .markdown-body .code-line .line-number::before { content: attr(data-num); }
 .markdown-body .code-line .code-line-content { display: table-cell; padding-left: 0.75em; white-space: pre-wrap; word-break: break-all; }
 .markdown-body blockquote { margin: 0 0 ${paragraphSpacing}em; padding: 0 1em; color: #6b7280; border-left: 0.25em solid #e5e7eb; }
@@ -830,12 +846,10 @@ export function getMarkdownStyles(fontConfig?: FontConfig): string {
 .markdown-body ul { list-style-type: disc; }
 .markdown-body ol { list-style-type: decimal; }
 .markdown-body li { margin-bottom: 0.25em; }
-.markdown-body table { margin-top: 0; margin-bottom: ${paragraphSpacing}em; width: 100%; border-collapse: collapse; border-spacing: 0; font-size: 0.85em; break-inside: auto; }
-.markdown-body table thead { display: table-header-group; }
-.markdown-body table tbody { display: table-row-group; }
+.markdown-body table { margin-top: 0; margin-bottom: ${paragraphSpacing}em; width: 100%; border-collapse: collapse; border-spacing: 0; font-size: 0.85em; }
 .markdown-body table th { font-weight: 600; background-color: #c2dfff; }
 .markdown-body table th, .markdown-body table td { padding: 0.5em 1em; border: 1px solid #d1d5db; }
-.markdown-body table tr { background-color: #fff; border-top: 1px solid #e5e7eb; break-inside: avoid; }
+.markdown-body table tr { background-color: #fff; border-top: 1px solid #e5e7eb; }
 .markdown-body table tr:nth-child(2n) { background-color: #f9fafb; }
 .markdown-body hr { height: 0.25em; padding: 0; margin: 1.5em 0; background-color: #e5e7eb; border: 0; }
 .markdown-body img { max-width: 100%; box-sizing: content-box; border-style: none; display: block; margin-left: auto; margin-right: auto; }
@@ -851,7 +865,7 @@ export function getMarkdownStyles(fontConfig?: FontConfig): string {
 .markdown-body .heading-number { font-weight: 600; color: #3b82f6; margin-right: 0.25em; }
 
 /* Admonition 提示框 */
-.markdown-body .admonition { margin: 1em 0; padding: 0.75em 1em; border-radius: 6px; border-left: 4px solid; background-color: #f9fafb; page-break-inside: avoid; }
+.markdown-body .admonition { margin: 1em 0; padding: 0.75em 1em; border-radius: 6px; border-left: 4px solid; background-color: #f9fafb; }
 .markdown-body .admonition-title { font-weight: 600; margin-bottom: 0.5em; display: flex; align-items: center; gap: 0.5em; }
 .markdown-body .admonition p:last-child { margin-bottom: 0; }
 .markdown-body .admonition.note { border-left-color: #3b82f6; background-color: #eff6ff; }
@@ -890,7 +904,8 @@ export function getMarkdownStyles(fontConfig?: FontConfig): string {
 .markdown-body .plantuml svg { max-width: 100%; }
 .markdown-body .wavedrom { margin: 1em 0; text-align: center; }
 .markdown-body .wavedrom svg { max-width: 100%; height: auto; display: block; margin: 0 auto; }
-
+${htmlExtras}
+${breakRules}
 /* Tabbed 标签页 */
 .markdown-body .tabbed-set { margin: 1em 0; page-break-inside: avoid; }
 .markdown-body .tabbed-labels { display: none; }
@@ -901,126 +916,9 @@ export function getMarkdownStyles(fontConfig?: FontConfig): string {
 `
 }
 
-/**
- * 获取 HTML 导出样式（使用 px 单位，用于浏览器显示）
- */
+/** HTML 导出样式（保留名称以保持向后兼容） */
 export function getHtmlMarkdownStyles(fontConfig?: FontConfig): string {
-  const bodyFontSize = fontConfig?.bodyFontSize || 16
-  const chineseFont = fontConfig?.chineseFont || 'DengXian'
-  const englishFont = fontConfig?.englishFont || 'Arial'
-  const codeFont = fontConfig?.codeFont || 'SourceCodePro'
-  const lineHeight = fontConfig?.lineHeight || 1.6
-  const paragraphSpacing = fontConfig?.paragraphSpacing || 1
-
-  // 英文字体优先，中文字体fallback
-  const chineseFontCss = getChineseFontCss(chineseFont)
-  const englishFontCss = getEnglishFontCss(englishFont)
-  const bodyFontCss = `${englishFontCss}, ${chineseFontCss}, sans-serif`
-  const codeFontCss = getCodeFontCss(codeFont)
-
-  return `
-.markdown-body { line-height: ${lineHeight}; color: #1f2937; font-size: ${bodyFontSize}px; font-family: ${bodyFontCss}; }
-.markdown-body h1, .markdown-body h2, .markdown-body h3, .markdown-body h4, .markdown-body h5, .markdown-body h6 { margin-top: 1.5em; margin-bottom: 0.75em; font-weight: 600; line-height: 1.25; color: #111827; clear: both; }
-.markdown-body h1 { font-size: 2em; border-bottom: 2px solid #e5e7eb; padding-bottom: 0.3em; }
-.markdown-body h2 { font-size: 1.5em; border-bottom: 1px solid #e5e7eb; padding-bottom: 0.3em; }
-.markdown-body h3 { font-size: 1.25em; }
-.markdown-body h4 { font-size: 1.2em; }
-.markdown-body h5 { font-size: 1.1em; }
-.markdown-body h6 { font-size: 1em; }
-.markdown-body p { margin-top: 0; margin-bottom: ${paragraphSpacing}em; }
-.markdown-body a { color: #3b82f6; text-decoration: none; }
-.markdown-body a:hover { text-decoration: underline; }
-.markdown-body strong { font-weight: 600; }
-.markdown-body em { font-style: italic; }
-.markdown-body code { padding: 0.2em 0.4em; margin: 0; font-size: 85%; background-color: #f3f4f6; border-radius: 3px; font-family: ${codeFontCss}; }
-.markdown-body pre { margin-top: 0; margin-bottom: ${paragraphSpacing}em; padding: 1em; font-size: 85%; line-height: 1.45; background-color: #f3f4f6; border-radius: 6px; font-family: ${codeFontCss}; break-inside: auto; }
-.markdown-body pre code { padding: 0; background-color: transparent; border-radius: 0; font-size: 100%; white-space: pre-wrap; word-break: break-all; word-wrap: break-word; display: block; }
-.markdown-body .code-lines-container { display: table; width: 100%; border-collapse: collapse; break-inside: auto; }
-.markdown-body .code-lines-container.line-num-width-1 .line-number { width: 1.5em; }
-.markdown-body .code-lines-container.line-num-width-2 .line-number { width: 2.5em; }
-.markdown-body .code-lines-container.line-num-width-3 .line-number { width: 3.5em; }
-.markdown-body .code-lines-container.line-num-width-4 .line-number { width: 4.5em; }
-.markdown-body .code-lines-container.line-num-width-5 .line-number { width: 5.5em; }
-.markdown-body .code-line { display: table-row; break-inside: avoid; }
-.markdown-body .code-line .line-number::before { content: attr(data-num); }
-.markdown-body .code-line .code-line-content { display: table-cell; padding-left: 0.75em; white-space: pre-wrap; word-break: break-all; }
-.markdown-body blockquote { margin: 0 0 ${paragraphSpacing}em; padding: 0 1em; color: #6b7280; border-left: 0.25em solid #e5e7eb; }
-.markdown-body ul, .markdown-body ol { margin-top: 0; margin-bottom: ${paragraphSpacing}em; padding-left: 2em; }
-.markdown-body ul { list-style-type: disc; }
-.markdown-body ol { list-style-type: decimal; }
-.markdown-body li { margin-bottom: 0.25em; }
-.markdown-body table { margin-top: 0; margin-bottom: ${paragraphSpacing}em; width: 100%; border-collapse: collapse; border-spacing: 0; font-size: 0.85em; break-inside: auto; }
-.markdown-body table thead { display: table-header-group; }
-.markdown-body table tbody { display: table-row-group; }
-.markdown-body table th { font-weight: 600; background-color: #c2dfff; }
-.markdown-body table th, .markdown-body table td { padding: 0.5em 1em; border: 1px solid #d1d5db; }
-.markdown-body table tr { background-color: #fff; border-top: 1px solid #e5e7eb; break-inside: avoid; }
-.markdown-body table tr:nth-child(2n) { background-color: #f9fafb; }
-.markdown-body hr { height: 0.25em; padding: 0; margin: 1.5em 0; background-color: #e5e7eb; border: 0; }
-.markdown-body img { max-width: 100%; box-sizing: content-box; border-style: none; display: block; margin-left: auto; margin-right: auto; }
-.markdown-body .img-float-left { float: left; margin-right: 1em; margin-bottom: 0.5em; }
-.markdown-body .img-float-right { float: right; margin-left: 1em; margin-bottom: 0.5em; }
-.markdown-body .katex { font-size: 1.1em; }
-.markdown-body .katex-display { margin: 1em 0; overflow-x: hidden; overflow-y: hidden; }
-.markdown-body .footnotes { margin-top: 2em; padding-top: 1em; border-top: 1px solid #e5e7eb; }
-.markdown-body .table-of-contents { margin-bottom: 1.5em; padding: 1em; background-color: #f9fafb; border: 1px solid #e5e7eb; border-radius: 6px; }
-.markdown-body .task-list-item { list-style-type: none; padding-left: 0; }
-.markdown-body .task-list-item input[type="checkbox"] { margin-right: 0.5em; }
-.markdown-body .mermaid { margin: 1em 0; text-align: center; }
-.markdown-body .heading-number { font-weight: 600; color: #3b82f6; margin-right: 0.25em; }
-
-/* Admonition 提示框 */
-.markdown-body .admonition { margin: 1em 0; padding: 0.75em 1em; border-radius: 6px; border-left: 4px solid; background-color: #f9fafb; page-break-inside: avoid; }
-.markdown-body .admonition-title { font-weight: 600; margin-bottom: 0.5em; display: flex; align-items: center; gap: 0.5em; }
-.markdown-body .admonition p:last-child { margin-bottom: 0; }
-.markdown-body .admonition.note { border-left-color: #3b82f6; background-color: #eff6ff; }
-.markdown-body .admonition.note .admonition-title { color: #1d4ed8; }
-.markdown-body .admonition.tip { border-left-color: #10b981; background-color: #ecfdf5; }
-.markdown-body .admonition.tip .admonition-title { color: #047857; }
-.markdown-body .admonition.warning { border-left-color: #f59e0b; background-color: #fffbeb; }
-.markdown-body .admonition.warning .admonition-title { color: #b45309; }
-.markdown-body .admonition.danger { border-left-color: #ef4444; background-color: #fef2f2; }
-.markdown-body .admonition.danger .admonition-title { color: #b91c1c; }
-.markdown-body .admonition.info { border-left-color: #6b7280; background-color: #f9fafb; }
-.markdown-body .admonition.info .admonition-title { color: #4b5563; }
-.markdown-body .admonition.success { border-left-color: #10b981; background-color: #ecfdf5; }
-.markdown-body .admonition.success .admonition-title { color: #047857; }
-.markdown-body .admonition.failure { border-left-color: #ef4444; background-color: #fef2f2; }
-.markdown-body .admonition.failure .admonition-title { color: #b91c1c; }
-.markdown-body .admonition.bug { border-left-color: #8b5cf6; background-color: #f5f3ff; }
-.markdown-body .admonition.bug .admonition-title { color: #6d28d9; }
-.markdown-body .admonition.example { border-left-color: #06b6d4; background-color: #ecfeff; }
-.markdown-body .admonition.example .admonition-title { color: #0891b2; }
-.markdown-body .admonition.quote { border-left-color: #64748b; background-color: #f1f5f9; }
-.markdown-body .admonition.quote .admonition-title { color: #475569; }
-.markdown-body .admonition.abstract { border-left-color: #3b82f6; background-color: #eff6ff; }
-.markdown-body .admonition.abstract .admonition-title { color: #1d4ed8; }
-.markdown-body .admonition.question { border-left-color: #f59e0b; background-color: #fffbeb; }
-.markdown-body .admonition.question .admonition-title { color: #b45309; }
-.markdown-body .admonition.attention { border-left-color: #f59e0b; background-color: #fffbeb; }
-.markdown-body .admonition.attention .admonition-title { color: #b45309; }
-.markdown-body .admonition.hint { border-left-color: #10b981; background-color: #ecfdf5; }
-.markdown-body .admonition.hint .admonition-title { color: #047857; }
-.markdown-body .admonition.caution { border-left-color: #ef4444; background-color: #fef2f2; }
-.markdown-body .admonition.caution .admonition-title { color: #b91c1c; }
-.markdown-body .admonition.error { border-left-color: #ef4444; background-color: #fef2f2; }
-.markdown-body .admonition.error .admonition-title { color: #b91c1c; }
-.markdown-body .plantuml { margin: 1em 0; text-align: center; }
-.markdown-body .plantuml svg { max-width: 100%; }
-.markdown-body .wavedrom { margin: 1em 0; text-align: center; }
-.markdown-body .wavedrom svg { max-width: 100%; }
-.markdown-body figure.figure-span { display: flex; flex-direction: column; align-items: center; margin: 1.5em 0; text-align: center; page-break-inside: avoid; }
-.markdown-body figure.figure-span img { max-width: 100%; height: auto; }
-.markdown-body figure.figure-span figcaption { margin-top: 0.5em; font-size: 0.9em; color: #6b7280; text-align: center; }
-
-/* Tabbed 标签页 */
-.markdown-body .tabbed-set { margin: 1em 0; page-break-inside: avoid; }
-.markdown-body .tabbed-labels { display: none; }
-.markdown-body .tabbed-content { background-color: transparent; }
-.markdown-body .tabbed-block { display: block; margin-bottom: 1em; padding: 0.5em 0; border-bottom: 1px solid #ccc; page-break-inside: avoid; }
-.markdown-body .tabbed-block:last-child { border-bottom: none; margin-bottom: 0; }
-.markdown-body .tabbed-block-title { display: block; font-weight: bold; font-size: 0.95em; color: #333; margin-bottom: 0.5em; padding-bottom: 0.3em; border-bottom: 1px dashed #999; }
-`
+  return getMarkdownStyles(fontConfig, 'px')
 }
 
 /**
