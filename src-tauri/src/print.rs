@@ -324,8 +324,8 @@ async fn print_and_extract_bookmarks(
         return Err("等待打印窗口渲染超时".to_string());
     }
 
-    // Step 3: 等待图表渲染（Mermaid 和 PlantUML 需要时间，大文档需要更长）
-    std::thread::sleep(Duration::from_millis(3000));
+    // Step 3: 等待文档渲染就绪（字体+布局，事件驱动，替代固定等待）
+    wait_for_document_ready(print_window).await?;
 
     // Step 4: 执行 JavaScript 获取标题位置
     let bookmarks = extract_bookmark_positions(print_window, heading_ids).await?;
@@ -486,6 +486,154 @@ async fn extract_bookmark_positions(
         .map_err(|e| format!("解析书签数据失败: {} - 数据: {}", e, json_str))?;
 
     Ok(bookmarks)
+}
+
+/// 等待页面渲染完成（字体加载 + 布局绘制），替代盲等 3 秒
+/// 使用 document.fonts.ready + requestAnimationFrame 事件驱动
+#[cfg(windows)]
+async fn wait_for_document_ready(print_window: &WebviewWindow) -> Result<(), String> {
+    use tauri::webview::PlatformWebview;
+    use webview2_com::Microsoft::Web::WebView2::Win32::*;
+    use windows_core::{Interface, HSTRING};
+
+    // 注入初始化脚本：字体加载完成后，等待两个 rAF 确保布局和绘制完成
+    let setup_js = r#"
+        (function() {
+            if (window.__pdfDocReady !== undefined) return;
+            window.__pdfDocReady = false;
+            function signalReady() {
+                requestAnimationFrame(function() {
+                    requestAnimationFrame(function() {
+                        window.__pdfDocReady = true;
+                    });
+                });
+            }
+            if (document.fonts && document.fonts.status === 'loading') {
+                document.fonts.ready.then(signalReady);
+            } else {
+                signalReady();
+            }
+        })()
+    "#;
+
+    // 执行初始化脚本（write-only，不关心返回值）
+    {
+        let completed = Arc::new(AtomicBool::new(false));
+        let completed_clone = completed.clone();
+        let error = Arc::new(Mutex::new(None::<String>));
+        let error_clone = error.clone();
+        let js_owned = setup_js.to_string();
+
+        print_window
+            .with_webview(move |webview: PlatformWebview| {
+                unsafe {
+                    let controller = webview.controller();
+                    let core_webview = match controller.CoreWebView2() {
+                        Ok(w) => w,
+                        Err(e) => {
+                            *error_clone.lock().unwrap() = Some(format!("{}", e));
+                            completed_clone.store(true, Ordering::SeqCst);
+                            return;
+                        }
+                    };
+                    let webview_15: ICoreWebView2_15 = match core_webview.cast() {
+                        Ok(w) => w,
+                        Err(e) => {
+                            *error_clone.lock().unwrap() = Some(format!("{}", e));
+                            completed_clone.store(true, Ordering::SeqCst);
+                            return;
+                        }
+                    };
+                    let completed_for_handler = completed_clone.clone();
+                    let handler = webview2_com::ExecuteScriptCompletedHandler::create(
+                        Box::new(move |_result, _result_json| {
+                            completed_for_handler.store(true, Ordering::SeqCst);
+                            Ok(())
+                        }),
+                    );
+                    let js_hstring = HSTRING::from(js_owned.as_str());
+                    if let Err(e) = webview_15.ExecuteScript(&js_hstring, &handler) {
+                        *error_clone.lock().unwrap() = Some(format!("{}", e));
+                        completed_clone.store(true, Ordering::SeqCst);
+                    }
+                }
+            })
+            .map_err(|e| format!("with_webview 错误: {}", e))?;
+
+        let start = std::time::Instant::now();
+        let timeout = Duration::from_secs(5);
+        while !completed.load(Ordering::SeqCst) && start.elapsed() < timeout {
+            std::thread::sleep(Duration::from_millis(50));
+        }
+    }
+
+    // 轮询检查 ready 标志，使用较短的检查间隔
+    let poll_start = std::time::Instant::now();
+    let poll_timeout = Duration::from_secs(5);
+
+    while poll_start.elapsed() < poll_timeout {
+        let completed = Arc::new(AtomicBool::new(false));
+        let completed_clone = completed.clone();
+
+        // 简单的 JS 查询：检查标志位
+        let check_js = "String(window.__pdfDocReady === true)";
+        let result: Arc<Mutex<Option<String>>> = Arc::new(Mutex::new(None));
+        let result_clone = result.clone();
+        let js_owned = check_js.to_string();
+
+        print_window
+            .with_webview(move |webview: PlatformWebview| {
+                unsafe {
+                    let controller = webview.controller();
+                    let core_webview = match controller.CoreWebView2() {
+                        Ok(w) => w,
+                        Err(_) => {
+                            completed_clone.store(true, Ordering::SeqCst);
+                            return;
+                        }
+                    };
+                    let webview_15: ICoreWebView2_15 = match core_webview.cast() {
+                        Ok(w) => w,
+                        Err(_) => {
+                            completed_clone.store(true, Ordering::SeqCst);
+                            return;
+                        }
+                    };
+                    let result_for_handler = result_clone.clone();
+                    let completed_for_handler = completed_clone.clone();
+                    let handler = webview2_com::ExecuteScriptCompletedHandler::create(
+                        Box::new(move |_exec_result, result_json: String| {
+                            *result_for_handler.lock().unwrap() = Some(result_json);
+                            completed_for_handler.store(true, Ordering::SeqCst);
+                            Ok(())
+                        }),
+                    );
+                    let js_hstring = HSTRING::from(js_owned.as_str());
+                    if let Err(_) = webview_15.ExecuteScript(&js_hstring, &handler) {
+                        completed_clone.store(true, Ordering::SeqCst);
+                    }
+                }
+            })
+            .map_err(|e| format!("with_webview 错误: {}", e))?;
+
+        let op_start = std::time::Instant::now();
+        let op_timeout = Duration::from_secs(3);
+        while !completed.load(Ordering::SeqCst) && op_start.elapsed() < op_timeout {
+            std::thread::sleep(Duration::from_millis(50));
+        }
+
+        if let Some(val) = result.lock().unwrap().take() {
+            if val == "true" || val == "\"true\"" {
+                return Ok(());
+            }
+        }
+
+        std::thread::sleep(Duration::from_millis(100));
+    }
+
+    // 超时也允许继续（比永久阻塞好），只记录日志
+    println!("文档就绪等待超时，继续导出流程");
+    Ok(())
 }
 
 /// 执行打印
@@ -925,8 +1073,8 @@ async fn load_html_and_print_stream(
         return Err("等待打印窗口渲染超时".to_string());
     }
 
-    // Step 3: 等待图表渲染（Mermaid 和 PlantUML 需要时间，大文档需要更长）
-    std::thread::sleep(Duration::from_millis(3000));
+    // Step 3: 等待文档渲染就绪（字体+布局，事件驱动，替代固定等待）
+    wait_for_document_ready(print_window).await?;
 
     // Step 4: 使用 PrintToPdfStream 获取 PDF bytes
     // 发送进度事件：提取书签位置

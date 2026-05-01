@@ -8,6 +8,9 @@
 # 开发模式 - 启动 Vite 开发服务器和 Tauri 应用
 npm run tauri:dev
 
+# 仅启动前端开发服务器（Vite，端口 5173）
+npm run dev
+
 # 仅构建前端（生产环境）
 npm run build
 
@@ -23,7 +26,7 @@ npm run test:run          # 单次运行
 npm run test:coverage     # 带覆盖率报告
 ```
 
-测试使用 Vitest + happy-dom，覆盖 `src/composables/**` 和 `src/utils/**`。
+测试使用 Vitest + happy-dom，覆盖 `src/composables/**` 和 `src/utils/**`。Vitest 已启用 `globals: true`（`describe`/`it`/`expect` 无需导入），`@` 路径别名映射到 `src/`。
 
 ## 架构概览
 
@@ -154,6 +157,19 @@ src-tauri/src/
   font_subset.rs            # 字体子集化（用于 PDF 页码字体）
 ```
 
+### Rust 依赖映射
+
+| Crate | 用途 |
+|-------|------|
+| `lopdf` 0.38 | PDF 书签注入，直接操作 PDF 对象树 |
+| `pdf-extract` 0.10 | 从 PDF 提取文本位置，用于书签定位 |
+| `pdf-lib` + `@pdf-lib/fontkit` | 前端侧 PDF 页码/页眉/页脚（JS） |
+| `fontcull` 2.0 | 中文大字体文件子集化，仅保留 PDF 所需的少量字符 |
+| `ttf-parser` 0.24 | 从字体文件提取字体家族名称 |
+| `encoding_rs` 0.8 | GB18030 编码支持（文件读取） |
+| `base64` 0.22 | 字体文件 base64 编码（供前端 PDF 使用） |
+| `webview2-com` 0.38 | Windows WebView2 PrintToPdf API（仅 Windows） |
+
 ### 安全配置
 见 `src-tauri/tauri.conf.json` —— 权限显式声明：
 - `dialog:allow-open`、`dialog:allow-save` 用于文件对话框
@@ -193,11 +209,18 @@ src-tauri/src/
 
 12. **跨文件锚点链接**：MkDocs 导出时，`data.md#数据库` 自动转换为 `#数据库`（使用 slugify 生成 ID）。
 
+## 应用生命周期
+
+- **启动流程**：先显示 splash 窗口（透明无边框），前端加载完成后调用 `close_splash_window` Rust 命令关闭 splash 并显示主窗口
+- **关闭流程**：主窗口的 `CloseRequested` 被 Rust 端阻止（`api.prevent_close()`），改为向前端发送 `close-requested` 事件，由 Vue 处理关闭逻辑（如保存确认）
+- **打印窗口**：PDF 导出时创建隐藏的 `print-window` WebView2 窗口，关闭主窗口时自动销毁
+
 ## 开发注意事项
 
 - Tauri 需要 Rust 工具链（参见 https://tauri.app/start/prerequisites/）
 - PlantUML 需要 Java 8+ 和 `plantuml.jar` 在 `src-tauri/assets/` 目录
-- 开发服务器运行在 1420 端口（配置于 `vite.config.ts` 和 `tauri.conf.json`）
+- 开发服务器运行在 5173 端口（配置于 `vite.config.ts` 和 `tauri.conf.json`）
 - PDF 静默打印仅支持 Windows（WebView2 PrintToPdf API）
 - 自定义字体放置于 `src-tauri/assets/fonts/` 目录，应用自动扫描
 - 打包时需要将图标放置于 `src-tauri/icons/` 目录
+- 前端 `@` 路径别名映射到 `src/` 目录

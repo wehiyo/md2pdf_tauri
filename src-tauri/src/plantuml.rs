@@ -3,7 +3,8 @@
 //! 通过调用本地 Java 和 plantuml.jar 实现 PlantUML 图表渲染
 
 use std::process::{Command, Stdio};
-use std::io::Write;
+use std::io::{Write, Read};
+use std::time::{Duration, Instant};
 use tauri::{AppHandle, Manager};
 
 // Windows 平台：导入 CommandExt trait 以使用 creation_flags
@@ -54,26 +55,61 @@ pub async fn render_plantuml(app: AppHandle, content: String) -> Result<String, 
             }
         })?;
 
-    // 写入 PlantUML 内容到 stdin
+    // 写入 PlantUML 内容到 stdin（drop 会关闭管道）
     if let Some(mut stdin) = child.stdin.take() {
         stdin.write_all(content.as_bytes())
             .map_err(|e| format!("写入 PlantUML 内容失败: {}", e))?;
     }
 
-    // 等待进程完成并获取输出
-    let output = child.wait_with_output()
-        .map_err(|e| format!("等待 Java 进程失败: {}", e))?;
+    // 带超时的等待，使用 try_wait 避免永久阻塞
+    const PLANTUML_TIMEOUT: Duration = Duration::from_secs(30);
+    let start = Instant::now();
 
-    if !output.status.success() {
-        let stderr = String::from_utf8_lossy(&output.stderr);
-        return Err(format!("PlantUML 渲染失败:\n{}", stderr));
+    loop {
+        match child.try_wait() {
+            Ok(Some(status)) => {
+                // 进程已退出，读取 stdout/stderr
+                let stdout = child.stdout.take()
+                    .map(|mut out| {
+                        let mut buf = Vec::new();
+                        out.read_to_end(&mut buf).unwrap_or_default();
+                        buf
+                    })
+                    .unwrap_or_default();
+
+                let stderr = child.stderr.take()
+                    .map(|mut err| {
+                        let mut buf = Vec::new();
+                        err.read_to_end(&mut buf).unwrap_or_default();
+                        buf
+                    })
+                    .unwrap_or_default();
+
+                if !status.success() {
+                    return Err(format!("PlantUML 渲染失败:\n{}", String::from_utf8_lossy(&stderr)));
+                }
+
+                let svg = String::from_utf8(stdout)
+                    .map_err(|e| format!("SVG 输出解析失败: {}", e))?;
+
+                return Ok(svg);
+            }
+            Ok(None) => {
+                if start.elapsed() >= PLANTUML_TIMEOUT {
+                    let _ = child.kill();
+                    let _ = child.wait();
+                    return Err(
+                        "PlantUML 渲染超时（30秒）。请检查图表复杂度或 Java 环境。".to_string()
+                    );
+                }
+                std::thread::sleep(Duration::from_millis(100));
+            }
+            Err(e) => {
+                let _ = child.kill();
+                return Err(format!("等待 Java 进程失败: {}", e));
+            }
+        }
     }
-
-    // 返回 SVG 内容
-    let svg = String::from_utf8(output.stdout)
-        .map_err(|e| format!("SVG 输出解析失败: {}", e))?;
-
-    Ok(svg)
 }
 
 /// 查找 Java 可执行文件路径
