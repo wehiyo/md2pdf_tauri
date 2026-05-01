@@ -5,32 +5,13 @@
 
 import { writeFile, mkdir, copyFile } from '@tauri-apps/plugin-fs'
 import { useMarkdown, resetGlobalHeadingIndex } from './useMarkdown'
+import type { NavChapter } from '../types'
 
 // 导出接口
 export interface SiteExportOptions {
-  outputDir: string           // 输出目录路径
-  siteName: string            // 站点名称（用于顶部标题）
-  chapters: NavChapter[]      // 章节列表（来自 useMkdocsExport）
-}
-
-export interface NavChapter {
-  title: string
-  navLevel: number
-  filePath: string
-  content?: string
-  headings?: Heading[]
-  numberPrefix: string
-  chapterNumber: string
-  htmlId?: string
-}
-
-export interface Heading {
-  level: number
-  text: string
-  id: string
-  adjustedLevel: number
-  adjustedNumber: string
-  adjustedId: string
+  outputDir: string
+  siteName: string
+  chapters: NavChapter[]
 }
 
 export interface SearchIndexEntry {

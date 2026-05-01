@@ -1,6 +1,6 @@
 import { ref, computed, nextTick, type Ref } from 'vue'
 import { invoke } from '@tauri-apps/api/core'
-import type { MdFile } from './useFileManagement'
+import type { MdFile } from '../types'
 
 interface GlobalSearchResult {
   path: string

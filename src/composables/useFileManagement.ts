@@ -6,34 +6,7 @@ import { getCurrentWindow } from '@tauri-apps/api/window'
 import { parse as parseYaml } from 'yaml'
 import { useErrorHandling } from './useErrorHandling'
 import type { Metadata } from './useMarkdown'
-
-// ── Types ──────────────────────────────────────────────
-
-export interface OpenedFile {
-  path: string | null
-  content: string
-  savedContent: string
-  dir: string | null
-  name: string
-}
-
-export interface MdFile {
-  name: string
-  path?: string
-  children?: MdFile[]
-  isFolder?: boolean
-  hasExplicitTitle?: boolean
-}
-
-export type WorkState = 'file' | 'folder' | 'mkdocs'
-
-export interface MkdocsConfig {
-  siteName: string
-  coverTitle?: string
-  coverSubtitle?: string
-  author?: string
-  copyright?: string
-}
+import type { OpenedFile, MdFile, WorkState, MkdocsConfig } from '../types'
 
 // ── Defaults ───────────────────────────────────────────
 

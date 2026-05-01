@@ -1,7 +1,7 @@
 import { describe, it, expect, vi } from 'vitest'
 import { ref, computed } from 'vue'
 import { useSaveConfirm } from './useSaveConfirm'
-import type { OpenedFile } from './useFileManagement'
+import type { OpenedFile } from '../types'
 
 function makeFile(overrides: Partial<OpenedFile> = {}): OpenedFile {
   return {

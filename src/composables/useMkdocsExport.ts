@@ -3,49 +3,10 @@ import { convertFileSrc } from '@tauri-apps/api/core'
 import { useMarkdown, resetGlobalHeadingIndex, incrementGlobalHeadingIndex, slugifyForMkdocs } from './useMarkdown'
 import type MarkdownIt from 'markdown-it'
 import { normalizePath } from '../utils/normalizePath'
+import type { NavChapter, Heading, BookmarkTreeNode, MdFile } from '../types'
 
-// 导出给其他模块使用
-export interface NavChapter {
-  title: string          // 章节标题（来自 nav）
-  navLevel: number       // nav 层级深度 (0, 1, 2, 3...)
-  filePath: string       // md 文件路径
-  content?: string       // 读取后的内容
-  headings?: Heading[]   // 提取的标题列表
-  numberPrefix: string   // 编号前缀（如 "1.2."）
-  chapterNumber: string  // 章节编号（如 "1"、"1.1"、"1.1.1"）
-  htmlId?: string        // HTML 标题元素的 id（用于书签跳转）
-  mdH1Title?: string     // md 文件的 h1 标题（如果有）
-  displayTitle?: string  // 实际显示的标题
-  fallbackTitle?: string // 后备标题：文件名（去掉扩展名）
-}
-
-export interface Heading {
-  level: number          // 原始级别 (1-6)
-  text: string
-  id: string
-  adjustedLevel: number  // 调整后的级别
-  adjustedNumber: string // 调整后的编号
-  adjustedId: string     // 调整后的 ID
-}
-
-export interface BookmarkTreeNode {
-  id: string
-  title: string           // nav 标题或 md 内标题
-  level: number           // 显示层级（用于树缩进）
-  navLevel: number        // nav 层级（用于分页判断）
-  filePath?: string       // 来源文件路径
-  originalHeadingLevel?: number  // md 内原始标题级别
-  children?: BookmarkTreeNode[]  // 子标题（md 内 h2-h6）
-}
-
-// MdFile 类型（与 App.vue 一致）
-interface MdFile {
-  name: string
-  path?: string
-  children?: MdFile[]
-  isFolder?: boolean
-  hasExplicitTitle?: boolean  // 是否有显式标题（nav 中指定）
-}
+// 重新导出以保持向后兼容
+export type { NavChapter, Heading, BookmarkTreeNode }
 
 // 编号计数器（模块级别，用于跨章节编号）
 let chapterCounter = 0

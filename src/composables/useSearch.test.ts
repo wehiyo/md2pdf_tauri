@@ -1,7 +1,7 @@
 import { describe, it, expect, vi } from 'vitest'
 import { ref, type Ref } from 'vue'
 import { useSearch } from './useSearch'
-import type { MdFile } from './useFileManagement'
+import type { MdFile } from '../types'
 
 // ── Helpers ──────────────────────────────────────────
 

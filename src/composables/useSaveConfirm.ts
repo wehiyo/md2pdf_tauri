@@ -1,5 +1,5 @@
 import { ref, type Ref, type ComputedRef } from 'vue'
-import type { OpenedFile } from './useFileManagement'
+import type { OpenedFile } from '../types'
 
 export function useSaveConfirm(
   openedFiles: Ref<OpenedFile[]>,
