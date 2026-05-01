@@ -13,8 +13,22 @@ use bookmark::inject_bookmarks;
 use pdf_extract::{extract_pdf_markers, extract_pdf_markers_from_bytes};
 use font_subset::{subset_chinese_font, subset_font_to_base64};
 use std::fs;
+use std::path::PathBuf;
 use encoding_rs::{UTF_8, GB18030};
 use tauri::{Emitter, Manager, AppHandle};
+
+/// 统一的资产路径解析：开发模式用当前目录，生产模式用 resource_dir
+pub fn resolve_asset_path(app: &AppHandle, relative_path: &str) -> Result<PathBuf, String> {
+    if cfg!(debug_assertions) {
+        let cwd = std::env::current_dir()
+            .map_err(|e| format!("获取当前目录失败: {}", e))?;
+        Ok(cwd.join(relative_path))
+    } else {
+        let dir = app.path().resource_dir()
+            .map_err(|e| format!("获取资源目录失败: {}", e))?;
+        Ok(dir.join(relative_path))
+    }
+}
 
 /// 读取文件，自动检测编码（支持 UTF-8 和 GB18030）
 /// 返回 (解码后的文本, 检测到的编码名称)
@@ -51,40 +65,14 @@ fn get_resource_dir(app: AppHandle) -> Result<String, String> {
 /// 获取字体文件的绝对路径（供前端调用）
 #[tauri::command]
 fn get_font_path(app: AppHandle, filename: String) -> Result<String, String> {
-    let is_dev = cfg!(debug_assertions);
-
-    let path = if is_dev {
-        // 开发模式：当前工作目录是 src-tauri，使用相对路径并转换为绝对路径
-        let cwd = std::env::current_dir()
-            .map_err(|e| format!("获取当前目录失败: {}", e))?;
-        cwd.join("assets/fonts").join(&filename)
-    } else {
-        // 生产模式：resource_dir/assets/fonts/
-        app.path().resource_dir()
-            .map_err(|e| format!("获取资源目录失败: {}", e))?
-            .join("assets/fonts")
-            .join(&filename)
-    };
-
-    let absolute_path = path.to_string_lossy().to_string();
-    Ok(absolute_path)
+    let path = resolve_asset_path(&app, &format!("assets/fonts/{}", filename))?;
+    Ok(path.to_string_lossy().to_string())
 }
 
 /// 读取字体文件并返回 base64 编码（用于 PDF 导出）
 #[tauri::command]
 fn get_font_base64(app: AppHandle, filename: String) -> Result<String, String> {
-    let is_dev = cfg!(debug_assertions);
-
-    let path = if is_dev {
-        let cwd = std::env::current_dir()
-            .map_err(|e| format!("获取当前目录失败: {}", e))?;
-        cwd.join("assets/fonts").join(&filename)
-    } else {
-        app.path().resource_dir()
-            .map_err(|e| format!("获取资源目录失败: {}", e))?
-            .join("assets/fonts")
-            .join(&filename)
-    };
+    let path = resolve_asset_path(&app, &format!("assets/fonts/{}", filename))?;
 
     let bytes = fs::read(&path)
         .map_err(|e| format!("读取字体文件失败: {}", e))?;
@@ -108,17 +96,7 @@ fn get_config_dir(app: AppHandle) -> Result<String, String> {
 #[tauri::command]
 fn scan_fonts_dir(app: AppHandle) -> Result<Vec<(String, String, String)>, String> {
     // 返回格式: Vec<(id, name, filename)>
-    let is_dev = cfg!(debug_assertions);
-
-    let fonts_dir = if is_dev {
-        // 开发模式：当前工作目录已经是 src-tauri，直接使用相对路径
-        std::path::PathBuf::from("assets/fonts")
-    } else {
-        // 生产模式：resource_dir
-        app.path().resource_dir()
-            .map_err(|e| format!("获取资源目录失败: {}", e))?
-            .join("assets/fonts")
-    };
+    let fonts_dir = resolve_asset_path(&app, "assets/fonts")?;
 
     let mut fonts: Vec<(String, String, String)> = Vec::new();
 

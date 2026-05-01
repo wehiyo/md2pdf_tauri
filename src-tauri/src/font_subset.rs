@@ -4,7 +4,7 @@
 
 use std::collections::HashSet;
 use fontcull::{subset_font_data, FontFormat};
-use tauri::{AppHandle, Manager};
+use tauri::AppHandle;
 use base64::{Engine as _, engine::general_purpose::STANDARD};
 
 /// 对指定字体进行子集化并返回 base64 编码
@@ -52,25 +52,10 @@ pub async fn subset_font_to_base64(
 
 /// 获取自定义字体文件路径
 fn get_custom_font_path(app: &AppHandle, filename: &str) -> Result<String, String> {
-    let is_dev = cfg!(debug_assertions);
-
-    let path = if is_dev {
-        // 开发模式：当前工作目录是 src-tauri
-        let cwd = std::env::current_dir()
-            .map_err(|e| format!("获取当前目录失败: {}", e))?;
-        cwd.join("assets/fonts").join(filename)
-    } else {
-        // 生产模式：resource_dir/assets/fonts/
-        app.path().resource_dir()
-            .map_err(|e| format!("获取资源目录失败: {}", e))?
-            .join("assets/fonts")
-            .join(filename)
-    };
-
+    let path = crate::resolve_asset_path(app, &format!("assets/fonts/{}", filename))?;
     if !path.exists() {
         return Err(format!("字体文件不存在: {}", path.to_string_lossy()));
     }
-
     Ok(path.to_string_lossy().to_string())
 }
 
@@ -104,28 +89,20 @@ pub async fn subset_chinese_font(
     Ok(subset_bytes)
 }
 
-/// 获取中文字体文件路径
+/// 获取中文字体文件路径（子集化专用）
 fn get_font_path(app: &AppHandle) -> Result<String, String> {
-    // 尝试开发模式的路径
-    let dev_paths = [
-        "src-tauri/assets/fonts/SourceHanSansSC-Regular.ttf",
-        "./assets/fonts/SourceHanSansSC-Regular.ttf",
-    ];
-
-    for path in dev_paths {
-        if std::path::Path::new(path).exists() {
-            return Ok(path.to_string());
+    const FONT_FILE: &str = "assets/fonts/SourceHanSansSC-Regular.ttf";
+    if cfg!(debug_assertions) {
+        // 开发模式：尝试多个相对路径
+        for dev_path in &[FONT_FILE, &format!("src-tauri/{}", FONT_FILE)] {
+            if std::path::Path::new(dev_path).exists() {
+                return Ok(dev_path.to_string());
+            }
         }
     }
-
-    // 生产模式：使用 resource_dir
-    let resource_dir = app.path().resource_dir()
-        .map_err(|e| format!("获取资源目录失败: {}", e))?;
-
-    let font_path = resource_dir.join("assets/fonts/SourceHanSansSC-Regular.ttf");
-    if font_path.exists() {
-        return Ok(font_path.to_string_lossy().to_string());
+    let path = crate::resolve_asset_path(app, FONT_FILE)?;
+    if path.exists() {
+        return Ok(path.to_string_lossy().to_string());
     }
-
     Err("未找到中文字体文件 SourceHanSansSC-Regular.ttf".to_string())
 }

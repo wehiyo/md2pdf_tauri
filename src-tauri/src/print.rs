@@ -177,24 +177,23 @@ fn create_print_window_with_settings(app: &AppHandle, settings: &PrintPageSettin
     Ok(print_window)
 }
 
-/// 在隐藏窗口中打印
+/// 在 WebView2 中加载 HTML 并等待导航完成
 #[cfg(windows)]
-async fn print_in_hidden_window(
+fn navigate_html_and_wait(
     print_window: &WebviewWindow,
     html: &str,
-    save_path: &str,
-) -> Result<PrintResult, String> {
+    timeout: Duration,
+) -> Result<(), String> {
     use tauri::webview::PlatformWebview;
     use windows_core::HSTRING;
 
     let nav_completed = Arc::new(AtomicBool::new(false));
     let nav_completed_clone = nav_completed.clone();
-    let html_owned = html.to_string();
     let error = Arc::new(Mutex::new(None::<String>));
     let error_clone = error.clone();
     let error_for_check = error.clone();
+    let html_owned = html.to_string();
 
-    // 在隐藏窗口中加载 HTML
     print_window
         .with_webview(move |webview: PlatformWebview| {
             unsafe {
@@ -206,22 +205,18 @@ async fn print_in_hidden_window(
                         return;
                     }
                 };
-
-                // 注册 NavigationCompleted 回调
-                let nav_completed_for_callback = nav_completed_clone.clone();
+                let nav_for_callback = nav_completed_clone.clone();
                 let handler = webview2_com::NavigationCompletedEventHandler::create(Box::new(
                     move |_sender, _args| {
-                        nav_completed_for_callback.store(true, Ordering::SeqCst);
+                        nav_for_callback.store(true, Ordering::SeqCst);
                         Ok(())
                     },
                 ));
-
                 let mut token: i64 = 0;
                 if let Err(e) = core_webview.add_NavigationCompleted(&handler, &mut token as *mut i64) {
                     *error.lock().unwrap() = Some(format!("无法注册导航事件: {}", e));
                     return;
                 }
-
                 let html_hstring = HSTRING::from(html_owned.as_str());
                 if let Err(e) = core_webview.NavigateToString(&html_hstring) {
                     *error.lock().unwrap() = Some(format!("NavigateToString 失败: {}", e));
@@ -231,15 +226,11 @@ async fn print_in_hidden_window(
         })
         .map_err(|e| format!("with_webview 错误: {}", e))?;
 
-    // 检查导航错误
     if let Some(err) = error_for_check.lock().unwrap().take() {
         return Err(err);
     }
 
-    // 等待导航完成（大文档需要更长时间）
     let start = std::time::Instant::now();
-    let timeout = Duration::from_secs(120);
-
     while !nav_completed.load(Ordering::SeqCst) && start.elapsed() < timeout {
         std::thread::sleep(Duration::from_millis(100));
     }
@@ -248,7 +239,17 @@ async fn print_in_hidden_window(
         return Err("等待打印窗口渲染超时".to_string());
     }
 
-    // 执行打印
+    Ok(())
+}
+
+/// 在隐藏窗口中打印
+#[cfg(windows)]
+async fn print_in_hidden_window(
+    print_window: &WebviewWindow,
+    html: &str,
+    save_path: &str,
+) -> Result<PrintResult, String> {
+    navigate_html_and_wait(print_window, html, Duration::from_secs(120))?;
     print_content(print_window, save_path).await
 }
 
@@ -260,69 +261,8 @@ async fn print_and_extract_bookmarks(
     save_path: &str,
     heading_ids: &[String],
 ) -> Result<PrintResultWithBookmarks, String> {
-    use tauri::webview::PlatformWebview;
-    use windows_core::HSTRING;
-
-    let nav_completed = Arc::new(AtomicBool::new(false));
-    let nav_completed_clone = nav_completed.clone();
-    let html_owned = html.to_string();
-    let error = Arc::new(Mutex::new(None::<String>));
-    let error_clone = error.clone();
-    let error_for_check = error.clone();
-
-    // Step 1: 在隐藏窗口中加载 HTML
-    print_window
-        .with_webview(move |webview: PlatformWebview| {
-            unsafe {
-                let controller = webview.controller();
-                let core_webview = match controller.CoreWebView2() {
-                    Ok(w) => w,
-                    Err(e) => {
-                        *error_clone.lock().unwrap() = Some(format!("无法获取 CoreWebView2: {}", e));
-                        return;
-                    }
-                };
-
-                // 注册 NavigationCompleted 回调
-                let nav_completed_for_callback = nav_completed_clone.clone();
-                let handler = webview2_com::NavigationCompletedEventHandler::create(Box::new(
-                    move |_sender, _args| {
-                        nav_completed_for_callback.store(true, Ordering::SeqCst);
-                        Ok(())
-                    },
-                ));
-
-                let mut token: i64 = 0;
-                if let Err(e) = core_webview.add_NavigationCompleted(&handler, &mut token as *mut i64) {
-                    *error.lock().unwrap() = Some(format!("无法注册导航事件: {}", e));
-                    return;
-                }
-
-                let html_hstring = HSTRING::from(html_owned.as_str());
-                if let Err(e) = core_webview.NavigateToString(&html_hstring) {
-                    *error.lock().unwrap() = Some(format!("NavigateToString 失败: {}", e));
-                    return;
-                }
-            }
-        })
-        .map_err(|e| format!("with_webview 错误: {}", e))?;
-
-    // 检查导航错误
-    if let Some(err) = error_for_check.lock().unwrap().take() {
-        return Err(err);
-    }
-
-    // Step 2: 等待导航完成（MkDocs 大文档需要更长时间）
-    let start = std::time::Instant::now();
-    let timeout = Duration::from_secs(120);
-
-    while !nav_completed.load(Ordering::SeqCst) && start.elapsed() < timeout {
-        std::thread::sleep(Duration::from_millis(100));
-    }
-
-    if !nav_completed.load(Ordering::SeqCst) {
-        return Err("等待打印窗口渲染超时".to_string());
-    }
+    // Step 1-2: 加载 HTML 并等待导航完成
+    navigate_html_and_wait(print_window, html, Duration::from_secs(120))?;
 
     // Step 3: 等待文档渲染就绪（字体+布局，事件驱动，替代固定等待）
     wait_for_document_ready(print_window).await?;
@@ -1003,81 +943,17 @@ async fn load_html_and_print_stream(
     markers: &[String],
     page_settings: &PrintPageSettings,
 ) -> Result<PrintResultWithBookmarks, String> {
-    use tauri::webview::PlatformWebview;
-    use windows_core::HSTRING;
-
     // 获取窗口的 app handle 用于发送事件
     let app = print_window.app_handle();
 
-    let nav_completed = Arc::new(AtomicBool::new(false));
-    let nav_completed_clone = nav_completed.clone();
-    let html_owned = html.to_string();
-    let error = Arc::new(Mutex::new(None::<String>));
-    let error_clone = error.clone();
-    let error_for_check = error.clone();
-
-    // Step 1: 在隐藏窗口中加载 HTML
-    // 发送进度事件
+    // Step 1-2: 发送进度、加载 HTML 并等待导航完成
     let _ = app.emit("export-progress", "生成 PDF...");
+    navigate_html_and_wait(print_window, html, Duration::from_secs(120))?;
 
-    print_window
-        .with_webview(move |webview: PlatformWebview| {
-            unsafe {
-                let controller = webview.controller();
-                let core_webview = match controller.CoreWebView2() {
-                    Ok(w) => w,
-                    Err(e) => {
-                        *error_clone.lock().unwrap() = Some(format!("无法获取 CoreWebView2: {}", e));
-                        return;
-                    }
-                };
-
-                // 注册 NavigationCompleted 回调
-                let nav_completed_for_callback = nav_completed_clone.clone();
-                let handler = webview2_com::NavigationCompletedEventHandler::create(Box::new(
-                    move |_sender, _args| {
-                        nav_completed_for_callback.store(true, Ordering::SeqCst);
-                        Ok(())
-                    },
-                ));
-
-                let mut token: i64 = 0;
-                if let Err(e) = core_webview.add_NavigationCompleted(&handler, &mut token as *mut i64) {
-                    *error.lock().unwrap() = Some(format!("无法注册导航事件: {}", e));
-                    return;
-                }
-
-                let html_hstring = HSTRING::from(html_owned.as_str());
-                if let Err(e) = core_webview.NavigateToString(&html_hstring) {
-                    *error.lock().unwrap() = Some(format!("NavigateToString 失败: {}", e));
-                    return;
-                }
-            }
-        })
-        .map_err(|e| format!("with_webview 错误: {}", e))?;
-
-    // 检查导航错误
-    if let Some(err) = error_for_check.lock().unwrap().take() {
-        return Err(err);
-    }
-
-    // Step 2: 等待导航完成（MkDocs 大文档需要更长时间）
-    let start = std::time::Instant::now();
-    let timeout = Duration::from_secs(120);
-
-    while !nav_completed.load(Ordering::SeqCst) && start.elapsed() < timeout {
-        std::thread::sleep(Duration::from_millis(100));
-    }
-
-    if !nav_completed.load(Ordering::SeqCst) {
-        return Err("等待打印窗口渲染超时".to_string());
-    }
-
-    // Step 3: 等待文档渲染就绪（字体+布局，事件驱动，替代固定等待）
+    // Step 3: 等待文档渲染就绪
     wait_for_document_ready(print_window).await?;
 
     // Step 4: 使用 PrintToPdfStream 获取 PDF bytes
-    // 发送进度事件：提取书签位置
     let _ = app.emit("export-progress", "提取书签位置...");
 
     let pdf_bytes = print_to_pdf_stream_internal(print_window, page_settings).await?;

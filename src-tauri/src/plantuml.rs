@@ -5,7 +5,7 @@
 use std::process::{Command, Stdio};
 use std::io::{Write, Read};
 use std::time::{Duration, Instant};
-use tauri::{AppHandle, Manager};
+use tauri::AppHandle;
 
 // Windows 平台：导入 CommandExt trait 以使用 creation_flags
 #[cfg(windows)]
@@ -144,26 +144,17 @@ fn get_java_path() -> String {
 
 /// 获取 plantuml.jar 的路径
 fn get_plantuml_jar_path(app: &AppHandle) -> Result<String, String> {
-    // 尝试开发模式的路径
-    let dev_paths = [
-        "src-tauri/assets/plantuml.jar",
-        "./assets/plantuml.jar",
-    ];
-
-    for path in dev_paths {
-        if std::path::Path::new(path).exists() {
-            return Ok(path.to_string());
+    const JAR_PATH: &str = "assets/plantuml.jar";
+    if cfg!(debug_assertions) {
+        for dev_path in &[JAR_PATH, &format!("src-tauri/{}", JAR_PATH)] {
+            if std::path::Path::new(dev_path).exists() {
+                return Ok(dev_path.to_string());
+            }
         }
     }
-
-    // 生产模式：使用 resource_dir
-    let resource_dir = app.path().resource_dir()
-        .map_err(|e| format!("获取资源目录失败: {}", e))?;
-
-    let jar_path = resource_dir.join("assets/plantuml.jar");
-    if jar_path.exists() {
-        return Ok(jar_path.to_string_lossy().to_string());
+    let path = crate::resolve_asset_path(app, JAR_PATH)?;
+    if path.exists() {
+        return Ok(path.to_string_lossy().to_string());
     }
-
     Err("未找到 plantuml.jar 文件".to_string())
 }
