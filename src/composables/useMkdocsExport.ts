@@ -2,6 +2,7 @@ import { invoke } from '@tauri-apps/api/core'
 import { convertFileSrc } from '@tauri-apps/api/core'
 import { useMarkdown, resetGlobalHeadingIndex, incrementGlobalHeadingIndex, slugifyForMkdocs } from './useMarkdown'
 import type MarkdownIt from 'markdown-it'
+import { normalizePath } from '../utils/normalizePath'
 
 // 导出给其他模块使用
 export interface NavChapter {
@@ -521,38 +522,6 @@ function getFileDir(filePath: string): string {
   const lastSlashIndex = normalized.lastIndexOf('/')
   if (lastSlashIndex === -1) return ''
   return normalized.substring(0, lastSlashIndex)
-}
-
-/**
- * 规范化路径（移除多余的 ./ 和 ../）
- */
-function normalizePath(path: string): string {
-  const parts = path.replace(/\\/g, '/').split('/')
-  const result: string[] = []
-
-  for (const part of parts) {
-    if (part === '..') {
-      if (result.length > 0 && result[result.length - 1] !== '..') {
-        result.pop()
-      } else {
-        result.push(part)
-      }
-    } else if (part !== '.' && part !== '') {
-      result.push(part)
-    }
-  }
-
-  // Windows 路径保留驱动器字母（如 D:）
-  let joinedPath = result.join('/')
-  if (path.match(/^[A-Za-z]:/)) {
-    // Windows 驱动器路径，确保有驱动器前缀
-    const driveMatch = path.match(/^([A-Za-z]:)/)
-    if (driveMatch && !joinedPath.startsWith(driveMatch[1])) {
-      joinedPath = driveMatch[1] + '/' + joinedPath
-    }
-  }
-
-  return joinedPath
 }
 
 /**

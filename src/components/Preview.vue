@@ -43,6 +43,7 @@ import PreviewToolbar from './PreviewToolbar.vue'
 import SettingsDialog from './SettingsDialog.vue'
 import { loadConfig, saveConfig, type FontConfig } from '../composables/useConfig'
 import { loadFonts } from '../composables/useFonts'
+import { normalizePath } from '../utils/normalizePath'
 
 const props = defineProps<{
   html: string
@@ -404,41 +405,6 @@ function renderWavedrom() {
       element.setAttribute('data-processed', 'true')
     }
   }
-}
-
-// 规范化路径，解析 . 和 ..
-function normalizePath(path: string): string {
-  // 先统一使用正斜杠
-  const normalized = path.replace(/\\/g, '/')
-  const parts = normalized.split('/')
-  const result: string[] = []
-
-  // 检测是否为 Windows 路径（以盘符开头）
-  const isWindowsPath = normalized.match(/^[A-Za-z]:/)
-  // 检测是否为 Unix 绝对路径（以 / 开头）
-  const isUnixAbsolutePath = normalized.startsWith('/')
-
-  for (let i = 0; i < parts.length; i++) {
-    const part = parts[i]
-
-    if (part === '..') {
-      // Windows 路径中，保留盘符部分不被移除
-      if (result.length > 1 || (result.length === 1 && !isWindowsPath)) {
-        result.pop()
-      }
-    } else if (part !== '.' && part !== '') {
-      result.push(part)
-    }
-  }
-
-  const joinedPath = result.join('/')
-
-  // Unix 绝对路径需要添加前导 /
-  if (isUnixAbsolutePath && !isWindowsPath) {
-    return '/' + joinedPath
-  }
-
-  return joinedPath
 }
 
 // 修复本地图片路径

@@ -9,6 +9,7 @@ import JSON5 from 'json5'
 import type { Metadata } from './useMarkdown'
 import type { FontConfig } from './useConfig'
 import { BUILTIN_CHINESE_FONTS, BUILTIN_CODE_FONTS, PAGE_SIZE_PRESETS } from './useConfig'
+import { escapeHtml } from './markdownParser'
 import { useExportProgress } from './useExportProgress'
 import { useErrorHandling } from './useErrorHandling'
 
@@ -777,10 +778,6 @@ function addH1PageBreaks(htmlContent: string, headings: Array<{ level: number; t
   })
 
   return result
-}
-
-function escapeHtml(text: string): string {
-  return text.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#039;')
 }
 
 /** 合并的 Markdown 样式，支持 pt（PDF）和 px（HTML）两种输出格式 */

@@ -1,39 +1,5 @@
 import { describe, it, expect } from 'vitest'
-
-// 复制 Preview.vue 中的 normalizePath 函数进行测试
-function normalizePath(path: string): string {
-  // 先统一使用正斜杠
-  const normalized = path.replace(/\\/g, '/')
-  const parts = normalized.split('/')
-  const result: string[] = []
-
-  // 检测是否为 Windows 路径（以盘符开头）
-  const isWindowsPath = normalized.match(/^[A-Za-z]:/)
-  // 检测是否为 Unix 绝对路径（以 / 开头）
-  const isUnixAbsolutePath = normalized.startsWith('/')
-
-  for (let i = 0; i < parts.length; i++) {
-    const part = parts[i]
-
-    if (part === '..') {
-      // Windows 路径中，保留盘符部分不被移除
-      if (result.length > 1 || (result.length === 1 && !isWindowsPath)) {
-        result.pop()
-      }
-    } else if (part !== '.' && part !== '') {
-      result.push(part)
-    }
-  }
-
-  const joinedPath = result.join('/')
-
-  // Unix 绝对路径需要添加前导 /
-  if (isUnixAbsolutePath && !isWindowsPath) {
-    return '/' + joinedPath
-  }
-
-  return joinedPath
-}
+import { normalizePath } from './normalizePath'
 
 describe('normalizePath - 图片路径规范化', () => {
   describe('Windows 路径处理', () => {
