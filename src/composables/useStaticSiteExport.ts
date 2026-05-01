@@ -931,10 +931,19 @@ function replaceImagePaths(html: string, imageMap: Map<string, string>, isSubPag
 export async function exportStaticSite(options: SiteExportOptions): Promise<void> {
   const { outputDir, siteName, chapters } = options
 
+  // 在输出目录下创建以 siteName 为名称的文件夹
+  // 处理 siteName 中的特殊字符，生成合法的文件夹名
+  const safeFolderName = siteName
+    .replace(/[<>:"/\\|?*]/g, '_')  // 替换 Windows 不允许的字符
+    .replace(/\s+/g, '_')           // 空格替换为下划线
+    .trim()
+
+  const siteOutputDir = `${outputDir}/${safeFolderName}`
+
   // 创建目录结构
-  await mkdir(`${outputDir}/assets/css`, { recursive: true })
-  await mkdir(`${outputDir}/assets/js`, { recursive: true })
-  await mkdir(`${outputDir}/pages`, { recursive: true })
+  await mkdir(`${siteOutputDir}/assets/css`, { recursive: true })
+  await mkdir(`${siteOutputDir}/assets/js`, { recursive: true })
+  await mkdir(`${siteOutputDir}/pages`, { recursive: true })
 
   // 生成页面信息列表
   const pageInfos: PageInfo[] = []
@@ -954,15 +963,15 @@ export async function exportStaticSite(options: SiteExportOptions): Promise<void
   }
 
   // 复制图片
-  const imageMap = await copyImages(chapters, outputDir)
+  const imageMap = await copyImages(chapters, siteOutputDir)
 
   // 写入 CSS
   const css = getMaterialSiteCss()
-  await writeFile(`${outputDir}/assets/css/site.css`, new TextEncoder().encode(css))
+  await writeFile(`${siteOutputDir}/assets/css/site.css`, new TextEncoder().encode(css))
 
   // 写入 JS
-  await writeFile(`${outputDir}/assets/js/search.js`, new TextEncoder().encode(getSearchJs()))
-  await writeFile(`${outputDir}/assets/js/navigation.js`, new TextEncoder().encode(getNavigationJs()))
+  await writeFile(`${siteOutputDir}/assets/js/search.js`, new TextEncoder().encode(getSearchJs()))
+  await writeFile(`${siteOutputDir}/assets/js/navigation.js`, new TextEncoder().encode(getNavigationJs()))
 
   // 生成搜索索引（嵌入到每个页面中）
   const searchIndex = generateSearchIndex(chapters, pageInfos)
@@ -970,7 +979,7 @@ export async function exportStaticSite(options: SiteExportOptions): Promise<void
 
   // 保存搜索索引到单独文件（可选，用于其他用途）
   await writeFile(
-    `${outputDir}/search-index.json`,
+    `${siteOutputDir}/search-index.json`,
     new TextEncoder().encode(JSON.stringify(searchIndex, null, 2))
   )
 
@@ -1050,8 +1059,8 @@ export async function exportStaticSite(options: SiteExportOptions): Promise<void
 
     // 写入文件
     const filePath = pageInfo.htmlFile === 'index.html'
-      ? `${outputDir}/index.html`
-      : `${outputDir}/${pageInfo.htmlFile}`
+      ? `${siteOutputDir}/index.html`
+      : `${siteOutputDir}/${pageInfo.htmlFile}`
 
     await writeFile(filePath, new TextEncoder().encode(pageHtml))
   }
