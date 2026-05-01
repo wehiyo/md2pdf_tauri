@@ -167,29 +167,29 @@ security level: 内部
 
     it('应正确处理 align=center', () => {
       const html = renderBody('![图片](test.png){align=center}')
-      expect(html).toContain('justify-content: center')
+      expect(html).toContain('text-align: center')
     })
 
     it('应正确处理 align=left', () => {
       const html = renderBody('![图片](test.png){align=left}')
-      expect(html).toContain('justify-content: flex-start')
+      expect(html).toContain('img-float-left')
     })
 
     it('应正确处理 align=right', () => {
       const html = renderBody('![图片](test.png){align=right}')
-      expect(html).toContain('justify-content: flex-end')
+      expect(html).toContain('img-float-right')
     })
 
     it('应正确处理 width 和 align 组合', () => {
       const html = renderBody('![图片](test.png){width=300 align=center}')
       expect(html).toContain('width: 300px')
-      expect(html).toContain('justify-content: center')
+      expect(html).toContain('text-align: center')
     })
 
     it('应正确处理 align 和 width 组合（顺序交换）', () => {
       const html = renderBody('![图片](test.png){align=center width=300}')
       expect(html).toContain('width: 300px')
-      expect(html).toContain('justify-content: center')
+      expect(html).toContain('text-align: center')
     })
   })
 
@@ -249,9 +249,10 @@ security level: 内部
       expect(html).toContain('katex-display')
     })
 
-    it('公式外 (r) 应被转换为注册商标符号', () => {
+    it('公式外 (r) 不应被转换为注册商标符号（typorgrapher已移除商标转换）', () => {
       const html = renderBody('产品名称(r) 注册商标')
-      expect(html).toContain('®')
+      expect(html).not.toContain('®')
+      expect(html).toContain('产品名称(r) 注册商标')
     })
   })
 
