@@ -376,3 +376,164 @@ pub async fn extract_pdf_markers_from_bytes(
 ) -> Result<Vec<MarkerPosition>, String> {
     extract_marker_positions_from_bytes(&pdf_bytes, &markers)
 }
+
+// ── Tests ──────────────────────────────────────────
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_marker_finder_new() {
+        let markers = vec!["PDFMARK000".to_string(), "PDFMARK001".to_string()];
+        let finder = MarkerFinder::new(&markers);
+        assert_eq!(finder.current_page, 0);
+        assert_eq!(finder.all_found, false);
+        assert_eq!(finder.total_markers, 2);
+        assert_eq!(finder.marker_list.len(), 2);
+        assert!(finder.found_markers.is_empty());
+    }
+
+    #[test]
+    fn test_find_y_for_byte_index_exact() {
+        let mut finder = MarkerFinder::new(&[]);
+        finder.char_positions = vec![(0, 100.0), (5, 200.0), (10, 300.0)];
+        assert!((finder.find_y_for_byte_index(0) - 100.0).abs() < 0.01);
+        assert!((finder.find_y_for_byte_index(5) - 200.0).abs() < 0.01);
+        assert!((finder.find_y_for_byte_index(10) - 300.0).abs() < 0.01);
+    }
+
+    #[test]
+    fn test_find_y_for_byte_index_between() {
+        let mut finder = MarkerFinder::new(&[]);
+        finder.char_positions = vec![(0, 100.0), (10, 200.0)];
+        // Before first → returns first
+        assert!((finder.find_y_for_byte_index(0) - 100.0).abs() < 0.01);
+        // Between 0 and 10 → returns previous (100.0)
+        assert!((finder.find_y_for_byte_index(3) - 100.0).abs() < 0.01);
+        assert!((finder.find_y_for_byte_index(7) - 100.0).abs() < 0.01);
+    }
+
+    #[test]
+    fn test_find_y_for_byte_index_after_last() {
+        let mut finder = MarkerFinder::new(&[]);
+        finder.char_positions = vec![(0, 100.0), (10, 200.0)];
+        // After last → returns last
+        assert!((finder.find_y_for_byte_index(20) - 200.0).abs() < 0.01);
+    }
+
+    #[test]
+    fn test_find_y_for_byte_index_empty() {
+        let mut finder = MarkerFinder::new(&[]);
+        finder.current_y = 50.0;
+        assert!((finder.find_y_for_byte_index(5) - 50.0).abs() < 0.01);
+    }
+
+    #[test]
+    fn test_search_markers_single_page() {
+        let markers = vec!["PDFMARK000".to_string(), "PDFMARK001".to_string()];
+        let mut finder = MarkerFinder::new(&markers);
+        finder.current_page = 1;
+
+        // Simulate text with markers separated by whitespace
+        finder.current_text = "Some text PDFMARK000 more text PDFMARK001 end".to_string();
+        // Add char_positions: each char at y=500
+        for (i, _) in finder.current_text.char_indices() {
+            finder.char_positions.push((i, 500.0));
+        }
+
+        finder.search_markers_in_text();
+
+        assert!(finder.found_markers.contains_key("PDFMARK000"));
+        assert!(finder.found_markers.contains_key("PDFMARK001"));
+        assert_eq!(finder.found_markers.len(), 2);
+        let (page, _) = finder.found_markers["PDFMARK000"];
+        assert_eq!(page, 1);
+    }
+
+    #[test]
+    fn test_search_markers_out_of_order_skipped() {
+        // If markers are in order and the first isn't found, subsequent shouldn't be searched
+        let markers = vec!["PDFMARK001".to_string(), "PDFMARK002".to_string()];
+        let mut finder = MarkerFinder::new(&markers);
+        finder.current_page = 1;
+
+        // Only contains PDFMARK002, not PDFMARK001
+        finder.current_text = "text PDFMARK002 end".to_string();
+        for (i, _) in finder.current_text.char_indices() {
+            finder.char_positions.push((i, 500.0));
+        }
+
+        finder.search_markers_in_text();
+
+        // PDFMARK001 not found, so PDFMARK002 shouldn't be searched either
+        assert!(!finder.found_markers.contains_key("PDFMARK001"));
+        assert!(!finder.found_markers.contains_key("PDFMARK002"));
+    }
+
+    #[test]
+    fn test_search_markers_sequential_found() {
+        let markers = vec![
+            "PDFMARK000".to_string(),
+            "PDFMARK001".to_string(),
+            "PDFMARK002".to_string(),
+        ];
+        let mut finder = MarkerFinder::new(&markers);
+        finder.current_page = 1;
+
+        finder.current_text = "PDFMARK000 some PDFMARK001 more PDFMARK002".to_string();
+        for (i, _) in finder.current_text.char_indices() {
+            finder.char_positions.push((i, 500.0));
+        }
+
+        finder.search_markers_in_text();
+
+        assert!(finder.found_markers.contains_key("PDFMARK000"));
+        assert!(finder.found_markers.contains_key("PDFMARK001"));
+        assert!(finder.found_markers.contains_key("PDFMARK002"));
+        assert!(finder.all_found);
+    }
+
+    #[test]
+    fn test_search_markers_no_duplicate_search() {
+        // Once a marker is found, calling search again should skip
+        let markers = vec!["PDFMARK000".to_string()];
+        let mut finder = MarkerFinder::new(&markers);
+        finder.current_page = 1;
+
+        finder.current_text = "PDFMARK000".to_string();
+        for (i, _) in finder.current_text.char_indices() {
+            finder.char_positions.push((i, 500.0));
+        }
+
+        finder.search_markers_in_text();
+        assert!(finder.found_markers.contains_key("PDFMARK000"));
+
+        // Clear and re-search — should skip because all_found is true
+        finder.current_text.clear();
+        finder.char_positions.clear();
+        finder.search_markers_in_text();
+        // Still found (from previous search)
+        assert!(finder.found_markers.contains_key("PDFMARK000"));
+    }
+
+    #[test]
+    fn test_filter_image_streams_skips_images() {
+        use lopdf::{Stream, Dictionary, Object as LopdfObject};
+        let object_id: pdf_extract::ObjectId = (1, 0);
+
+        // Non-image stream → should keep
+        let plain_stream = Stream::new(Dictionary::new(), vec![1, 2, 3]);
+        let mut plain_lopdf = LopdfObject::Stream(plain_stream);
+        let result = filter_image_streams(object_id, &mut plain_lopdf);
+        assert!(result.is_some());
+
+        // Image stream → should skip
+        let mut image_dict = Dictionary::new();
+        image_dict.set(b"Type", LopdfObject::Name(b"Image".to_vec()));
+        let image_stream = Stream::new(image_dict, vec![4, 5, 6]);
+        let mut image_lopdf = LopdfObject::Stream(image_stream);
+        let result2 = filter_image_streams(object_id, &mut image_lopdf);
+        assert!(result2.is_none());
+    }
+}

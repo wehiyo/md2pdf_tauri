@@ -276,3 +276,61 @@ fn set_children_relations(doc: &mut Document, parent: &BookmarkNode) -> Result<(
 
     Ok(())
 }
+
+// ── Tests ──────────────────────────────────────────
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_utf16be_encode_ascii() {
+        let result = utf16be_encode("Hello");
+        assert_eq!(result, vec![0xFE, 0xFF, 0x00, 0x48, 0x00, 0x65, 0x00, 0x6C, 0x00, 0x6C, 0x00, 0x6F]);
+    }
+
+    #[test]
+    fn test_utf16be_encode_chinese() {
+        let result = utf16be_encode("中文");
+        assert_eq!(result, vec![0xFE, 0xFF, 0x4E, 0x2D, 0x65, 0x87]);
+    }
+
+    #[test]
+    fn test_utf16be_encode_empty() {
+        let result = utf16be_encode("");
+        assert_eq!(result, vec![0xFE, 0xFF]);
+    }
+
+    #[test]
+    fn test_utf16be_encode_mixed() {
+        let result = utf16be_encode("A中");
+        assert_eq!(result, vec![0xFE, 0xFF, 0x00, 0x41, 0x4E, 0x2D]);
+    }
+
+    #[test]
+    fn test_transform_y_basic() {
+        assert!((transform_y(100.0, 842.0) - 757.0).abs() < 0.01);
+    }
+
+    #[test]
+    fn test_transform_y_top_of_page() {
+        assert!((transform_y(0.0, 842.0) - 857.0).abs() < 0.01);
+    }
+
+    #[test]
+    fn test_transform_y_bottom_of_page() {
+        assert!((transform_y(842.0, 842.0) - 15.0).abs() < 0.01);
+    }
+
+    #[test]
+    fn test_transform_y_non_a4() {
+        assert!((transform_y(200.0, 792.0) - 607.0).abs() < 0.01);
+    }
+
+    #[test]
+    fn test_transform_y_offset() {
+        let y1 = transform_y(50.0, 842.0);
+        let y2 = transform_y(60.0, 842.0);
+        assert!(((y1 - y2) - 10.0).abs() < 0.01);
+    }
+}
