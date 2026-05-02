@@ -19,10 +19,21 @@
 
 <script setup lang="ts">
 import { computed, ref } from 'vue'
-import { MdEditor, NormalToolbar } from 'md-editor-v3'
+import { MdEditor, NormalToolbar, config } from 'md-editor-v3'
 import type { ToolbarNames } from 'md-editor-v3'
 import { writeFile, mkdir, readDir } from '@tauri-apps/plugin-fs'
+import Cropper from 'cropperjs'
+import 'cropperjs/dist/cropper.min.css'
 import 'md-editor-v3/lib/style.css'
+
+// 将本地 Cropper 实例注入全局配置，替代 CDN 加载
+config({
+  editorExtensions: {
+    cropper: {
+      instance: Cropper
+    }
+  }
+})
 
 const props = defineProps<{
   modelValue: string

@@ -20,6 +20,7 @@
     "@tauri-apps/plugin-dialog": "2.7.0",
     "@tauri-apps/plugin-fs": "2.5.0",
     "@tauri-apps/plugin-shell": "2.3.5",
+    "cropperjs": "^1.6.2",
     "highlight.js": "^11.9.0",
     "json5": "^2.2.3",
     "katex": "^0.16.9",
