@@ -836,6 +836,7 @@ export function getMarkdownStyles(fontConfig?: FontConfig, format: 'pt' | 'px' =
 .markdown-body .code-lines-container.line-num-width-4 .line-number { width: 4.5em; }
 .markdown-body .code-lines-container.line-num-width-5 .line-number { width: 5.5em; }
 .markdown-body .code-line { display: table-row; }
+.markdown-body .code-line .line-number { display: table-cell; text-align: right; padding-right: 0.75em; border-right: 1px solid #e5e7eb; color: #9ca3af; white-space: pre; }
 .markdown-body .code-line .line-number::before { content: attr(data-num); }
 .markdown-body .code-line .code-line-content { display: table-cell; padding-left: 0.75em; white-space: pre-wrap; word-break: break-all; }
 .markdown-body blockquote { margin: 0 0 ${paragraphSpacing}em; padding: 0 1em; color: #6b7280; border-left: 0.25em solid #e5e7eb; }
