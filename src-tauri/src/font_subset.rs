@@ -3,9 +3,10 @@
 //! 使用 fontcull 库对字体进行子集化，只保留需要的字符
 
 use std::collections::HashSet;
-use fontcull::{subset_font_data, FontFormat};
+use fontcull::subset_font_data;
 use tauri::AppHandle;
 use base64::{Engine as _, engine::general_purpose::STANDARD};
+use anyhow::Context;
 
 /// 对指定字体进行子集化并返回 base64 编码
 ///
@@ -22,78 +23,43 @@ pub async fn subset_font_to_base64(
     filename: String,
     text: String,
 ) -> Result<String, String> {
-    // 获取字体文件路径
-    let font_path = get_custom_font_path(&app, &filename)?;
-
-    println!("子集化字体: {} (路径: {})", filename, font_path);
-
-    // 读取字体文件
+    let font_path = get_custom_font_path(&app, &filename).map_err(|e| e.to_string())?;
     let font_bytes = std::fs::read(&font_path)
-        .map_err(|e| format!("读取字体失败: {}", e))?;
-
-    // 检查字体格式
-    let format = FontFormat::detect(&font_bytes);
-    println!("字体格式: {:?}", format);
-
-    // 构建需要保留的字符集合
+        .context("读取字体失败").map_err(|e| e.to_string())?;
     let chars: HashSet<char> = text.chars().collect();
-    println!("子集化字符: {} 个", chars.len());
-
-    // 执行子集化（空数组表示使用默认 OpenType 特性）
     let subset_bytes = subset_font_data(&font_bytes, &chars, &[])
-        .map_err(|e| format!("子集化失败: {}", e))?;
-
-    println!("子集化成功: {} bytes (原始: {} bytes)", subset_bytes.len(), font_bytes.len());
-
-    // 返回 base64 编码
-    let base64_str = STANDARD.encode(&subset_bytes);
-    Ok(base64_str)
+        .context("子集化失败").map_err(|e| e.to_string())?;
+    Ok(STANDARD.encode(&subset_bytes))
 }
 
 /// 获取自定义字体文件路径
-fn get_custom_font_path(app: &AppHandle, filename: &str) -> Result<String, String> {
+fn get_custom_font_path(app: &AppHandle, filename: &str) -> anyhow::Result<String> {
     let path = crate::resolve_asset_path(app, &format!("assets/fonts/{}", filename))?;
     if !path.exists() {
-        return Err(format!("字体文件不存在: {}", path.to_string_lossy()));
+        anyhow::bail!("字体文件不存在: {}", path.to_string_lossy());
     }
     Ok(path.to_string_lossy().to_string())
 }
 
 /// 对中文字体进行子集化
-///
-/// # Arguments
-/// * `app` - Tauri AppHandle
-/// * `text` - 需要保留的字符文本
-///
-/// # Returns
-/// 子集化后的字体数据（TTF 格式）
 #[tauri::command]
 pub async fn subset_chinese_font(
     app: AppHandle,
     text: String,
 ) -> Result<Vec<u8>, String> {
-    // 获取字体文件路径
-    let font_path = get_font_path(&app)?;
-
-    // 读取字体文件
+    let font_path = get_font_path(&app).map_err(|e| e.to_string())?;
     let font_bytes = std::fs::read(&font_path)
-        .map_err(|e| format!("读取字体失败: {}", e))?;
-
-    // 构建需要保留的字符集合
+        .context("读取字体失败").map_err(|e| e.to_string())?;
     let chars: HashSet<char> = text.chars().collect();
-
-    // 执行子集化（使用默认 OpenType 特性）
     let subset_bytes = subset_font_data(&font_bytes, &chars, &[])
-        .map_err(|e| format!("子集化失败: {}", e))?;
-
+        .context("子集化失败").map_err(|e| e.to_string())?;
     Ok(subset_bytes)
 }
 
 /// 获取中文字体文件路径（子集化专用）
-fn get_font_path(app: &AppHandle) -> Result<String, String> {
+fn get_font_path(app: &AppHandle) -> anyhow::Result<String> {
     const FONT_FILE: &str = "assets/fonts/SourceHanSansSC-Regular.ttf";
     if cfg!(debug_assertions) {
-        // 开发模式：尝试多个相对路径
         for dev_path in &[FONT_FILE, &format!("src-tauri/{}", FONT_FILE)] {
             if std::path::Path::new(dev_path).exists() {
                 return Ok(dev_path.to_string());
@@ -104,5 +70,5 @@ fn get_font_path(app: &AppHandle) -> Result<String, String> {
     if path.exists() {
         return Ok(path.to_string_lossy().to_string());
     }
-    Err("未找到中文字体文件 SourceHanSansSC-Regular.ttf".to_string())
+    anyhow::bail!("未找到中文字体文件 SourceHanSansSC-Regular.ttf")
 }

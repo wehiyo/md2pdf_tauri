@@ -16,16 +16,17 @@ use std::fs;
 use std::path::PathBuf;
 use encoding_rs::{UTF_8, GB18030};
 use tauri::{Emitter, Manager, AppHandle};
+use anyhow::Context;
 
 /// 统一的资产路径解析：开发模式用当前目录，生产模式用 resource_dir
-pub fn resolve_asset_path(app: &AppHandle, relative_path: &str) -> Result<PathBuf, String> {
+pub fn resolve_asset_path(app: &AppHandle, relative_path: &str) -> anyhow::Result<PathBuf> {
     if cfg!(debug_assertions) {
         let cwd = std::env::current_dir()
-            .map_err(|e| format!("获取当前目录失败: {}", e))?;
+            .context("获取当前目录失败")?;
         Ok(cwd.join(relative_path))
     } else {
         let dir = app.path().resource_dir()
-            .map_err(|e| format!("获取资源目录失败: {}", e))?;
+            .context("获取资源目录失败")?;
         Ok(dir.join(relative_path))
     }
 }
@@ -65,17 +66,19 @@ fn get_resource_dir(app: AppHandle) -> Result<String, String> {
 /// 获取字体文件的绝对路径（供前端调用）
 #[tauri::command]
 fn get_font_path(app: AppHandle, filename: String) -> Result<String, String> {
-    let path = resolve_asset_path(&app, &format!("assets/fonts/{}", filename))?;
+    let path = resolve_asset_path(&app, &format!("assets/fonts/{}", filename))
+        .map_err(|e| e.to_string())?;
     Ok(path.to_string_lossy().to_string())
 }
 
 /// 读取字体文件并返回 base64 编码（用于 PDF 导出）
 #[tauri::command]
 fn get_font_base64(app: AppHandle, filename: String) -> Result<String, String> {
-    let path = resolve_asset_path(&app, &format!("assets/fonts/{}", filename))?;
+    let path = resolve_asset_path(&app, &format!("assets/fonts/{}", filename))
+        .map_err(|e| e.to_string())?;
 
     let bytes = fs::read(&path)
-        .map_err(|e| format!("读取字体文件失败: {}", e))?;
+        .context("读取字体文件失败").map_err(|e| e.to_string())?;
 
     // 使用标准 base64 编码
     use base64::{Engine as _, engine::general_purpose::STANDARD};
@@ -96,7 +99,8 @@ fn get_config_dir(app: AppHandle) -> Result<String, String> {
 #[tauri::command]
 fn scan_fonts_dir(app: AppHandle) -> Result<Vec<(String, String, String)>, String> {
     // 返回格式: Vec<(id, name, filename)>
-    let fonts_dir = resolve_asset_path(&app, "assets/fonts")?;
+    let fonts_dir = resolve_asset_path(&app, "assets/fonts")
+        .map_err(|e| e.to_string())?;
 
     let mut fonts: Vec<(String, String, String)> = Vec::new();
 
