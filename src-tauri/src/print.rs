@@ -201,7 +201,7 @@ fn navigate_html_and_wait(
                 let core_webview = match controller.CoreWebView2() {
                     Ok(w) => w,
                     Err(e) => {
-                        *error_clone.lock().unwrap() = Some(format!("无法获取 CoreWebView2: {}", e));
+                        *error_clone.lock().unwrap_or_else(|e| e.into_inner()) = Some(format!("无法获取 CoreWebView2: {}", e));
                         return;
                     }
                 };
@@ -214,19 +214,19 @@ fn navigate_html_and_wait(
                 ));
                 let mut token: i64 = 0;
                 if let Err(e) = core_webview.add_NavigationCompleted(&handler, &mut token as *mut i64) {
-                    *error.lock().unwrap() = Some(format!("无法注册导航事件: {}", e));
+                    *error.lock().unwrap_or_else(|e| e.into_inner()) = Some(format!("无法注册导航事件: {}", e));
                     return;
                 }
                 let html_hstring = HSTRING::from(html_owned.as_str());
                 if let Err(e) = core_webview.NavigateToString(&html_hstring) {
-                    *error.lock().unwrap() = Some(format!("NavigateToString 失败: {}", e));
+                    *error.lock().unwrap_or_else(|e| e.into_inner()) = Some(format!("NavigateToString 失败: {}", e));
                     return;
                 }
             }
         })
         .map_err(|e| format!("with_webview 错误: {}", e))?;
 
-    if let Some(err) = error_for_check.lock().unwrap().take() {
+    if let Some(err) = error_for_check.lock().unwrap_or_else(|e| e.into_inner()).take() {
         return Err(err);
     }
 
@@ -367,7 +367,7 @@ async fn extract_bookmark_positions(
                 let core_webview = match controller.CoreWebView2() {
                     Ok(w) => w,
                     Err(e) => {
-                        *result_clone.lock().unwrap() = Some(format!("错误: 无法获取 CoreWebView2: {}", e));
+                        *result_clone.lock().unwrap_or_else(|e| e.into_inner()) = Some(format!("错误: 无法获取 CoreWebView2: {}", e));
                         completed_clone.store(true, Ordering::SeqCst);
                         return;
                     }
@@ -376,7 +376,7 @@ async fn extract_bookmark_positions(
                 let webview_15: ICoreWebView2_15 = match core_webview.cast() {
                     Ok(w) => w,
                     Err(e) => {
-                        *result_clone.lock().unwrap() = Some(format!("错误: WebView2 版本不支持 ExecuteScript: {}", e));
+                        *result_clone.lock().unwrap_or_else(|e| e.into_inner()) = Some(format!("错误: WebView2 版本不支持 ExecuteScript: {}", e));
                         completed_clone.store(true, Ordering::SeqCst);
                         return;
                     }
@@ -387,9 +387,9 @@ async fn extract_bookmark_positions(
                 let handler = webview2_com::ExecuteScriptCompletedHandler::create(
                     Box::new(move |result: windows::core::Result<()>, result_json: String| {
                         if result.is_ok() {
-                            *result_for_handler.lock().unwrap() = Some(result_json);
+                            *result_for_handler.lock().unwrap_or_else(|e| e.into_inner()) = Some(result_json);
                         } else {
-                            *result_for_handler.lock().unwrap() = Some(format!("错误: ExecuteScript 返回错误"));
+                            *result_for_handler.lock().unwrap_or_else(|e| e.into_inner()) = Some(format!("错误: ExecuteScript 返回错误"));
                         }
                         completed_for_handler.store(true, Ordering::SeqCst);
                         Ok(())
@@ -400,7 +400,7 @@ async fn extract_bookmark_positions(
                 let js_hstring = HSTRING::from(js_code_clone.as_str());
 
                 if let Err(e) = webview_15.ExecuteScript(&js_hstring, &handler) {
-                    *result_clone.lock().unwrap() = Some(format!("错误: ExecuteScript 失败: {}", e));
+                    *result_clone.lock().unwrap_or_else(|e| e.into_inner()) = Some(format!("错误: ExecuteScript 失败: {}", e));
                     completed_clone.store(true, Ordering::SeqCst);
                 }
             }
@@ -415,7 +415,7 @@ async fn extract_bookmark_positions(
         std::thread::sleep(Duration::from_millis(50));
     }
 
-    let js_result = result.lock().unwrap().take()
+    let js_result = result.lock().unwrap_or_else(|e| e.into_inner()).take()
         .ok_or_else(|| "JavaScript 执行超时".to_string())?;
 
     // ExecuteScript 返回的是 JSON 字符串（带引号），需要先解析
@@ -471,7 +471,7 @@ async fn wait_for_document_ready(print_window: &WebviewWindow) -> Result<(), Str
                     let core_webview = match controller.CoreWebView2() {
                         Ok(w) => w,
                         Err(e) => {
-                            *error_clone.lock().unwrap() = Some(format!("{}", e));
+                            *error_clone.lock().unwrap_or_else(|e| e.into_inner()) = Some(format!("{}", e));
                             completed_clone.store(true, Ordering::SeqCst);
                             return;
                         }
@@ -479,7 +479,7 @@ async fn wait_for_document_ready(print_window: &WebviewWindow) -> Result<(), Str
                     let webview_15: ICoreWebView2_15 = match core_webview.cast() {
                         Ok(w) => w,
                         Err(e) => {
-                            *error_clone.lock().unwrap() = Some(format!("{}", e));
+                            *error_clone.lock().unwrap_or_else(|e| e.into_inner()) = Some(format!("{}", e));
                             completed_clone.store(true, Ordering::SeqCst);
                             return;
                         }
@@ -493,7 +493,7 @@ async fn wait_for_document_ready(print_window: &WebviewWindow) -> Result<(), Str
                     );
                     let js_hstring = HSTRING::from(js_owned.as_str());
                     if let Err(e) = webview_15.ExecuteScript(&js_hstring, &handler) {
-                        *error_clone.lock().unwrap() = Some(format!("{}", e));
+                        *error_clone.lock().unwrap_or_else(|e| e.into_inner()) = Some(format!("{}", e));
                         completed_clone.store(true, Ordering::SeqCst);
                     }
                 }
@@ -543,7 +543,7 @@ async fn wait_for_document_ready(print_window: &WebviewWindow) -> Result<(), Str
                     let completed_for_handler = completed_clone.clone();
                     let handler = webview2_com::ExecuteScriptCompletedHandler::create(
                         Box::new(move |_exec_result, result_json: String| {
-                            *result_for_handler.lock().unwrap() = Some(result_json);
+                            *result_for_handler.lock().unwrap_or_else(|e| e.into_inner()) = Some(result_json);
                             completed_for_handler.store(true, Ordering::SeqCst);
                             Ok(())
                         }),
@@ -562,7 +562,7 @@ async fn wait_for_document_ready(print_window: &WebviewWindow) -> Result<(), Str
             std::thread::sleep(Duration::from_millis(50));
         }
 
-        if let Some(val) = result.lock().unwrap().take() {
+        if let Some(val) = result.lock().unwrap_or_else(|e| e.into_inner()).take() {
             if val == "true" || val == "\"true\"" {
                 return Ok(());
             }
@@ -599,7 +599,7 @@ async fn print_content(
                 let core_webview = match controller.CoreWebView2() {
                     Ok(w) => w,
                     Err(e) => {
-                        *result_clone.lock().unwrap() = Some(Err(format!("无法获取 CoreWebView2: {}", e)));
+                        *result_clone.lock().unwrap_or_else(|e| e.into_inner()) = Some(Err(format!("无法获取 CoreWebView2: {}", e)));
                         completed_clone.store(true, Ordering::SeqCst);
                         return;
                     }
@@ -608,7 +608,7 @@ async fn print_content(
                 let webview_7: ICoreWebView2_7 = match core_webview.cast() {
                     Ok(w) => w,
                     Err(e) => {
-                        *result_clone.lock().unwrap() = Some(Err(format!("WebView2 版本不支持: {}", e)));
+                        *result_clone.lock().unwrap_or_else(|e| e.into_inner()) = Some(Err(format!("WebView2 版本不支持: {}", e)));
                         completed_clone.store(true, Ordering::SeqCst);
                         return;
                     }
@@ -618,7 +618,7 @@ async fn print_content(
                 let environment_6: ICoreWebView2Environment6 = match environment.cast() {
                     Ok(e) => e,
                     Err(e) => {
-                        *result_clone.lock().unwrap() = Some(Err(format!("Environment 版本不支持: {}", e)));
+                        *result_clone.lock().unwrap_or_else(|e| e.into_inner()) = Some(Err(format!("Environment 版本不支持: {}", e)));
                         completed_clone.store(true, Ordering::SeqCst);
                         return;
                     }
@@ -627,7 +627,7 @@ async fn print_content(
                 let settings: ICoreWebView2PrintSettings = match environment_6.CreatePrintSettings() {
                     Ok(s) => s,
                     Err(e) => {
-                        *result_clone.lock().unwrap() = Some(Err(format!("无法创建打印设置: {}", e)));
+                        *result_clone.lock().unwrap_or_else(|e| e.into_inner()) = Some(Err(format!("无法创建打印设置: {}", e)));
                         completed_clone.store(true, Ordering::SeqCst);
                         return;
                     }
@@ -663,7 +663,7 @@ async fn print_content(
                             };
                             Err(error_msg)
                         };
-                        *result_for_closure.lock().unwrap() = Some(print_result);
+                        *result_for_closure.lock().unwrap_or_else(|e| e.into_inner()) = Some(print_result);
                         completed_for_closure.store(true, Ordering::SeqCst);
                         Ok(())
                     },
@@ -678,7 +678,7 @@ async fn print_content(
                     operation_closure,
                     completed_closure,
                 ) {
-                    *result_clone.lock().unwrap() = Some(Err(format!("PrintToPdf 执行失败: {}", e)));
+                    *result_clone.lock().unwrap_or_else(|e| e.into_inner()) = Some(Err(format!("PrintToPdf 执行失败: {}", e)));
                     completed_clone.store(true, Ordering::SeqCst);
                 }
             }
@@ -692,7 +692,7 @@ async fn print_content(
         std::thread::sleep(std::time::Duration::from_millis(50));
     }
 
-    let guard = result.lock().unwrap();
+    let guard = result.lock().unwrap_or_else(|e| e.into_inner());
     guard.clone().unwrap_or_else(|| Err("未获取到打印结果".to_string()))
 }
 
@@ -713,15 +713,15 @@ pub async fn check_print_support(window: WebviewWindow) -> Result<bool, String> 
                 unsafe {
                     let controller = webview.controller();
                     if let Ok(core_webview) = controller.CoreWebView2() {
-                        *result_clone.lock().unwrap() = Some(core_webview.cast::<ICoreWebView2_7>().is_ok());
+                        *result_clone.lock().unwrap_or_else(|e| e.into_inner()) = Some(core_webview.cast::<ICoreWebView2_7>().is_ok());
                     } else {
-                        *result_clone.lock().unwrap() = Some(false);
+                        *result_clone.lock().unwrap_or_else(|e| e.into_inner()) = Some(false);
                     }
                 }
             })
             .map_err(|e| format!("检查失败: {}", e))?;
 
-        let supported = result.lock().unwrap().unwrap_or(false);
+        let supported = result.lock().unwrap_or_else(|e| e.into_inner()).unwrap_or(false);
         Ok(supported)
     }
 
@@ -763,7 +763,7 @@ async fn print_to_pdf_stream_internal(
                 let core_webview = match controller.CoreWebView2() {
                     Ok(w) => w,
                     Err(e) => {
-                        *result_clone.lock().unwrap() = Some(Err(format!("无法获取 CoreWebView2: {}", e)));
+                        *result_clone.lock().unwrap_or_else(|e| e.into_inner()) = Some(Err(format!("无法获取 CoreWebView2: {}", e)));
                         completed_clone.store(true, Ordering::SeqCst);
                         return;
                     }
@@ -773,7 +773,7 @@ async fn print_to_pdf_stream_internal(
                 let webview_16: ICoreWebView2_16 = match core_webview.cast() {
                     Ok(w) => w,
                     Err(e) => {
-                        *result_clone.lock().unwrap() = Some(Err(format!("WebView2 版本不支持 PrintToPdfStream: {}", e)));
+                        *result_clone.lock().unwrap_or_else(|e| e.into_inner()) = Some(Err(format!("WebView2 版本不支持 PrintToPdfStream: {}", e)));
                         completed_clone.store(true, Ordering::SeqCst);
                         return;
                     }
@@ -783,7 +783,7 @@ async fn print_to_pdf_stream_internal(
                 let environment_6: ICoreWebView2Environment6 = match environment.cast() {
                     Ok(e) => e,
                     Err(e) => {
-                        *result_clone.lock().unwrap() = Some(Err(format!("Environment 版本不支持: {}", e)));
+                        *result_clone.lock().unwrap_or_else(|e| e.into_inner()) = Some(Err(format!("Environment 版本不支持: {}", e)));
                         completed_clone.store(true, Ordering::SeqCst);
                         return;
                     }
@@ -792,7 +792,7 @@ async fn print_to_pdf_stream_internal(
                 let settings: ICoreWebView2PrintSettings = match environment_6.CreatePrintSettings() {
                     Ok(s) => s,
                     Err(e) => {
-                        *result_clone.lock().unwrap() = Some(Err(format!("无法创建打印设置: {}", e)));
+                        *result_clone.lock().unwrap_or_else(|e| e.into_inner()) = Some(Err(format!("无法创建打印设置: {}", e)));
                         completed_clone.store(true, Ordering::SeqCst);
                         return;
                     }
@@ -812,7 +812,7 @@ async fn print_to_pdf_stream_internal(
                 let handler = webview2_com::PrintToPdfStreamCompletedHandler::create(
                     Box::new(move |error_result: windows::core::Result<()>, pdf_stream: Option<IStream>| {
                         if error_result.is_err() {
-                            *result_for_closure.lock().unwrap() = Some(Err(format!("PrintToPdfStream 失败: {:?}", error_result)));
+                            *result_for_closure.lock().unwrap_or_else(|e| e.into_inner()) = Some(Err(format!("PrintToPdfStream 失败: {:?}", error_result)));
                             completed_for_closure.store(true, Ordering::SeqCst);
                             return Ok(());
                         }
@@ -820,7 +820,7 @@ async fn print_to_pdf_stream_internal(
                         let stream = match pdf_stream {
                             Some(s) => s,
                             None => {
-                                *result_for_closure.lock().unwrap() = Some(Err("PrintToPdfStream 返回空流".to_string()));
+                                *result_for_closure.lock().unwrap_or_else(|e| e.into_inner()) = Some(Err("PrintToPdfStream 返回空流".to_string()));
                                 completed_for_closure.store(true, Ordering::SeqCst);
                                 return Ok(());
                             }
@@ -829,7 +829,7 @@ async fn print_to_pdf_stream_internal(
                         // 获取流大小
                         let mut statstg = STATSTG::default();
                         if let Err(e) = stream.Stat(&mut statstg, STATFLAG_DEFAULT) {
-                            *result_for_closure.lock().unwrap() = Some(Err(format!("获取 PDF 流大小失败: {}", e)));
+                            *result_for_closure.lock().unwrap_or_else(|e| e.into_inner()) = Some(Err(format!("获取 PDF 流大小失败: {}", e)));
                             completed_for_closure.store(true, Ordering::SeqCst);
                             return Ok(());
                         }
@@ -837,7 +837,7 @@ async fn print_to_pdf_stream_internal(
 
                         // 回到流的起始位置
                         if let Err(e) = stream.Seek(0, STREAM_SEEK_SET, None) {
-                            *result_for_closure.lock().unwrap() = Some(Err(format!("Seek 失败: {}", e)));
+                            *result_for_closure.lock().unwrap_or_else(|e| e.into_inner()) = Some(Err(format!("Seek 失败: {}", e)));
                             completed_for_closure.store(true, Ordering::SeqCst);
                             return Ok(());
                         }
@@ -867,14 +867,14 @@ async fn print_to_pdf_stream_internal(
                             total_read += bytes_read as usize;
                         }
 
-                        *result_for_closure.lock().unwrap() = Some(Ok(buffer));
+                        *result_for_closure.lock().unwrap_or_else(|e| e.into_inner()) = Some(Ok(buffer));
                         completed_for_closure.store(true, Ordering::SeqCst);
                         Ok(())
                     }),
                 );
 
                 if let Err(e) = webview_16.PrintToPdfStream(&settings, &handler) {
-                    *result_clone.lock().unwrap() = Some(Err(format!("PrintToPdfStream 调用失败: {}", e)));
+                    *result_clone.lock().unwrap_or_else(|e| e.into_inner()) = Some(Err(format!("PrintToPdfStream 调用失败: {}", e)));
                     completed_clone.store(true, Ordering::SeqCst);
                 }
             }
@@ -888,7 +888,7 @@ async fn print_to_pdf_stream_internal(
         std::thread::sleep(std::time::Duration::from_millis(50));
     }
 
-    let guard = result.lock().unwrap();
+    let guard = result.lock().unwrap_or_else(|e| e.into_inner());
     guard.clone().unwrap_or_else(|| Err("未获取到 PDF 数据".to_string()))
 }
 
