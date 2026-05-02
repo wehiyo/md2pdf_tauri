@@ -22,7 +22,7 @@
             :class="{ active: activeTab === 'page' }"
             @click="activeTab = 'page'"
           >
-            页面设置
+            PDF设置
           </button>
         </div>
 
@@ -267,7 +267,7 @@
           </div>
         </div>
 
-        <!-- 页面设置 Tab -->
+        <!-- PDF设置 Tab -->
         <div v-if="activeTab === 'page'" class="settings-body">
           <div class="settings-item">
             <label>页面尺寸</label>
@@ -285,6 +285,28 @@
                   class="dropdown-item"
                   :class="{ selected: localConfig.pageSize === option.value }"
                   @click="selectPageSize(option.value)"
+                >
+                  {{ option.label }}
+                </div>
+              </div>
+            </div>
+          </div>
+          <div class="settings-item">
+            <label>页边距</label>
+            <div class="font-select-row">
+              <div class="custom-select" @click="toggleMarginPresetDropdown">
+                <span class="selected-font-name">{{ marginPresetLabel }}</span>
+                <svg class="select-arrow" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <polyline points="6 9 12 15 18 9"/>
+                </svg>
+              </div>
+              <div v-if="marginPresetDropdownOpen" class="dropdown-menu">
+                <div
+                  v-for="option in marginPresetOptions"
+                  :key="option.value"
+                  class="dropdown-item"
+                  :class="{ selected: marginPreset === option.value }"
+                  @click="selectMarginPreset(option.value)"
                 >
                   {{ option.label }}
                 </div>
@@ -340,6 +362,12 @@
               </div>
             </div>
           </div>
+          <div class="settings-item">
+            <label class="checkbox-label">
+              <input type="checkbox" v-model="localConfig.showHeadingNumbers" />
+              <span class="checkbox-text">为标题生成数字编号</span>
+            </label>
+          </div>
         </div>
 
         <div class="settings-footer">
@@ -379,7 +407,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, watch, onMounted } from 'vue'
+import { ref, watch, onMounted, computed } from 'vue'
 import type { FontConfig, CustomFont } from '../composables/useConfig'
 import {
   scanFonts as scanFontsDir,
@@ -417,6 +445,19 @@ const lineHeightDropdownOpen = ref(false)
 const paragraphSpacingDropdownOpen = ref(false)
 const previewWidthDropdownOpen = ref(false)
 const pageSizeDropdownOpen = ref(false)
+const marginPresetDropdownOpen = ref(false)
+
+// 页边距预设
+const MARGIN_PRESETS = {
+  standard: { top: 20, bottom: 20, left: 25, right: 25 },
+  narrow: { top: 12, bottom: 12, left: 15, right: 15 }
+}
+
+const marginPresetOptions = [
+  { value: 'standard' as const, label: '标准' },
+  { value: 'narrow' as const, label: '窄' },
+  { value: 'custom' as const, label: '自定义' }
+]
 
 // 选项常量
 const fontSizeOptions = FONT_SIZE_OPTIONS
@@ -425,6 +466,21 @@ const paragraphSpacingOptions = PARAGRAPH_SPACING_OPTIONS
 const previewWidthOptions = PREVIEW_WIDTH_OPTIONS
 const previewBgColorOptions = PREVIEW_BACKGROUND_COLORS
 const pageSizeOptions = PAGE_SIZE_OPTIONS
+
+// 页边距预设自动检测：匹配预设值则显示对应标签，否则显示"自定义"
+const marginPreset = computed<'standard' | 'narrow' | 'custom'>(() => {
+  const m = localConfig.value
+  const s = MARGIN_PRESETS.standard
+  if (m.marginTop === s.top && m.marginBottom === s.bottom && m.marginLeft === s.left && m.marginRight === s.right) return 'standard'
+  const n = MARGIN_PRESETS.narrow
+  if (m.marginTop === n.top && m.marginBottom === n.bottom && m.marginLeft === n.left && m.marginRight === n.right) return 'narrow'
+  return 'custom'
+})
+
+const marginPresetLabel = computed(() => {
+  const option = marginPresetOptions.find(o => o.value === marginPreset.value)
+  return option ? option.label : '自定义'
+})
 
 // 内置字体列表
 const builtinChineseFonts = BUILTIN_CHINESE_FONTS.map(f => ({ id: f.id, name: f.name }))
@@ -491,6 +547,9 @@ onMounted(() => {
   }
   if (!localConfig.value.marginRight) {
     localConfig.value.marginRight = 25
+  }
+  if (localConfig.value.showHeadingNumbers === undefined) {
+    localConfig.value.showHeadingNumbers = true
   }
 })
 
@@ -585,6 +644,7 @@ function closeAllDropdowns() {
   paragraphSpacingDropdownOpen.value = false
   previewWidthDropdownOpen.value = false
   pageSizeDropdownOpen.value = false
+  marginPresetDropdownOpen.value = false
 }
 
 // 检查字体是否已添加到列表
@@ -703,6 +763,7 @@ function closeOtherDropdowns(except: string) {
   if (except !== 'paragraphSpacing') paragraphSpacingDropdownOpen.value = false
   if (except !== 'previewWidth') previewWidthDropdownOpen.value = false
   if (except !== 'pageSize') pageSizeDropdownOpen.value = false
+  if (except !== 'marginPreset') marginPresetDropdownOpen.value = false
 }
 
 // 选择字体
@@ -748,6 +809,22 @@ function selectPreviewBackgroundColor(value: string) {
 function selectPageSize(value: 'A4' | 'B5' | 'Letter') {
   localConfig.value.pageSize = value
   pageSizeDropdownOpen.value = false
+}
+
+function toggleMarginPresetDropdown() {
+  marginPresetDropdownOpen.value = !marginPresetDropdownOpen.value
+  closeOtherDropdowns('marginPreset')
+}
+
+function selectMarginPreset(value: 'standard' | 'narrow' | 'custom') {
+  if (value !== 'custom') {
+    const preset = MARGIN_PRESETS[value]
+    localConfig.value.marginTop = preset.top
+    localConfig.value.marginBottom = preset.bottom
+    localConfig.value.marginLeft = preset.left
+    localConfig.value.marginRight = preset.right
+  }
+  marginPresetDropdownOpen.value = false
 }
 
 function updateMargin(margin: 'marginTop' | 'marginBottom' | 'marginLeft' | 'marginRight', event: Event) {
@@ -1199,5 +1276,20 @@ function getPageSizeLabel(value: 'A4' | 'B5' | 'Letter'): string {
 .margin-input:focus {
   border-color: #3b82f6;
   outline: none;
+}
+.checkbox-label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  cursor: pointer;
+}
+.checkbox-label input[type="checkbox"] {
+  width: 16px;
+  height: 16px;
+  cursor: pointer;
+}
+.checkbox-text {
+  font-size: 14px;
+  color: #374151;
 }
 </style>

@@ -129,12 +129,14 @@ let isMkdocsExportMode = false
 let globalHeadingIndex = 0
 const chapterCounters = { h2: 0, h3: 0, h4: 0, h5: 0, h6: 0 }
 let lastAdjustedLevel = 0
+let showHeadingNumbers = true
 
 // ── Global heading index (for MkDocs export) ───────
 
 export function resetGlobalHeadingIndex(): void { globalHeadingIndex = 0 }
 export function getGlobalHeadingIndex(): number { return globalHeadingIndex }
 export function incrementGlobalHeadingIndex(): void { globalHeadingIndex++ }
+export function setShowHeadingNumbers(val: boolean): void { showHeadingNumbers = val }
 
 // ── Post-processing helpers ────────────────────────
 
@@ -292,7 +294,7 @@ md.renderer.rules.heading_deflist_block = (tokens, idx) => {
       .replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>')
       .replace(/\*([^*]+)\*/g, '<em>$1</em>')
       .replace(/`([^`]+)`/g, '<code>$1</code>')
-    const numberSpan = number ? `<span class="heading-number">${number}</span>` : ''
+    const numberSpan = (number && showHeadingNumbers) ? `<span class="heading-number">${number}</span>` : ''
     return `<h${adjustedLevel} id="${headingId}">${numberSpan}${headingContent}</h${adjustedLevel}><dd>${defHtml}</dd>`
   } else {
     const level = originalLevel
@@ -311,7 +313,7 @@ md.renderer.rules.heading_deflist_block = (tokens, idx) => {
       .replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>')
       .replace(/\*([^*]+)\*/g, '<em>$1</em>')
       .replace(/`([^`]+)`/g, '<code>$1</code>')
-    const numberSpan = number ? `<span class="heading-number">${number}</span>` : ''
+    const numberSpan = (number && showHeadingNumbers) ? `<span class="heading-number">${number}</span>` : ''
     return `<h${level} id="${headingId}">${numberSpan}${headingContent}</h${level}><dd>${defHtml}</dd>`
   }
 }
@@ -349,7 +351,7 @@ md.renderer.rules.heading_open = (tokens, idx) => {
     const adjustedId = numberPrefixForId ? `${numberPrefixForId}${baseSlug}` : baseSlug
     const adjustedTag = `h${adjustedLevel}`
     lastAdjustedLevel = adjustedLevel
-    const numberSpan = number ? `<span class="heading-number">${number}</span>` : ''
+    const numberSpan = (number && showHeadingNumbers) ? `<span class="heading-number">${number}</span>` : ''
     return `<${adjustedTag} id="${adjustedId}">${numberSpan}`
   } else {
     const level = token.tag as 'h1' | 'h2' | 'h3' | 'h4'
@@ -371,7 +373,7 @@ md.renderer.rules.heading_open = (tokens, idx) => {
     const line = token.map ? token.map[0] + frontmatterLineOffset : frontmatterLineOffset
     headingLineMap.set(numberedId, line)
 
-    const numberSpan = number ? `<span class="heading-number">${number}</span>` : ''
+    const numberSpan = (number && showHeadingNumbers) ? `<span class="heading-number">${number}</span>` : ''
     return `<${level} id="${numberedId}">${numberSpan}`
   }
 }

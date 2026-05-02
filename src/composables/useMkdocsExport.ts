@@ -1,12 +1,24 @@
 import { invoke } from '@tauri-apps/api/core'
 import { convertFileSrc } from '@tauri-apps/api/core'
-import { useMarkdown, resetGlobalHeadingIndex, incrementGlobalHeadingIndex, slugifyForMkdocs } from './useMarkdown'
+import { useMarkdown, resetGlobalHeadingIndex, incrementGlobalHeadingIndex, slugifyForMkdocs, setShowHeadingNumbers } from './useMarkdown'
 import type MarkdownIt from 'markdown-it'
 import { normalizePath } from '../utils/normalizePath'
 import type { NavChapter, Heading, BookmarkTreeNode, MdFile } from '../types'
 
 // 重新导出以保持向后兼容
 export type { NavChapter, Heading, BookmarkTreeNode }
+
+// 不编号的章节标题（不区分大小写）
+const UNNUMBERED_TITLES = ['cover', 'contents', 'preface', 'dedication', 'copyright', 'index', 'appendix']
+
+function isUnnumberedChapterTitle(title: string): boolean {
+  return UNNUMBERED_TITLES.includes(title.trim().toLowerCase())
+}
+
+/** 获取章节的有效显示标题：nav 标题 > md h1 > 文件名 */
+function getEffectiveTitle(chapter: NavChapter): string {
+  return chapter.title || chapter.mdH1Title || chapter.fallbackTitle || ''
+}
 
 // 编号计数器（模块级别，用于跨章节编号）
 let chapterCounter = 0
@@ -186,6 +198,71 @@ export async function loadAllMdFiles(chapters: NavChapter[]): Promise<void> {
 }
 
 /**
+ * 根据 nav 标题和 md h1 标题重新计算章节编号
+ * nav 层级 0 或 md 文件 h1 标题匹配 cover/contents/preface/dedication/copyright/index/appendix
+ * （不区分大小写）的章节不编号，其所有子章节也不编号。
+ * 在 loadAllMdFiles 之后调用，以便同时获取 nav 标题和 md h1 标题。
+ */
+function recomputeChapterNumbers(chapters: NavChapter[]): void {
+  chapterCounter = 0
+  subChapterCounter = 0
+  subSubChapterCounter = 0
+  subSubSubCounter = 0
+
+  let level0Unnumbered = false
+
+  for (const chapter of chapters) {
+    const effectiveTitle = getEffectiveTitle(chapter)
+
+    if (chapter.navLevel === 0) {
+      level0Unnumbered = isUnnumberedChapterTitle(effectiveTitle)
+
+      if (level0Unnumbered) {
+        chapter.chapterNumber = ''
+        chapter.numberPrefix = ''
+      } else {
+        chapterCounter++
+        chapter.chapterNumber = `${chapterCounter}`
+        chapter.numberPrefix = `${chapterCounter}.`
+      }
+      subChapterCounter = 0
+      subSubChapterCounter = 0
+      subSubSubCounter = 0
+    } else if (chapter.navLevel === 1) {
+      if (level0Unnumbered) {
+        chapter.chapterNumber = ''
+        chapter.numberPrefix = ''
+      } else {
+        subChapterCounter++
+        chapter.chapterNumber = `${chapterCounter}.${subChapterCounter}`
+        chapter.numberPrefix = `${chapter.chapterNumber}.`
+      }
+      subSubChapterCounter = 0
+      subSubSubCounter = 0
+    } else if (chapter.navLevel === 2) {
+      if (level0Unnumbered) {
+        chapter.chapterNumber = ''
+        chapter.numberPrefix = ''
+      } else {
+        subSubChapterCounter++
+        chapter.chapterNumber = `${chapterCounter}.${subChapterCounter}.${subSubChapterCounter}`
+        chapter.numberPrefix = `${chapter.chapterNumber}.`
+      }
+      subSubSubCounter = 0
+    } else {
+      if (level0Unnumbered) {
+        chapter.chapterNumber = ''
+        chapter.numberPrefix = ''
+      } else {
+        subSubSubCounter++
+        chapter.chapterNumber = `${chapterCounter}.${subChapterCounter}.${subSubChapterCounter}.${subSubSubCounter}`
+        chapter.numberPrefix = `${chapter.chapterNumber}.`
+      }
+    }
+  }
+}
+
+/**
  * 调整标题层级
  * h1 隐藏（跳过），h2+ 相对于 nav 标题降低 1 级显示
  * nav level 0 → h1 (level 1)，文件 h2 → h2 (level 2)
@@ -325,10 +402,13 @@ export function renumberHeadings(chapters: NavChapter[]): BookmarkTreeNode[] {
       const adjustedLevel = adjustHeadingLevel(rawHeading.level, chapter.navLevel)
 
       // 计算编号 - h2-h4 显示编号，h5-h6 不显示编号
+      // 不编号章节内所有标题也不编号
+      const isChapterUnnumbered = !chapter.numberPrefix
       let adjustedNumber = ''
       let numberPrefixForId = ''  // 用于 ID 的编号前缀（连字符格式）
 
-      // h2-h6 都更新计数器和生成 ID 前缀
+      if (!isChapterUnnumbered) {
+        // h2-h6 都更新计数器和生成 ID 前缀
       if (rawHeading.level >= 2 && rawHeading.level <= 6) {
         // 更新章节内计数器 - 基于原始层级
         if (rawHeading.level === 2) {
@@ -378,6 +458,7 @@ export function renumberHeadings(chapters: NavChapter[]): BookmarkTreeNode[] {
           // h6：不显示编号，但 ID 带前缀
           numberPrefixForId = prefixParts.join('-') + '-' + chapterCounters.h2 + '-' + chapterCounters.h3 + '-' + chapterCounters.h4 + '-' + chapterCounters.h5 + '-' + chapterCounters.h6 + '-'
         }
+      }
       }
 
       // 生成带编号前缀的 ID（MkDocs 模式：编号前缀 + 标题 slug）
@@ -437,9 +518,13 @@ export function renumberHeadings(chapters: NavChapter[]): BookmarkTreeNode[] {
     }
     chapter.displayTitle = displayTitle
 
-    const bookmarkDisplayTitle = `${chapter.chapterNumber}. ${displayTitle}`
+    const bookmarkDisplayTitle = chapter.chapterNumber
+      ? `${chapter.chapterNumber}. ${displayTitle}`
+      : displayTitle
     // 章节ID使用与combineChaptersToHtml相同的逻辑
-    const chapterId = `chapter-${chapter.chapterNumber}`
+    const chapterId = chapter.chapterNumber
+      ? `chapter-${chapter.chapterNumber}`
+      : `chapter-${slugifyForMkdocs(displayTitle)}`
     chapter.htmlId = chapterId  // 预先设置，供后续使用
     chapterIndex++  // 使用局部计数器，不影响 globalHeadingIndex
     const bookmarkNode: BookmarkTreeNode = {
@@ -527,7 +612,7 @@ export function renderChapterContent(
  * 合并所有章节为单一 HTML，添加分页标记和章节标题
  * 同时为每个章节设置 htmlId（用于书签跳转）
  */
-export function combineChaptersToHtml(chapters: NavChapter[]): string {
+export function combineChaptersToHtml(chapters: NavChapter[], showHeadingNumbers: boolean = true): string {
   const htmlParts: string[] = []
 
   const { parse, renderContentSkipH1 } = useMarkdown()
@@ -542,11 +627,6 @@ export function combineChaptersToHtml(chapters: NavChapter[]): string {
     // nav level 0 的章节标题是 h1，会被 addH1PageBreaks 添加分页
     // 这里不再手动添加分页标记，避免重复产生空白页
 
-    // 使用预先设置的 htmlId（由 renumberHeadings 设置）
-    const chapterId = chapter.htmlId || `chapter-${chapter.chapterNumber}`
-    chapter.htmlId = chapterId  // 存储 id 供书签跳转使用
-    chapterIndex++
-
     // 确定显示标题
     // 规则：nav 有标题时用 nav 标题；nav 无标题时用 md h1 标题，否则用文件名
     // 如果 nav 标题与 md h1 相同，显示 nav 标题（内容相同）
@@ -557,11 +637,19 @@ export function combineChaptersToHtml(chapters: NavChapter[]): string {
     }
     chapter.displayTitle = displayTitle
 
+    // 使用预先设置的 htmlId（由 renumberHeadings 设置）
+    const chapterId = chapter.htmlId || (chapter.chapterNumber
+      ? `chapter-${chapter.chapterNumber}`
+      : `chapter-${slugifyForMkdocs(displayTitle)}`)
+    chapter.htmlId = chapterId  // 存储 id 供书签跳转使用
+    chapterIndex++
+
     // 添加章节标题
     // nav level 决定标题层级：level 0 → h1, level 1 → h2, level 2 → h3, level 3 → h4, level 4+ → h4（HTML 最多 h4）
     const headingLevel = Math.min(chapter.navLevel + 1, 4)
-    // 所有层级都显示编号
-    const numberSpan = `<span class="heading-number">${chapter.chapterNumber}. </span>`
+    const numberSpan = (chapter.chapterNumber && showHeadingNumbers)
+      ? `<span class="heading-number">${chapter.chapterNumber}. </span>`
+      : ''
     const chapterTitleHtml = `<h${headingLevel} id="${chapterId}">${numberSpan}${displayTitle}</h${headingLevel}>`
     htmlParts.push(chapterTitleHtml)
 
@@ -596,35 +684,32 @@ export function combineChaptersToHtml(chapters: NavChapter[]): string {
  * PDF 书签显示 h1~h5（层级 1~5）
  */
 export function extractPdfBookmarks(
-  chapters: NavChapter[]
+  chapters: NavChapter[],
+  showHeadingNumbers: boolean = true
 ): Array<{ title: string; level: number; id: string }> {
   const bookmarks: Array<{ title: string; level: number; id: string }> = []
 
   for (const chapter of chapters) {
     // 使用 displayTitle（已由 renumberHeadings 或 combineChaptersToHtml 设置）
     const displayTitle = chapter.displayTitle || chapter.title
-    if (!chapter.filePath) {
-      // 嵌套导航本身作为书签
-      bookmarks.push({
-        title: `${chapter.chapterNumber}. ${displayTitle}`,
-        level: Math.min(chapter.navLevel + 1, 5), // PDF 书签最多 5 级
-        id: `chapter-${chapter.chapterNumber}`
-      })
-    } else {
-      // 文件条目：章节标题作为书签
-      bookmarks.push({
-        title: `${chapter.chapterNumber}. ${displayTitle}`,
-        level: Math.min(chapter.navLevel + 1, 5),
-        id: `chapter-${chapter.chapterNumber}`
-      })
-    }
+    const bookmarkTitle = (chapter.chapterNumber && showHeadingNumbers)
+      ? `${chapter.chapterNumber}. ${displayTitle}`
+      : displayTitle
+    const bookmarkId = chapter.chapterNumber
+      ? `chapter-${chapter.chapterNumber}`
+      : chapter.htmlId || `chapter-${slugifyForMkdocs(displayTitle)}`
+    bookmarks.push({
+      title: bookmarkTitle,
+      level: Math.min(chapter.navLevel + 1, 5), // PDF 书签最多 5 级
+      id: bookmarkId
+    })
 
     if (chapter.headings) {
       for (const heading of chapter.headings) {
         // 添加 h1~h5 到 PDF 书签（层级 1~5）
         if (heading.adjustedLevel <= 5) {
           bookmarks.push({
-            title: heading.adjustedNumber ?
+            title: (heading.adjustedNumber && showHeadingNumbers) ?
               `${heading.adjustedNumber}${heading.text}` : heading.text,
             level: heading.adjustedLevel,
             id: heading.adjustedId
@@ -642,7 +727,8 @@ export function extractPdfBookmarks(
  */
 export async function prepareMkdocsExport(
   nav: MdFile[],
-  basePath: string
+  basePath: string,
+  showHeadingNumbers: boolean = true
 ): Promise<{
   chapters: NavChapter[]
   bookmarkTree: BookmarkTreeNode[]
@@ -659,12 +745,17 @@ export async function prepareMkdocsExport(
   // 加载文件内容
   await loadAllMdFiles(chapters)
 
+  // 根据章节标题（nav 标题或 md h1）重新计算编号，不编号章节跳过编号
+  recomputeChapterNumbers(chapters)
+
   // 先重新编号标题，生成书签树（从 globalHeadingIndex=0 开始）
   const bookmarkTree = renumberHeadings(chapters)
 
   // 重置 useMarkdown.ts 的计数器，然后渲染 HTML（从相同的 globalHeadingIndex=0 开始）
   resetGlobalHeadingIndex()
-  let combinedHtml = combineChaptersToHtml(chapters)
+  setShowHeadingNumbers(showHeadingNumbers)
+  let combinedHtml = combineChaptersToHtml(chapters, showHeadingNumbers)
+  setShowHeadingNumbers(true)  // 恢复默认，避免影响预览
 
   // 后处理：统一处理所有锚点链接，使用收集的标题 ID
   // 创建全局标题文本 -> ID 的映射（支持多章节同名标题）
@@ -915,7 +1006,7 @@ export async function prepareMkdocsExport(
   combinedHtml = processedHtml
 
   // 提取 PDF 书签
-  const pdfBookmarks = extractPdfBookmarks(chapters)
+  const pdfBookmarks = extractPdfBookmarks(chapters, showHeadingNumbers)
 
   return { chapters, bookmarkTree, combinedHtml, pdfBookmarks }
 }

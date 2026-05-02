@@ -57,6 +57,7 @@ describe('getMarkdownStyles', () => {
     marginBottom: 20,
     marginLeft: 25,
     marginRight: 25,
+    showHeadingNumbers: true,
   }
 
   it('应生成 pt 格式样式（默认 PDF 模式）', () => {

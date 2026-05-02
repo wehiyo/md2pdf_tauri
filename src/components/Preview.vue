@@ -100,7 +100,8 @@ const fontConfig = ref<FontConfig>({
   marginTop: 20,
   marginBottom: 20,
   marginLeft: 25,
-  marginRight: 25
+  marginRight: 25,
+  showHeadingNumbers: true
 })
 
 // 处理设置保存

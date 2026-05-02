@@ -12,6 +12,7 @@ export interface SiteExportOptions {
   outputDir: string
   siteName: string
   chapters: NavChapter[]
+  showHeadingNumbers?: boolean
 }
 
 export interface SearchIndexEntry {
@@ -600,7 +601,8 @@ function generateSidebarNav(
   chapters: NavChapter[],
   pageInfos: PageInfo[],
   currentChapter: NavChapter,
-  isSubPage: boolean = false
+  isSubPage: boolean = false,
+  showHeadingNumbers: boolean = true
 ): string {
   // 构建导航树
   const navItems: string[] = []
@@ -617,7 +619,7 @@ function generateSidebarNav(
     const levelClass = ` md-nav__link--level-${chapter.navLevel}`
 
     // 显示标题（带编号）
-    const displayTitle = chapter.chapterNumber
+    const displayTitle = (chapter.chapterNumber && showHeadingNumbers)
       ? `${chapter.chapterNumber}. ${chapter.title}`
       : chapter.title
 
@@ -645,7 +647,7 @@ function generateSidebarNav(
     if (isActive && chapter.headings && chapter.headings.length > 0) {
       for (const heading of chapter.headings) {
         if (heading.adjustedLevel <= 4) {
-          const headingTitle = heading.adjustedNumber
+          const headingTitle = (heading.adjustedNumber && showHeadingNumbers)
             ? `${heading.adjustedNumber}${heading.text}`
             : heading.text
           navItems.push(`<a href="#${heading.adjustedId}" class="md-nav__link md-nav__link--level-${chapter.navLevel + 1}">${headingTitle}</a>`)
@@ -776,7 +778,8 @@ function extractPlainText(content: string): string {
  */
 function generateSearchIndex(
   chapters: NavChapter[],
-  pageInfos: PageInfo[]
+  pageInfos: PageInfo[],
+  showHeadingNumbers: boolean = true
 ): SearchIndexEntry[] {
   const index: SearchIndexEntry[] = []
 
@@ -791,7 +794,7 @@ function generateSearchIndex(
 
     const entry: SearchIndexEntry = {
       page: pageInfo.htmlFile,
-      title: chapter.chapterNumber
+      title: (chapter.chapterNumber && showHeadingNumbers)
         ? `${chapter.chapterNumber}. ${chapter.title}`
         : chapter.title,
       sections: []
@@ -805,7 +808,7 @@ function generateSearchIndex(
           const plainText = extractPlainText(body)
 
           entry.sections.push({
-            heading: heading.adjustedNumber
+            heading: (heading.adjustedNumber && showHeadingNumbers)
               ? `${heading.adjustedNumber}${heading.text}`
               : heading.text,
             id: `#${heading.adjustedId}`,
@@ -910,7 +913,7 @@ function replaceImagePaths(html: string, imageMap: Map<string, string>, isSubPag
  * 导出静态站点
  */
 export async function exportStaticSite(options: SiteExportOptions): Promise<void> {
-  const { outputDir, siteName, chapters } = options
+  const { outputDir, siteName, chapters, showHeadingNumbers = true } = options
 
   // 在输出目录下创建以 siteName 为名称的文件夹
   // 处理 siteName 中的特殊字符，生成合法的文件夹名
@@ -937,7 +940,7 @@ export async function exportStaticSite(options: SiteExportOptions): Promise<void
     }
 
     pageInfos.push({
-      title: chapter.chapterNumber ? `${chapter.chapterNumber}. ${chapter.title}` : chapter.title,
+      title: (chapter.chapterNumber && showHeadingNumbers) ? `${chapter.chapterNumber}. ${chapter.title}` : chapter.title,
       htmlFile: htmlFile === 'index.html' ? 'index.html' : `pages/${htmlFile}`,
       chapter
     })
@@ -955,7 +958,7 @@ export async function exportStaticSite(options: SiteExportOptions): Promise<void
   await writeFile(`${siteOutputDir}/assets/js/navigation.js`, new TextEncoder().encode(getNavigationJs()))
 
   // 生成搜索索引（嵌入到每个页面中）
-  const searchIndex = generateSearchIndex(chapters, pageInfos)
+  const searchIndex = generateSearchIndex(chapters, pageInfos, showHeadingNumbers)
   const searchIndexJson = JSON.stringify(searchIndex)
 
   // 保存搜索索引到单独文件（可选，用于其他用途）
@@ -1025,7 +1028,7 @@ export async function exportStaticSite(options: SiteExportOptions): Promise<void
     const navFooter = generateNavFooter(prevPage, nextPage, isSubPage)
 
     // 生成侧边栏导航（当前页面高亮）
-    const sidebarNav = generateSidebarNav(chapters, pageInfos, chapter, isSubPage)
+    const sidebarNav = generateSidebarNav(chapters, pageInfos, chapter, isSubPage, showHeadingNumbers)
 
     // 生成完整页面 HTML
     const pageHtml = generatePageHtml(

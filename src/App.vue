@@ -105,7 +105,7 @@ import LeftSidebar from './components/LeftSidebar.vue'
 import OutlinePanel from './components/OutlinePanel.vue'
 import ExportProgress from './components/ExportProgress.vue'
 import MkdocsPreviewDialog from './components/MkdocsPreviewDialog.vue'
-import { useMarkdown } from './composables/useMarkdown'
+import { useMarkdown, setShowHeadingNumbers } from './composables/useMarkdown'
 import type { Metadata } from './composables/useMarkdown'
 import { usePDF, getHtmlMarkdownStyles } from './composables/usePDF'
 import { useScrollSync } from './composables/useScrollSync'
@@ -205,7 +205,8 @@ const fontConfig = ref<FontConfig>({
   bodyFontSize: 16, chineseCustomFonts: [], englishCustomFonts: [], codeCustomFonts: [],
   lineHeight: 1.6, paragraphSpacing: 1, previewWidth: 900,
   previewBackgroundColor: '#ffffff', pageSize: 'A4',
-  marginTop: 20, marginBottom: 20, marginLeft: 25, marginRight: 25
+  marginTop: 20, marginBottom: 20, marginLeft: 25, marginRight: 25,
+  showHeadingNumbers: true
 })
 
 // ── MkDocs preview ─────────────────────────────────────
@@ -218,6 +219,7 @@ const mkdocsCombinedHtml = ref('')
 
 const currentMetadata = fileMgmt.currentMetadata
 const renderedHtml = computed(() => {
+  setShowHeadingNumbers(fontConfig.value.showHeadingNumbers !== false)
   const result = render(fileMgmt.content.value)
   currentMetadata.value = result.metadata
   return result.html
@@ -326,7 +328,10 @@ async function exportHTML() {
       resetChapterCounters()
       const chapters = collectNavChapters(fileMgmt.mdFiles.value, fileMgmt.importedFolderPath.value, 0, '')
       await loadAllMdFiles(chapters)
-      await exportStaticSite({ outputDir, siteName, chapters })
+      await exportStaticSite({
+        outputDir, siteName, chapters,
+        showHeadingNumbers: fontConfig.value.showHeadingNumbers !== false
+      })
       await message('静态站点导出成功！', { title: '成功', kind: 'info' })
     } catch (error) { await handleError(error, '导出静态站点') }
     return
@@ -362,7 +367,8 @@ async function exportPDF() {
   if (fileMgmt.workState.value === 'mkdocs') {
     try {
       const { chapters, bookmarkTree, combinedHtml } = await prepareMkdocsExport(
-        fileMgmt.mdFiles.value, fileMgmt.importedFolderPath.value || ''
+        fileMgmt.mdFiles.value, fileMgmt.importedFolderPath.value || '',
+        fontConfig.value.showHeadingNumbers !== false
       )
       fileMgmt.mkdocsChapters.value = chapters
       mkdocsBookmarkTree.value = bookmarkTree

@@ -63,6 +63,7 @@ export interface FontConfig {
   marginBottom: number  // 下边距 mm
   marginLeft: number    // 左边距 mm
   marginRight: number   // 右边距 mm
+  showHeadingNumbers: boolean  // PDF 导出时显示标题数字编号
 }
 
 const DEFAULT_CONFIG: FontConfig = {
@@ -83,6 +84,7 @@ const DEFAULT_CONFIG: FontConfig = {
   marginBottom: 20,
   marginLeft: 25,
   marginRight: 25,
+  showHeadingNumbers: true,
 }
 
 const CONFIG_FILE_NAME = 'config.json'
