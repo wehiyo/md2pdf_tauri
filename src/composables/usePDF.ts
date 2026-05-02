@@ -278,10 +278,14 @@ export function usePDF() {
     }
 
     // 预渲染 WaveDrom 时序图
-    const wavedromRegex = /<div class="wavedrom">([\s\S]*?)<\/div>/g
+    // 同时匹配未处理的 (<div class="wavedrom">) 和已处理的 DOM HTML（含 data-processed 属性）
+    const wavedromRegex = /<div class="wavedrom"(?:\s[^>]*)?>([\s\S]*?)<\/div>/g
     const wavedromMatches: { full: string; code: string }[] = []
     while ((match = wavedromRegex.exec(result)) !== null) {
-      wavedromMatches.push({ full: match[0], code: match[1].trim() })
+      // 跳过已经含 SVG 的已处理元素（code 以 <svg 开头）
+      const code = match[1].trim()
+      if (code.startsWith('<svg')) continue
+      wavedromMatches.push({ full: match[0], code })
     }
 
     for (let i = 0; i < wavedromMatches.length; i++) {
@@ -289,9 +293,10 @@ export function usePDF() {
       try {
         // WaveDrom 使用 JavaScript 对象字面量语法，使用 JSON5 安全解析
         const data = JSON5.parse(code)
-        // 使用 wavedrom 的内部渲染函数生成 SVG
-        // renderAny 返回 SVG 字符串，需要确保有正确的 xmlns 属性
-        let svgContent = wavedrom.renderAny(0, data, wavedrom.waveSkin)
+        // renderAny 返回 ONML 树（嵌套数组），需通过 onml.stringify 转换为 SVG 字符串
+        const onmlTree = wavedrom.renderAny(0, data, wavedrom.waveSkin)
+        // onml 在 wavedrom 的类型声明中缺失，运行时可用
+        let svgContent = (wavedrom as any).onml.stringify(onmlTree)
 
         // 确保 SVG 有 xmlns 属性，否则在某些渲染引擎中可能不显示
         if (svgContent && !svgContent.includes('xmlns=')) {
@@ -300,7 +305,6 @@ export function usePDF() {
 
         // 添加内联样式确保正确显示
         if (svgContent) {
-          // 确保 SVG 有基本的显示样式
           svgContent = svgContent.replace('<svg', '<svg style="display:block;max-width:100%;height:auto;"')
         }
 
@@ -310,6 +314,60 @@ export function usePDF() {
       }
     }
 
+    return result
+  }
+
+  /**
+   * 将 HTML 中的本地图片转换为 base64 data URL
+   * 解决 PDF 打印窗口（NavigateToString 加载，opaque origin）无法加载
+   * asset:// 协议或 file:// 路径图片的问题。
+   */
+  async function embedImagesAsBase64(html: string): Promise<string> {
+    const imgRegex = /<img([^>]*)src=["']([^"']+)["']([^>]*)>/g
+    const replacements: Array<{ original: string; replacement: string }> = []
+
+    let match: RegExpExecArray | null
+    while ((match = imgRegex.exec(html)) !== null) {
+      const fullMatch = match[0]
+      const before = match[1]
+      const src = match[2]
+      const after = match[3]
+
+      // 跳过已经是 data URL、外部 http/https 链接、或 asset 协议 URL
+      if (src.startsWith('data:') || src.match(/^https?:\/\//i)) continue
+
+      // 确定实际文件路径：优先使用 data-original-src，其次使用 src
+      const originalSrcMatch = before.match(/data-original-src="([^"]+)"/)
+      const filePath = originalSrcMatch ? originalSrcMatch[1] : src
+
+      try {
+        const bytes = await readFile(filePath)
+        // 根据扩展名判断 MIME 类型
+        const ext = filePath.split('.').pop()?.toLowerCase() || 'png'
+        const mimeMap: Record<string, string> = {
+          png: 'image/png', jpg: 'image/jpeg', jpeg: 'image/jpeg',
+          gif: 'image/gif', svg: 'image/svg+xml', webp: 'image/webp',
+          bmp: 'image/bmp', ico: 'image/x-icon'
+        }
+        const mime = mimeMap[ext] || 'image/png'
+        const base64 = btoa(String.fromCharCode(...bytes))
+        const dataUrl = `data:${mime};base64,${base64}`
+
+        // 构建新的 img 标签：用 data URL 替换 src，保留其他属性
+        let newAttrs = before
+        // 移除 data-original-src（已嵌入为 base64，不再需要）
+        newAttrs = newAttrs.replace(/\s*data-original-src="[^"]*"/, '')
+        const newTag = `<img${newAttrs}src="${dataUrl}"${after}>`
+        replacements.push({ original: fullMatch, replacement: newTag })
+      } catch {
+        // 文件读取失败，保留原始标签
+      }
+    }
+
+    let result = html
+    for (const { original, replacement } of replacements) {
+      result = result.replace(original, replacement)
+    }
     return result
   }
 
@@ -369,10 +427,14 @@ export function usePDF() {
     // Step 6: 获取字体 CSS（用于 PDF 渲染环境）
     const fontFaceStyles = await getFontFaceStyles(fontConfig, contentWithPageBreaks)
 
+    // Step 6.5: 本地图片转 base64（打印窗口通过 NavigateToString 加载 HTML，
+    // 为 opaque origin，无法访问 asset:// 协议或 file:// 路径的图片）
+    const contentWithEmbeddedImages = await embedImagesAsBase64(contentWithPageBreaks)
+
     // Step 7: 创建 HTML 文档
     // 封面右下角使用 author、copyright 和当前日期
     const fullHtml = getFullHtml(
-      fileName, coverTitle, contentWithPageBreaks, metaHtml, fontConfig, fontFaceStyles,
+      fileName, coverTitle, contentWithEmbeddedImages, metaHtml, fontConfig, fontFaceStyles,
       coverSubtitle, metadata.author, metadata.copyright
     )
 
