@@ -250,7 +250,7 @@ async fn print_in_hidden_window(
     save_path: &str,
 ) -> Result<PrintResult, String> {
     navigate_html_and_wait(print_window, html, Duration::from_secs(120))?;
-    print_content(print_window, save_path).await
+    print_content(print_window, save_path, &PrintPageSettings::default()).await
 }
 
 /// 在隐藏窗口中打印并提取书签位置
@@ -268,10 +268,10 @@ async fn print_and_extract_bookmarks(
     wait_for_document_ready(print_window).await?;
 
     // Step 4: 执行 JavaScript 获取标题位置
-    let bookmarks = extract_bookmark_positions(print_window, heading_ids).await?;
+    let bookmarks = extract_bookmark_positions(print_window, heading_ids, &PrintPageSettings::default()).await?;
 
     // Step 5: 执行打印
-    let print_result = print_content(print_window, save_path).await?;
+    let print_result = print_content(print_window, save_path, &PrintPageSettings::default()).await?;
 
     Ok(PrintResultWithBookmarks {
         success: print_result.success,
@@ -286,26 +286,26 @@ async fn print_and_extract_bookmarks(
 async fn extract_bookmark_positions(
     print_window: &WebviewWindow,
     heading_ids: &[String],
+    page_settings: &PrintPageSettings,
 ) -> Result<Vec<BookmarkPosition>, String> {
     use tauri::webview::PlatformWebview;
     use webview2_com::Microsoft::Web::WebView2::Win32::*;
     use windows_core::Interface;
 
-    // 构建 JavaScript 代码
     let heading_ids_json = serde_json::to_string(heading_ids)
         .map_err(|e| format!("序列化标题 ID 失败: {}", e))?;
+
+    // 动态计算内容区高度 (px @ 96 DPI)
+    let page_height_px = page_settings.page_height_mm * 96.0 / 25.4;
+    let margin_top_px = page_settings.margin_top_mm * 96.0 / 25.4;
+    let margin_bottom_px = page_settings.margin_bottom_mm * 96.0 / 25.4;
+    let content_height_px = (page_height_px - margin_top_px - margin_bottom_px) as u32;
 
     let js_code = format!(r#"
         (function() {{
             const headingIds = {};
             const bookmarks = [];
-
-            // A4 页面参数 (基于 CSS @page 设置)
-            // @page {{ margin: 2cm 2.5cm; size: A4; }}
-            // A4: 210mm × 297mm = 794px × 1123px @ 96 DPI
-            // 内容区: 上下边距 2cm = 76px, 左右边距 2.5cm = 94px
-            // 内容区高度: 1123 - 76*2 = 971px
-            const contentHeight = 971;
+            const contentHeight = {};
 
             // 获取正文容器
             const mainContent = document.querySelector('.main-content');
@@ -352,7 +352,7 @@ async fn extract_bookmark_positions(
 
             return JSON.stringify(bookmarks);
         }})();
-    "#, heading_ids_json);
+    "#, heading_ids_json, content_height_px);
 
     let result = Arc::new(Mutex::new(None::<String>));
     let result_clone = result.clone();
@@ -581,6 +581,7 @@ async fn wait_for_document_ready(print_window: &WebviewWindow) -> Result<(), Str
 async fn print_content(
     print_window: &WebviewWindow,
     save_path: &str,
+    page_settings: &PrintPageSettings,
 ) -> Result<PrintResult, String> {
     use tauri::webview::PlatformWebview;
     use webview2_com::Microsoft::Web::WebView2::Win32::*;
@@ -591,6 +592,12 @@ async fn print_content(
     let save_path_owned = save_path.to_string();
     let completed = Arc::new(AtomicBool::new(false));
     let completed_clone = completed.clone();
+    let page_w = page_settings.page_width_mm / 25.4;
+    let page_h = page_settings.page_height_mm / 25.4;
+    let m_top = page_settings.margin_top_mm / 25.4;
+    let m_bottom = page_settings.margin_bottom_mm / 25.4;
+    let m_left = page_settings.margin_left_mm / 25.4;
+    let m_right = page_settings.margin_right_mm / 25.4;
 
     print_window
         .with_webview(move |webview: PlatformWebview| {
@@ -633,14 +640,14 @@ async fn print_content(
                     }
                 };
 
-                // A4 页面设置（硬编码，用于旧版打印命令）
+                // 动态页面设置
                 settings.SetOrientation(COREWEBVIEW2_PRINT_ORIENTATION(0)).ok();
-                settings.SetPageWidth(8.27).ok();
-                settings.SetPageHeight(11.69).ok();
-                settings.SetMarginTop(0.79).ok();
-                settings.SetMarginBottom(0.79).ok();
-                settings.SetMarginLeft(0.98).ok();
-                settings.SetMarginRight(0.98).ok();
+                settings.SetPageWidth(page_w).ok();
+                settings.SetPageHeight(page_h).ok();
+                settings.SetMarginTop(m_top).ok();
+                settings.SetMarginBottom(m_bottom).ok();
+                settings.SetMarginLeft(m_left).ok();
+                settings.SetMarginRight(m_right).ok();
 
                 let path_hstring = HSTRING::from(save_path_owned.as_str());
 
