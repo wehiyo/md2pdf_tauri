@@ -10,6 +10,7 @@
       :scrollAuto="false"
       class="md-editor"
       @onSave="saveFile"
+      :onUploadImg="handleUploadImg"
     >
       <template #defToolbars><NormalToolbar title="新建文件" :onClick="newFile"><svg class="toolbar-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="12" y1="18" x2="12" y2="12"/><line x1="9" y1="15" x2="15" y2="15"/></svg></NormalToolbar><NormalToolbar title="打开文件" :onClick="openFile"><svg class="toolbar-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M5 19a2 2 0 0 1-2-2V7a2 2 0 0 1 2-2h4l2 2h4a2 2 0 0 1 2 2v1M5 19h14a2 2 0 0 0 2-2v-5a2 2 0 0 0-2-2H9a2 2 0 0 0-2 2v5a2 2 0 0 1-2 2z"/></svg></NormalToolbar><NormalToolbar title="保存文件" :onClick="saveFile"><svg class="toolbar-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg></NormalToolbar><NormalToolbar title="切换预览" :onClick="togglePreview"><svg class="toolbar-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"/><line x1="9" y1="3" x2="9" y2="21"/></svg></NormalToolbar></template>
     </MdEditor>
@@ -20,10 +21,12 @@
 import { computed, ref } from 'vue'
 import { MdEditor, NormalToolbar } from 'md-editor-v3'
 import type { ToolbarNames } from 'md-editor-v3'
+import { writeFile, mkdir, readDir } from '@tauri-apps/plugin-fs'
 import 'md-editor-v3/lib/style.css'
 
 const props = defineProps<{
   modelValue: string
+  fileDir?: string | null
 }>()
 
 const emit = defineEmits<{
@@ -129,6 +132,43 @@ const toolbars: ToolbarNames[] = [
   '=',
   3  // 切换预览（最后）
 ]
+
+// 图片上传处理：保存到 md 文件同目录的 md_pics/ 子目录，重名自动加数字后缀
+async function handleUploadImg(files: File[], callback: (urls: string[]) => void) {
+  if (!props.fileDir) return
+
+  const urls: string[] = []
+  const picsDir = props.fileDir.replace(/\\/g, '/') + '/md_pics'
+
+  try { await mkdir(picsDir, { recursive: true }) } catch { /* ignore */ }
+
+  let existingFiles: string[] = []
+  try {
+    const entries = await readDir(picsDir)
+    existingFiles = entries.map(e => e.name)
+  } catch { /* dir doesn't exist yet */ }
+
+  for (const file of files) {
+    const originalName = file.name
+    const dotIndex = originalName.lastIndexOf('.')
+    const baseName = dotIndex > 0 ? originalName.substring(0, dotIndex) : originalName
+    const ext = dotIndex > 0 ? originalName.substring(dotIndex) : ''
+
+    let destName = originalName
+    let counter = 1
+    while (existingFiles.includes(destName)) {
+      destName = `${baseName}_${counter}${ext}`
+      counter++
+    }
+
+    const buffer = await file.arrayBuffer()
+    await writeFile(picsDir + '/' + destName, new Uint8Array(buffer))
+    existingFiles.push(destName)
+    urls.push(`md_pics/${destName}`)
+  }
+
+  callback(urls)
+}
 
 // 新建文件
 function newFile() {

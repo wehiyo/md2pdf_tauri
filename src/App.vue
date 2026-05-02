@@ -29,6 +29,7 @@
         ref="editorRef"
         v-show="!previewOnlyMode"
         v-model="fileMgmt.content.value"
+        :file-dir="fileMgmt.currentFileDir.value"
         class="editor-pane"
         :style="editorPaneStyle"
         @new-file="newFile"
