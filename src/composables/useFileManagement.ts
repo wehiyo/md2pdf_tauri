@@ -274,6 +274,31 @@ export function useFileManagement() {
     }
   }
 
+  async function saveFileAs(): Promise<boolean> {
+    if (currentFileIndex.value < 0 || openedFiles.value.length === 0) return false
+    try {
+      const filePath = await save({
+        filters: [{ name: 'Markdown', extensions: ['md'] }]
+      })
+      if (filePath) {
+        await writeTextFile(filePath, content.value)
+        const lastSep = Math.max(filePath.lastIndexOf('/'), filePath.lastIndexOf('\\'))
+        openedFiles.value[currentFileIndex.value].path = filePath
+        openedFiles.value[currentFileIndex.value].savedContent = content.value
+        openedFiles.value[currentFileIndex.value].dir = lastSep > 0 ? filePath.substring(0, lastSep) : null
+        openedFiles.value[currentFileIndex.value].name = getFileName(filePath)
+        savedContent.value = content.value
+        currentFilePath.value = filePath
+        currentFileDir.value = lastSep > 0 ? filePath.substring(0, lastSep) : null
+        return true
+      }
+      return false
+    } catch (error) {
+      await handleError(error, '另存为')
+      return false
+    }
+  }
+
   // ── File tree ───────────────────────────────────────
 
   async function openFileFromTree(path: string, _pushNav?: (path: string, anchor?: string | null) => void, _pendingAnchor?: string | null) {
@@ -544,6 +569,7 @@ export function useFileManagement() {
     newFile,
     openFile,
     saveFile,
+    saveFileAs,
     // File tree
     openFileFromTree,
     openFileFromTreeNoHistory,

@@ -19,6 +19,10 @@ export default defineConfig(async () => ({
       // 3. tell vite to ignore watching `src-tauri`
       ignored: ["**/src-tauri/**"],
     },
+    fs: {
+      // 阻止 Vite 扫描 Rust target 目录（含数万文档 HTML，导致 EMFILE）
+      deny: ["src-tauri/target"],
+    },
   },
 
   resolve: {

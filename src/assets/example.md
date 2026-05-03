@@ -250,7 +250,6 @@ class Cat extends Animal {
 
 这是一张本地图片，使用相对路径引用。这是一张本地图片，使用相对路径引用。这是一张本地图片，使用相对路径引用。这是一张本地图片，使用相对路径引用。
 
-
 #### 网络图片
 
 ![Vite Logo](https://vitejs.dev/logo.svg){width=400}

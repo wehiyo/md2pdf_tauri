@@ -35,6 +35,7 @@
         @new-file="newFile"
         @open-file="openFile"
         @save-file="fileMgmt.saveFile"
+        @save-as="fileMgmt.saveFileAs"
         @toggle-preview="togglePreview"
       />
       <div
@@ -428,14 +429,29 @@ async function handleCloseRequest() {
 onMounted(async () => {
   initScrollSync()
   window.addEventListener('wheel', handleWheel, { passive: false })
-  windowCloseUnlisten = await listen('close-requested', handleCloseRequest)
+
+  try {
+    windowCloseUnlisten = await listen('close-requested', handleCloseRequest)
+  } catch (e) {
+    console.error('注册关闭事件监听失败:', e)
+  }
+
   fileMgmt.updateWindowTitle()
+
   try {
     const config = await loadConfig()
     fontConfig.value = config
     await loadFonts(config)
-  } catch { /* use defaults */ }
-  try { await invoke('close_splash_window') } catch { /* may not exist */ }
+  } catch (e) {
+    console.error('加载配置或字体失败，使用默认值:', e)
+  }
+
+  // 无论前面是否出错，都关闭 splash 显示主窗口
+  try {
+    await invoke('close_splash_window')
+  } catch (e) {
+    console.error('关闭 splash 窗口失败:', e)
+  }
 })
 
 watch(fileMgmt.windowTitle, () => fileMgmt.updateWindowTitle())
