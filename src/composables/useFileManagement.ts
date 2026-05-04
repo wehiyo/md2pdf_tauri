@@ -135,6 +135,33 @@ export function useFileManagement() {
     await win.setTitle(windowTitle.value)
   }
 
+  // ── Auto save ──────────────────────────────────────
+
+  let autoSaveTimer: ReturnType<typeof setInterval> | null = null
+
+  function startAutoSave(intervalMs: number = 30000) {
+    stopAutoSave()
+    autoSaveTimer = setInterval(async () => {
+      if (hasUnsavedChanges.value && currentFilePath.value) {
+        try {
+          await writeTextFile(currentFilePath.value, content.value)
+          savedContent.value = content.value
+          if (currentFileIndex.value >= 0 && openedFiles.value.length > 0) {
+            openedFiles.value[currentFileIndex.value].savedContent = content.value
+          }
+          console.log('自动保存:', currentFilePath.value)
+        } catch { /* 自动保存失败静默忽略 */ }
+      }
+    }, intervalMs)
+  }
+
+  function stopAutoSave() {
+    if (autoSaveTimer) {
+      clearInterval(autoSaveTimer)
+      autoSaveTimer = null
+    }
+  }
+
   // ── Multi-file helpers ─────────────────────────────
 
   function findFileIndex(path: string): number {
@@ -738,6 +765,9 @@ export function useFileManagement() {
     hasUnsavedChanges,
     windowTitle,
     updateWindowTitle,
+    // Auto save
+    startAutoSave,
+    stopAutoSave,
     // Multi-file
     findFileIndex,
     addFileToList,

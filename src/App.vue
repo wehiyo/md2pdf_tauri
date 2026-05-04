@@ -462,6 +462,7 @@ async function handleCloseRequest() {
 }
 
 onMounted(async () => {
+  fileMgmt.startAutoSave()
   initScrollSync()
   window.addEventListener('wheel', handleWheel, { passive: false })
 
@@ -501,6 +502,7 @@ watch(renderedHtml, async () => {
 })
 
 onUnmounted(() => {
+  fileMgmt.stopAutoSave()
   window.removeEventListener('wheel', handleWheel)
   if (windowCloseUnlisten) { windowCloseUnlisten(); windowCloseUnlisten = null }
 })
