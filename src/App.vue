@@ -1,5 +1,5 @@
 <template>
-  <div class="app-container">
+  <div class="app-container" @contextmenu.prevent>
     <div class="main-content" :style="mainContentStyle">
       <LeftSidebar
         ref="sidebarRef"
