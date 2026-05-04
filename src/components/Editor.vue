@@ -32,7 +32,8 @@
 import { computed, ref, onMounted, onBeforeUnmount } from 'vue'
 import { MdEditor, NormalToolbar, config } from 'md-editor-v3'
 import type { ToolbarNames } from 'md-editor-v3'
-import { writeFile, mkdir, readDir } from '@tauri-apps/plugin-fs'
+import { writeFile, mkdir, readDir, readFile } from '@tauri-apps/plugin-fs'
+import { getCurrentWebview } from '@tauri-apps/api/webview'
 import Cropper from 'cropperjs'
 import { buildRegex, type SearchOptions } from '../composables/useSearch'
 import 'cropperjs/dist/cropper.min.css'
@@ -257,40 +258,99 @@ const toolbars: ToolbarNames[] = [
 
 // 图片上传处理：保存到 md 文件同目录的 md_pics/ 子目录，重名自动加数字后缀
 async function handleUploadImg(files: File[], callback: (urls: string[]) => void) {
-  if (!props.fileDir) return
-
   const urls: string[] = []
-  const picsDir = props.fileDir.replace(/\\/g, '/') + '/md_pics'
 
-  try { await mkdir(picsDir, { recursive: true }) } catch { /* ignore */ }
+  if (props.fileDir) {
+    // 有文件目录：保存到 md_pics/ 子目录
+    const picsDir = props.fileDir.replace(/\\/g, '/') + '/md_pics'
+    try { await mkdir(picsDir, { recursive: true }) } catch { /* ignore */ }
 
-  let existingFiles: string[] = []
-  try {
-    const entries = await readDir(picsDir)
-    existingFiles = entries.map(e => e.name)
-  } catch { /* dir doesn't exist yet */ }
+    let existingFiles: string[] = []
+    try {
+      const entries = await readDir(picsDir)
+      existingFiles = entries.map(e => e.name)
+    } catch { /* dir doesn't exist yet */ }
 
-  for (const file of files) {
-    const originalName = file.name
-    const dotIndex = originalName.lastIndexOf('.')
-    const baseName = dotIndex > 0 ? originalName.substring(0, dotIndex) : originalName
-    const ext = dotIndex > 0 ? originalName.substring(dotIndex) : ''
+    for (const file of files) {
+      const originalName = file.name || 'image.png'
+      const dotIndex = originalName.lastIndexOf('.')
+      const baseName = dotIndex > 0 ? originalName.substring(0, dotIndex) : originalName
+      const ext = dotIndex > 0 ? originalName.substring(dotIndex) : '.png'
 
-    let destName = originalName
-    let counter = 1
-    while (existingFiles.includes(destName)) {
-      destName = `${baseName}_${counter}${ext}`
-      counter++
+      let destName = originalName
+      let counter = 1
+      while (existingFiles.includes(destName)) {
+        destName = `${baseName}_${counter}${ext}`
+        counter++
+      }
+
+      const buffer = await file.arrayBuffer()
+      await writeFile(picsDir + '/' + destName, new Uint8Array(buffer))
+      existingFiles.push(destName)
+      urls.push(`md_pics/${destName}`)
     }
-
-    const buffer = await file.arrayBuffer()
-    await writeFile(picsDir + '/' + destName, new Uint8Array(buffer))
-    existingFiles.push(destName)
-    urls.push(`md_pics/${destName}`)
+  } else {
+    // 无文件目录（新建未保存）：转换为 data URL 嵌入
+    for (const file of files) {
+      const buffer = await file.arrayBuffer()
+      const bytes = new Uint8Array(buffer)
+      const base64 = btoa(String.fromCharCode(...bytes))
+      const mime = file.type || 'image/png'
+      urls.push(`data:${mime};base64,${base64}`)
+    }
   }
 
   callback(urls)
 }
+
+// Tauri v2 拖放处理：OS 文件拖放不走 DOM 事件，需通过 Tauri API 监听
+let unlistenDragDrop: (() => void) | null = null
+
+// 将文件绝对路径读取并模拟 File 对象传给 handleUploadImg
+async function handleDragDropPaths(paths: string[]) {
+  const imageExts = ['.png', '.jpg', '.jpeg', '.gif', '.svg', '.webp', '.bmp', '.ico']
+  const imagePaths = paths.filter(p => imageExts.includes(p.substring(p.lastIndexOf('.')).toLowerCase()))
+  if (imagePaths.length === 0) return
+
+  // 从磁盘读取文件，构造类 File 对象
+  const fakeFiles: File[] = []
+  for (const path of imagePaths) {
+    try {
+      const bytes = await readFile(path)
+      const name = path.replace(/\\/g, '/').split('/').pop() || 'image.png'
+      const ext = name.split('.').pop()?.toLowerCase() || 'png'
+      const mimeMap: Record<string, string> = { png: 'image/png', jpg: 'image/jpeg', jpeg: 'image/jpeg', gif: 'image/gif', svg: 'image/svg+xml', webp: 'image/webp', bmp: 'image/bmp', ico: 'image/x-icon' }
+      const mime = mimeMap[ext] || 'image/png'
+      fakeFiles.push(new File([bytes], name, { type: mime }))
+    } catch { /* skip unreadable */ }
+  }
+  if (fakeFiles.length === 0) return
+
+  handleUploadImg(fakeFiles, (urls) => {
+    const view = (mdEditorRef.value as any)?.getEditorView?.()
+    if (view) {
+      const pos = view.state.selection.main.head
+      const md = urls.map(u => `![image](${u})`).join('\n')
+      view.dispatch({
+        changes: { from: pos, to: pos, insert: md },
+        selection: { anchor: pos + md.length }
+      })
+    }
+  })
+}
+
+onMounted(async () => {
+  unlistenDragDrop = await getCurrentWebview().onDragDropEvent((event) => {
+    if (event.payload.type === 'drop') {
+      const { paths, position } = event.payload
+      // 转换为物理像素坐标（WebView 中的 clientX/clientY）
+      handleDragDropPaths(paths)
+    }
+  })
+})
+onBeforeUnmount(() => {
+  unlistenDragDrop?.()
+})
 
 // 新建文件
 function newFile() {
