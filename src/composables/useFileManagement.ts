@@ -401,6 +401,20 @@ export function useFileManagement() {
     }
   }
 
+  // 关闭当前文件夹/MkDocs项目，回到单文件模式
+  function closeProject() {
+    workState.value = 'file'
+    importedFolderPath.value = null
+    mdFiles.value = []
+    openedFiles.value = []
+    currentFileIndex.value = -1
+    currentFilePath.value = null
+    currentFileDir.value = null
+    content.value = ''
+    savedContent.value = ''
+    mkdocsConfig.value = { siteName: 'Documentation' }
+  }
+
   async function saveFile(): Promise<boolean> {
     // MkDocs 模式下从文件树直接打开的文件也在 openedFiles 中
     const hasOpenedFile = currentFileIndex.value >= 0 && openedFiles.value.length > 0
@@ -745,6 +759,8 @@ export function useFileManagement() {
     importFolderByPath,
     importMkdocsByPath,
     openFileFromPath,
+    // Close project
+    closeProject,
     // MkDocs import
     extractMdFilesFromNav,
     updateMdFileNamesFromH1,

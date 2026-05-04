@@ -105,6 +105,14 @@
         </svg>
       </button>
     </div>
+    <div class="toolbar-edge">
+      <button class="toolbar-btn" title="关闭预览" @click="$emit('close-preview')">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <line x1="18" y1="6" x2="6" y2="18"/>
+          <line x1="6" y1="6" x2="18" y2="18"/>
+        </svg>
+      </button>
+    </div>
   </div>
 </template>
 
@@ -120,6 +128,7 @@ const emit = defineEmits<{
   'navigate-back': []
   'navigate-forward': []
   'open-settings': []
+  'close-preview': []
 }>()
 
 defineProps<{
@@ -198,10 +207,15 @@ onUnmounted(() => {
 }
 
 .toolbar-left,
-.toolbar-right {
+.toolbar-right,
+.toolbar-edge {
   display: flex;
   align-items: center;
   gap: 0;
+}
+
+.toolbar-right {
+  margin-left: auto;
 }
 
 .toolbar-btn {

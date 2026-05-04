@@ -5,6 +5,7 @@
         ref="sidebarRef"
         :work-state="fileMgmt.workState.value"
         :folder-path="fileMgmt.importedFolderPath.value || ''"
+        :site-name="fileMgmt.mkdocsConfig.value.siteName"
         :files="fileMgmt.mdFiles.value"
         :current-file="fileMgmt.currentFilePath.value"
         :has-multiple-files="fileMgmt.mdFiles.value.length > 0 || fileMgmt.openedFiles.value.length > 1"
@@ -20,6 +21,7 @@
         @open-file="openFile"
         @switch-file="handleSwitchFile"
         @close-file="handleCloseFile"
+        @close-folder="fileMgmt.closeProject"
       />
       <div
         class="splitter sidebar-splitter"
@@ -68,6 +70,7 @@
         class="preview-pane"
         :style="previewPaneStyle"
         @preview-only="togglePreviewOnly"
+        @close-preview="showPreview = false"
         @import-folder="importFolder"
         @import-mkdocs="importMkdocs"
         @export-html="exportHTML"

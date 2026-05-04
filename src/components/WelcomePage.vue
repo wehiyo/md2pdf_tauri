@@ -111,13 +111,13 @@ function openRecent(item: RecentItem) {
   margin-bottom: 40px;
 }
 .welcome-header h1 {
-  font-size: 28px;
+  font-size: 32px;
   font-weight: 300;
   color: #1e293b;
   margin: 0 0 8px;
 }
 .welcome-header p {
-  font-size: 14px;
+  font-size: 18px;
   color: #94a3b8;
   margin: 0;
 }

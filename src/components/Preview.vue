@@ -12,6 +12,7 @@
       @navigate-back="emit('navigate-back')"
       @navigate-forward="emit('navigate-forward')"
       @open-settings="showSettings = true"
+      @close-preview="emit('close-preview')"
     />
     <div class="preview-body">
       <div class="preview-content-wrapper">
@@ -56,6 +57,7 @@ const props = defineProps<{
 
 const emit = defineEmits<{
   'preview-only': []
+  'close-preview': []
   'import-folder': []
   'import-mkdocs': []
   'export-html': []

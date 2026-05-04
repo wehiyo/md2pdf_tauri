@@ -63,6 +63,9 @@
         <div v-else class="folder-view">
           <div class="folder-header">
             <span class="folder-name">{{ folderName }}</span>
+            <button class="folder-close-btn" title="关闭" @click="$emit('close-folder')">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+            </button>
           </div>
           <div class="folder-tree">
             <FileTreeItem
@@ -187,6 +190,7 @@ interface OpenedFile {
 const props = defineProps<{
   workState: 'file' | 'folder' | 'mkdocs'
   folderPath: string
+  siteName?: string
   files: MdFile[]
   currentFile: string | null
   hasMultipleFiles: boolean
@@ -205,6 +209,7 @@ const emit = defineEmits<{
   'update-width': [width: number]
   'switch-file': [index: number]
   'close-file': [index: number]
+  'close-folder': []
 }>()
 
 // 状态
@@ -220,6 +225,7 @@ const searchHistory = ref<string[]>([])  // 最近5次搜索词
 
 // 计算属性
 const folderName = computed(() => {
+  if (props.workState === 'mkdocs') return props.siteName || 'MkDocs'
   if (!props.folderPath) return '文件列表'
   const lastSep = Math.max(props.folderPath.lastIndexOf('/'), props.folderPath.lastIndexOf('\\'))
   return lastSep >= 0 ? props.folderPath.substring(lastSep + 1) : props.folderPath
@@ -560,6 +566,9 @@ defineExpose({
 }
 
 .folder-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
   padding: 8px 12px;
   background-color: #e2e8f0;
   border-bottom: 1px solid #cbd5e1;
@@ -569,6 +578,34 @@ defineExpose({
   font-size: 12px;
   font-weight: 600;
   color: #374151;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.folder-close-btn {
+  flex-shrink: 0;
+  width: 20px;
+  height: 20px;
+  padding: 0;
+  border: none;
+  border-radius: 4px;
+  background: transparent;
+  color: #64748b;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.folder-close-btn:hover {
+  background: #cbd5e1;
+  color: #334155;
+}
+
+.folder-close-btn svg {
+  width: 14px;
+  height: 14px;
 }
 
 .folder-tree {
