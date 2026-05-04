@@ -25,6 +25,16 @@ function makePreviewRef() {
   }) as any
 }
 
+function makeEditorRef() {
+  return ref({
+    highlightSearchResults: vi.fn(() => []),
+    jumpToSearchResult: vi.fn(),
+    clearSearchHighlights: vi.fn(),
+    getSearchIndex: () => 0,
+    getSearchTotal: () => 0,
+  }) as any
+}
+
 function makeSidebarRef() {
   return ref({ updateResults: vi.fn() }) as any
 }
@@ -34,14 +44,14 @@ function makeSidebarRef() {
 describe('useSearch', () => {
   describe('globalTotalMatches', () => {
     it('空结果时应返回 0', () => {
-      const search = useSearch(ref([]), ref(null), vi.fn() as any, makePreviewRef(), makeSidebarRef())
+      const search = useSearch(ref([]), ref(null), vi.fn() as any, makePreviewRef(), makeEditorRef(), makeSidebarRef())
       expect(search.globalTotalMatches.value).toBe(0)
     })
   })
 
   describe('handleSearchClear', () => {
     it('应重置所有搜索状态', () => {
-      const search = useSearch(makeMdFiles(), ref('/a/doc1.md'), vi.fn() as any, makePreviewRef(), makeSidebarRef())
+      const search = useSearch(makeMdFiles(), ref('/a/doc1.md'), vi.fn() as any, makePreviewRef(), makeEditorRef(), makeSidebarRef())
       search.globalSearchText.value = 'test'
       search.globalSearchMode.value = 'global'
       search.globalCurrentIndex.value = 5
@@ -60,7 +70,7 @@ describe('useSearch', () => {
     it('无匹配时应更新 sidebarRef 为 0/-1', async () => {
       const previewRef = makePreviewRef()
       const sidebarRef = makeSidebarRef()
-      const search = useSearch(makeMdFiles(), ref('/a/doc1.md'), vi.fn() as any, previewRef, sidebarRef)
+      const search = useSearch(makeMdFiles(), ref('/a/doc1.md'), vi.fn() as any, previewRef, makeEditorRef(), sidebarRef)
 
       await search.handleSearch('no-match-text', 'current')
 
@@ -71,7 +81,7 @@ describe('useSearch', () => {
       const previewRef = makePreviewRef()
       previewRef.value.highlightSearchResults = vi.fn(() => ['match1', 'match2'])
       const sidebarRef = makeSidebarRef()
-      const search = useSearch(makeMdFiles(), ref('/a/doc1.md'), vi.fn() as any, previewRef, sidebarRef)
+      const search = useSearch(makeMdFiles(), ref('/a/doc1.md'), vi.fn() as any, previewRef, makeEditorRef(), sidebarRef)
 
       await search.handleSearch('text', 'current')
 

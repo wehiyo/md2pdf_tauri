@@ -191,6 +191,7 @@ const search = useSearch(
   fileMgmt.currentFilePath,
   fileMgmt.openFileFromTree,
   previewRef,
+  editorRef,
   sidebarRef,
   nav.pushNavigationState,
 )
@@ -199,6 +200,11 @@ const search = useSearch(
 
 const showPreview = ref(true)
 const previewOnlyMode = ref(false)
+
+// 搜索目标跟随预览可见性切换
+watch([showPreview, previewOnlyMode], ([sp, po]) => {
+  search.setSearchTarget(po || sp ? 'preview' : 'editor')
+}, { immediate: true })
 
 // 欢迎页面：仅在单文件模式且无打开文件时显示
 const showWelcome = computed(() =>

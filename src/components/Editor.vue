@@ -97,56 +97,113 @@ function handleClickOutside(e: MouseEvent) {
 onMounted(() => document.addEventListener('click', handleClickOutside))
 onBeforeUnmount(() => document.removeEventListener('click', handleClickOutside))
 
-// 暴露滚动容器和滚动方法
-defineExpose({
-  getScrollContainer: () => {
-    // CodeMirror 滚动容器
-    return containerRef.value?.querySelector('.cm-scroller') as HTMLElement | null
-  },
-  /**
-   * 滚动到指定行号（不使用 dispatch，避免触发工具栏消失）
-   * @param lineNumber 行号（从 0 开始）
-   */
-  scrollToLine: (lineNumber: number) => {
-    const editorInstance = mdEditorRef.value as any
-    const view = editorInstance?.getEditorView?.()
-    if (!view) return
+// ── Editor search ─────────────────────────────────────
 
-    // 确保行号在有效范围内（CodeMirror 行号从 1 开始）
-    const targetLine = Math.min(lineNumber + 1, view.state.doc.lines)
-    if (targetLine < 1) return
+  interface MatchPos {
+    line: number  // 0-based line
+    ch: number    // 0-based character in line
+    length: number
+  }
 
-    // 获取行信息
-    const lineInfo = view.state.doc.line(targetLine)
+  const editorSearchText = ref('')
+  const editorMatches = ref<MatchPos[]>([])
+  const editorMatchIndex = ref(-1)
 
-    // 获取滚动容器
-    const scroller = view.scrollDOM
-    if (!scroller) return
+  function highlightSearchResultsInEditor(text: string) {
+    clearEditorSearchHighlights()
+    editorSearchText.value = text
+    editorMatches.value = []
+    editorMatchIndex.value = -1
+    if (!text) return []
 
-    // 获取 viewState 用于测量位置
-    const viewState = (view as any).viewState
+    const content = props.modelValue
+    const lines = content.split('\n')
 
-    // 第一次：估算位置并滚动，触发 CodeMirror 渲染目标区域
-    const estimatedBlock = viewState?.lineBlockAt(lineInfo.from)
-    if (estimatedBlock) {
-      scroller.scrollTop = estimatedBlock.top - 10
+    for (let i = 0; i < lines.length; i++) {
+      const line = lines[i]
+      let col = line.indexOf(text)
+      while (col >= 0) {
+        editorMatches.value.push({ line: i, ch: col, length: text.length })
+        col = line.indexOf(text, col + 1)
+      }
     }
+    if (editorMatches.value.length > 0) editorMatchIndex.value = 0
+    return editorMatches.value
+  }
 
-    // 第二次：等待渲染完成后，获取准确位置并修正滚动
-    requestAnimationFrame(() => {
+  function selectEditorMatch(index: number) {
+    const view = (mdEditorRef.value as any)?.getEditorView?.()
+    if (!view) return
+    const m = editorMatches.value[index]
+    if (!m) return
+    // CodeMirror 行号从 1 开始
+    const line = view.state.doc.line(m.line + 1)
+    const from = line.from + m.ch
+    const to = from + m.length
+    view.dispatch({ selection: { anchor: from, head: to } })
+    // 滚动到该行
+    const viewState = (view as any).viewState
+    const block = viewState?.lineBlockAt(line.from)
+    if (block) {
+      view.scrollDOM.scrollTop = block.top - view.scrollDOM.clientHeight / 3
+    }
+  }
+
+  function clearEditorSearchHighlights() {
+    editorSearchText.value = ''
+    editorMatches.value = []
+    editorMatchIndex.value = -1
+    // 清除 CodeMirror 选区
+    const view = (mdEditorRef.value as any)?.getEditorView?.()
+    if (view) {
+      const pos = view.state.selection.main.head
+      view.dispatch({ selection: { anchor: pos } })
+    }
+  }
+
+  function jumpToEditorSearchResult(delta: number) {
+    if (editorMatches.value.length === 0) return
+    let newIndex = editorMatchIndex.value + delta
+    if (newIndex < 0) newIndex = editorMatches.value.length - 1
+    else if (newIndex >= editorMatches.value.length) newIndex = 0
+    editorMatchIndex.value = newIndex
+    selectEditorMatch(newIndex)
+  }
+
+  // ── Expose ──────────────────────────────────────────
+
+  defineExpose({
+    getScrollContainer: () => {
+      return containerRef.value?.querySelector('.cm-scroller') as HTMLElement | null
+    },
+    scrollToLine: (lineNumber: number) => {
+      const editorInstance = mdEditorRef.value as any
+      const view = editorInstance?.getEditorView?.()
+      if (!view) return
+      const targetLine = Math.min(lineNumber + 1, view.state.doc.lines)
+      if (targetLine < 1) return
+      const lineInfo = view.state.doc.line(targetLine)
+      const scroller = view.scrollDOM
+      if (!scroller) return
+      const viewState = (view as any).viewState
+      const estimatedBlock = viewState?.lineBlockAt(lineInfo.from)
+      if (estimatedBlock) scroller.scrollTop = estimatedBlock.top - 10
       requestAnimationFrame(() => {
-        // 双重 raf 确保 CodeMirror 完成渲染和测量
-        const accurateBlock = viewState?.lineBlockAt(lineInfo.from)
-        if (accurateBlock) {
-          // 只有位置有明显偏差时才修正
-          if (Math.abs(accurateBlock.top - (estimatedBlock?.top || 0)) > 5) {
+        requestAnimationFrame(() => {
+          const accurateBlock = viewState?.lineBlockAt(lineInfo.from)
+          if (accurateBlock && Math.abs(accurateBlock.top - (estimatedBlock?.top || 0)) > 5) {
             scroller.scrollTop = accurateBlock.top - 10
           }
-        }
+        })
       })
-    })
-  }
-})
+    },
+    // Search interface (mirrors Preview.vue)
+    highlightSearchResults: highlightSearchResultsInEditor,
+    clearSearchHighlights: clearEditorSearchHighlights,
+    jumpToSearchResult: jumpToEditorSearchResult,
+    getSearchIndex: () => editorMatchIndex.value,
+    getSearchTotal: () => editorMatches.value.length,
+  })
 
 const content = computed({
   get: () => props.modelValue,

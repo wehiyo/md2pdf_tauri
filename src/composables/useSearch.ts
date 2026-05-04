@@ -8,11 +8,20 @@ interface GlobalSearchResult {
   context?: string
 }
 
+interface SearchTarget {
+  highlightSearchResults: (t: string) => any[]
+  jumpToSearchResult: (d: number) => void
+  clearSearchHighlights: () => void
+  getSearchIndex: () => number
+  getSearchTotal: () => number
+}
+
 export function useSearch(
   mdFiles: Ref<MdFile[]>,
   currentFilePath: Ref<string | null>,
   openFileFromTree: (path: string, pushNav?: (path: string, anchor?: string | null) => void, pendingAnchor?: string | null) => Promise<{ success: boolean }>,
-  previewRef: Ref<{ highlightSearchResults: (t: string) => any[]; jumpToSearchResult: (d: number) => void; clearSearchHighlights: () => void; getSearchIndex: () => number; getSearchTotal: () => number } | undefined>,
+  previewRef: Ref<SearchTarget | undefined>,
+  editorRef: Ref<SearchTarget | undefined>,
   sidebarRef: Ref<{ updateResults: (t: number, i: number) => void } | undefined>,
   _pushNav?: (path: string) => void,
 ) {
@@ -77,6 +86,15 @@ export function useSearch(
     return null
   }
 
+  let visibleTarget: 'preview' | 'editor' = 'preview'
+
+  function getCurrentTarget(): SearchTarget | undefined {
+    // 预览可见时优先使用预览，否则使用编辑器
+    if (visibleTarget === 'preview' && previewRef.value) return previewRef.value
+    if (editorRef.value) return editorRef.value
+    return previewRef.value || editorRef.value
+  }
+
   async function handleSearch(text: string, mode: 'current' | 'global') {
     globalSearchMode.value = mode
     if (mode === 'global') {
@@ -85,14 +103,24 @@ export function useSearch(
       globalCurrentIndex.value = globalTotalMatches.value > 0 ? 0 : -1
       sidebarRef.value?.updateResults(globalTotalMatches.value, globalCurrentIndex.value)
     } else {
+      // 同时在预览区和编辑器搜索高亮
+      let total = 0
       if (previewRef.value) {
         const highlights = previewRef.value.highlightSearchResults(text)
-        if (highlights.length > 0) {
-          previewRef.value.jumpToSearchResult(0)
-          sidebarRef.value?.updateResults(highlights.length, 0)
-        } else {
-          sidebarRef.value?.updateResults(0, -1)
+        total = highlights.length
+      }
+      if (editorRef.value) {
+        const editorHighlights = editorRef.value.highlightSearchResults(text)
+        if (editorHighlights.length > 0 && !previewRef.value) {
+          total = editorHighlights.length
         }
+      }
+      if (total > 0) {
+        const target = getCurrentTarget()
+        target?.jumpToSearchResult(0)
+        sidebarRef.value?.updateResults(total, 0)
+      } else {
+        sidebarRef.value?.updateResults(0, -1)
       }
     }
   }
@@ -118,27 +146,32 @@ export function useSearch(
           }
         }, 300)
       } else {
-        if (previewRef.value) {
-          previewRef.value.jumpToSearchResult(direction === 'next' ? 1 : -1)
-        }
+        const t = getCurrentTarget()
+        if (t) t.jumpToSearchResult(direction === 'next' ? 1 : -1)
       }
       sidebarRef.value?.updateResults(globalTotalMatches.value, globalCurrentIndex.value)
     } else {
-      if (previewRef.value) {
-        previewRef.value.jumpToSearchResult(direction === 'prev' ? -1 : 1)
-        const currentIndex = previewRef.value.getSearchIndex()
-        const totalResults = previewRef.value.getSearchTotal()
-        sidebarRef.value?.updateResults(totalResults, currentIndex)
+      // 同时在预览和编辑器中跳转
+      if (previewRef.value) previewRef.value.jumpToSearchResult(direction === 'prev' ? -1 : 1)
+      if (editorRef.value) editorRef.value.jumpToSearchResult(direction === 'prev' ? -1 : 1)
+      const target = getCurrentTarget()
+      if (target) {
+        sidebarRef.value?.updateResults(target.getSearchTotal(), target.getSearchIndex())
       }
     }
   }
 
   function handleSearchClear() {
     if (previewRef.value) previewRef.value.clearSearchHighlights()
+    if (editorRef.value) editorRef.value.clearSearchHighlights()
     globalSearchText.value = ''
     globalSearchResults.value = []
     globalSearchMode.value = 'current'
     globalCurrentIndex.value = -1
+  }
+
+  function setSearchTarget(target: 'preview' | 'editor') {
+    visibleTarget = target
   }
 
   async function handleSearchResultSelect(path: string) {
@@ -169,5 +202,6 @@ export function useSearch(
     handleSearchJump,
     handleSearchClear,
     handleSearchResultSelect,
+    setSearchTarget,
   }
 }
