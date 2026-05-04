@@ -34,6 +34,7 @@ import { MdEditor, NormalToolbar, config } from 'md-editor-v3'
 import type { ToolbarNames } from 'md-editor-v3'
 import { writeFile, mkdir, readDir } from '@tauri-apps/plugin-fs'
 import Cropper from 'cropperjs'
+import { buildRegex, type SearchOptions } from '../composables/useSearch'
 import 'cropperjs/dist/cropper.min.css'
 import 'md-editor-v3/lib/style.css'
 
@@ -109,22 +110,27 @@ onBeforeUnmount(() => document.removeEventListener('click', handleClickOutside))
   const editorMatches = ref<MatchPos[]>([])
   const editorMatchIndex = ref(-1)
 
-  function highlightSearchResultsInEditor(text: string) {
+  function highlightSearchResultsInEditor(options: SearchOptions) {
     clearEditorSearchHighlights()
-    editorSearchText.value = text
+    editorSearchText.value = options.text
     editorMatches.value = []
     editorMatchIndex.value = -1
-    if (!text) return []
+    if (!options.text) return []
 
+    const re = buildRegex(options)
+    if (!re) return []
+
+    const regex = new RegExp(re.source, re.flags.includes('g') ? re.flags : re.flags + 'g')
     const content = props.modelValue
     const lines = content.split('\n')
 
     for (let i = 0; i < lines.length; i++) {
       const line = lines[i]
-      let col = line.indexOf(text)
-      while (col >= 0) {
-        editorMatches.value.push({ line: i, ch: col, length: text.length })
-        col = line.indexOf(text, col + 1)
+      regex.lastIndex = 0
+      let match: RegExpExecArray | null
+      while ((match = regex.exec(line)) !== null) {
+        editorMatches.value.push({ line: i, ch: match.index, length: match[0].length })
+        if (match[0].length === 0) regex.lastIndex = match.index + 1 // 防止死循环
       }
     }
     if (editorMatches.value.length > 0) editorMatchIndex.value = 0

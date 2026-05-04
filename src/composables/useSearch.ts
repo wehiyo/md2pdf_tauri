@@ -8,8 +8,34 @@ interface GlobalSearchResult {
   context?: string
 }
 
+export type SearchMode = 'case-sensitive' | 'whole-word' | 'regex'
+
+export interface SearchOptions {
+  text: string
+  mode: SearchMode
+}
+
+export function buildRegex(options: SearchOptions): RegExp | null {
+  try {
+    let pattern = options.text
+    if (options.mode === 'whole-word') {
+      pattern = `\\b${escapeRegex(options.text)}\\b`
+    } else if (options.mode === 'case-sensitive') {
+      pattern = escapeRegex(options.text)
+    }
+    // regex mode: use raw text as pattern
+    return new RegExp(pattern, options.mode === 'case-sensitive' ? 'gi' : 'gi')
+  } catch {
+    return null
+  }
+}
+
+function escapeRegex(s: string): string {
+  return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+}
+
 interface SearchTarget {
-  highlightSearchResults: (t: string) => any[]
+  highlightSearchResults: (options: SearchOptions) => any[]
   jumpToSearchResult: (d: number) => void
   clearSearchHighlights: () => void
   getSearchIndex: () => number
@@ -34,39 +60,39 @@ export function useSearch(
     return globalSearchResults.value.reduce((sum, r) => sum + r.matches, 0)
   })
 
-  function countMatches(content: string, text: string): number {
-    let count = 0
-    let index = content.indexOf(text)
-    while (index >= 0) {
-      count++
-      index = content.indexOf(text, index + text.length)
-    }
-    return count
+  function countMatches(content: string, options: SearchOptions): number {
+    const re = buildRegex(options)
+    if (!re) return 0
+    return (content.match(re) || []).length
   }
 
-  function extractContext(content: string, text: string): string {
-    const index = content.indexOf(text)
-    if (index < 0) return ''
+  function extractContext(content: string, options: SearchOptions): string {
+    const re = buildRegex(options)
+    if (!re) return ''
+    const match = re.exec(content)
+    if (!match) return ''
+    const index = match.index
+    const len = match[0].length
     const start = Math.max(0, index - 50)
-    const end = Math.min(content.length, index + text.length + 50)
+    const end = Math.min(content.length, index + len + 50)
     let context = content.substring(start, end)
     if (start > 0) context = '...' + context
     if (end < content.length) context = context + '...'
     return context.replace(/\n/g, ' ').trim()
   }
 
-  async function searchInAllFiles(text: string, files: MdFile[]): Promise<GlobalSearchResult[]> {
+  async function searchInAllFiles(options: SearchOptions, files: MdFile[]): Promise<GlobalSearchResult[]> {
     const results: GlobalSearchResult[] = []
     for (const file of files) {
       if (file.isFolder && file.children) {
-        const subResults = await searchInAllFiles(text, file.children)
+        const subResults = await searchInAllFiles(options, file.children)
         results.push(...subResults)
       } else if (file.path) {
         try {
           const [fileContent] = await invoke<[string, string]>('read_file_with_encoding', { path: file.path })
-          const matches = countMatches(fileContent, text)
+          const matches = countMatches(fileContent, options)
           if (matches > 0) {
-            const context = extractContext(fileContent, text)
+            const context = extractContext(fileContent, options)
             results.push({ path: file.path, matches, context })
           }
         } catch { /* skip unreadable files */ }
@@ -95,22 +121,25 @@ export function useSearch(
     return previewRef.value || editorRef.value
   }
 
-  async function handleSearch(text: string, mode: 'current' | 'global') {
+  const searchOptions = ref<SearchOptions>({ text: '', mode: 'case-sensitive' })
+
+  async function handleSearch(text: string, mode: 'current' | 'global', matchMode: SearchMode = 'case-sensitive') {
     globalSearchMode.value = mode
+    const options: SearchOptions = { text, mode: matchMode }
+    searchOptions.value = options
     if (mode === 'global') {
       globalSearchText.value = text
-      globalSearchResults.value = await searchInAllFiles(text, mdFiles.value)
+      globalSearchResults.value = await searchInAllFiles(options, mdFiles.value)
       globalCurrentIndex.value = globalTotalMatches.value > 0 ? 0 : -1
       sidebarRef.value?.updateResults(globalTotalMatches.value, globalCurrentIndex.value)
     } else {
-      // 同时在预览区和编辑器搜索高亮
       let total = 0
       if (previewRef.value) {
-        const highlights = previewRef.value.highlightSearchResults(text)
+        const highlights = previewRef.value.highlightSearchResults(options)
         total = highlights.length
       }
       if (editorRef.value) {
-        const editorHighlights = editorRef.value.highlightSearchResults(text)
+        const editorHighlights = editorRef.value.highlightSearchResults(options)
         if (editorHighlights.length > 0 && !previewRef.value) {
           total = editorHighlights.length
         }
@@ -140,8 +169,8 @@ export function useSearch(
       if (currentPath !== target.path) {
         await openFileFromTree(target.path)
         setTimeout(() => {
-          if (previewRef.value && globalSearchText.value) {
-            previewRef.value.highlightSearchResults(globalSearchText.value)
+          if (previewRef.value && searchOptions.value.text) {
+            previewRef.value.highlightSearchResults(searchOptions.value)
             previewRef.value.jumpToSearchResult(target.localIndex)
           }
         }, 300)
@@ -151,7 +180,6 @@ export function useSearch(
       }
       sidebarRef.value?.updateResults(globalTotalMatches.value, globalCurrentIndex.value)
     } else {
-      // 同时在预览和编辑器中跳转
       if (previewRef.value) previewRef.value.jumpToSearchResult(direction === 'prev' ? -1 : 1)
       if (editorRef.value) editorRef.value.jumpToSearchResult(direction === 'prev' ? -1 : 1)
       const target = getCurrentTarget()
@@ -184,8 +212,8 @@ export function useSearch(
     globalCurrentIndex.value = startIndex
     await nextTick()
     setTimeout(() => {
-      if (previewRef.value && globalSearchText.value) {
-        const highlights = previewRef.value.highlightSearchResults(globalSearchText.value)
+      if (previewRef.value && searchOptions.value.text) {
+        const highlights = previewRef.value.highlightSearchResults(searchOptions.value)
         if (highlights.length > 0) previewRef.value.jumpToSearchResult(0)
         sidebarRef.value?.updateResults(globalTotalMatches.value, globalCurrentIndex.value)
       }

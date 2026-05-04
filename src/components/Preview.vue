@@ -45,6 +45,7 @@ import SettingsDialog from './SettingsDialog.vue'
 import { loadConfig, saveConfig, type FontConfig } from '../composables/useConfig'
 import { loadFonts } from '../composables/useFonts'
 import { normalizePath } from '../utils/normalizePath'
+import { buildRegex, type SearchOptions } from '../composables/useSearch'
 
 const props = defineProps<{
   html: string
@@ -127,68 +128,59 @@ defineExpose({
 })
 
 // 高亮搜索结果
-function highlightSearchResults(text: string): HTMLElement[] {
-  if (!previewRef.value || !text) return []
+function highlightSearchResults(options: SearchOptions): HTMLElement[] {
+  if (!previewRef.value || !options.text) return []
 
-  // 先清除之前的高亮
   clearSearchHighlights()
+  currentSearchText.value = options.text
 
-  // 更新当前搜索文本
-  currentSearchText.value = text
+  const re = buildRegex(options)
+  if (!re) return []
+  // TreeWalker 文本搜索必须用 global flag 配合 lastIndex，重置为 0
+  const regex = new RegExp(re.source, re.flags.includes('g') ? re.flags : re.flags + 'g')
 
   const highlights: HTMLElement[] = []
-
-  // 使用 TreeWalker 遍历文本节点
   const walker = document.createTreeWalker(previewRef.value, NodeFilter.SHOW_TEXT)
   const textNodes: Text[] = []
 
-  // 先收集所有文本节点（不修改 DOM）
   while (walker.nextNode()) {
     textNodes.push(walker.currentNode as Text)
   }
 
-  // 对每个文本节点进行处理
   for (const node of textNodes) {
-    // 递归处理一个节点中的所有匹配
-    processNodeMatches(node, text, highlights)
+    processNodeMatches(node, regex, highlights)
   }
 
   searchHighlights.value = highlights
-
-  // 更新搜索索引
-  if (highlights.length > 0) {
-    currentSearchIndex.value = 0
-  } else {
-    currentSearchIndex.value = -1
-  }
+  if (highlights.length > 0) currentSearchIndex.value = 0
+  else currentSearchIndex.value = -1
 
   return highlights
 }
 
 // 递归处理单个文本节点中的所有匹配
-function processNodeMatches(node: Text, text: string, highlights: HTMLElement[]) {
+function processNodeMatches(node: Text, regex: RegExp, highlights: HTMLElement[]) {
   if (!node.parentNode) return
-
   const content = node.textContent || ''
-  const index = content.indexOf(text)
-
-  if (index < 0) return // 没有匹配
+  regex.lastIndex = 0
+  const match = regex.exec(content)
+  if (!match) return
 
   try {
-    // 分割文本节点：前部分 + 高亮部分 + 后部分
+    const index = match.index
+    const len = match[0].length
     const before = node.splitText(index)
-    const highlighted = before.splitText(text.length)
+    const highlighted = before.splitText(len)
 
-    // 创建高亮元素包裹匹配文本
     const mark = document.createElement('mark')
     mark.className = 'search-highlight'
     node.parentNode.insertBefore(mark, before)
     mark.appendChild(before)
-
     highlights.push(mark)
 
-    // 继续处理剩余文本（highlighted 节点之后的文本）
-    processNodeMatches(highlighted, text, highlights)
+    // 继续处理剩余文本（需要重置 lastIndex）
+    regex.lastIndex = 0
+    processNodeMatches(highlighted, regex, highlights)
   } catch {
     // 跳过无法处理的情况
   }

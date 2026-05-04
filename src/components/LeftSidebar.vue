@@ -49,14 +49,6 @@
               暂无打开的文件
             </div>
           </div>
-          <button class="open-file-btn" @click="$emit('open-file')">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-              <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
-              <polyline points="17 8 12 3 7 8"/>
-              <line x1="12" y1="3" x2="12" y2="15"/>
-            </svg>
-            打开文件
-          </button>
         </div>
 
         <!-- 文件夹/MkDocs 模式：显示文件树（替换，不分割显示） -->
@@ -120,6 +112,11 @@
           <select v-if="hasMultipleFiles" v-model="searchMode" class="search-mode-select">
             <option value="current">当前文件</option>
             <option value="global">全局搜索</option>
+          </select>
+          <select v-model="searchMatchMode" class="search-mode-select">
+            <option value="case-sensitive">区分大小写</option>
+            <option value="whole-word">全词匹配</option>
+            <option value="regex">正则表达式</option>
           </select>
           <span v-if="totalResults > 0" class="search-count">{{ currentIndex + 1 }}/{{ totalResults }}</span>
           <span v-else-if="searchText && hasSearched" class="search-count">无结果</span>
@@ -201,11 +198,10 @@ const props = defineProps<{
 
 const emit = defineEmits<{
   'select-file': [path: string]
-  'search': [text: string, mode: 'current' | 'global']
+  'search': [text: string, mode: 'current' | 'global', matchMode: 'case-sensitive' | 'whole-word' | 'regex']
   'search-jump': [direction: 'prev' | 'next']
   'search-clear': []
   'select-search-result': [path: string]
-  'open-file': []
   'update-width': [width: number]
   'switch-file': [index: number]
   'close-file': [index: number]
@@ -216,6 +212,7 @@ const emit = defineEmits<{
 const activeTab = ref<'files' | 'search'>('files')
 const searchText = ref('')
 const searchMode = ref<'current' | 'global'>('current')
+const searchMatchMode = ref<'case-sensitive' | 'whole-word' | 'regex'>('case-sensitive')
 const currentIndex = ref(0)
 const totalResults = ref(0)
 const hasSearched = ref(false)
@@ -235,7 +232,7 @@ const folderName = computed(() => {
 function handleSearch() {
   if (searchText.value.trim()) {
     hasSearched.value = true
-    emit('search', searchText.value.trim(), searchMode.value)
+    emit('search', searchText.value.trim(), searchMode.value, searchMatchMode.value)
     // 保存到搜索历史
     addToSearchHistory(searchText.value.trim())
     showSearchHistory.value = false
@@ -305,9 +302,9 @@ function updateResults(total: number, current: number) {
 }
 
 // 搜索模式切换时重新搜索
-watch(searchMode, () => {
+watch([searchMode, searchMatchMode], () => {
   if (searchText.value.trim() && hasSearched.value) {
-    emit('search', searchText.value.trim(), searchMode.value)
+    emit('search', searchText.value.trim(), searchMode.value, searchMatchMode.value)
   }
 })
 
@@ -488,32 +485,6 @@ defineExpose({
   height: 12px;
 }
 
-.open-file-btn {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 8px;
-  margin: 12px;
-  padding: 8px 16px;
-  border: 1px solid #e2e8f0;
-  border-radius: 6px;
-  background-color: #ffffff;
-  color: #374151;
-  font-size: 12px;
-  cursor: pointer;
-  transition: all 0.2s;
-}
-
-.open-file-btn:hover {
-  background-color: #f1f5f9;
-  border-color: #cbd5e1;
-}
-
-.open-file-btn svg {
-  width: 14px;
-  height: 14px;
-}
-
 /* 文件 Tab - 单文件模式（已废弃，保留样式以防回退） */
 .single-file-card {
   padding: 16px;
@@ -633,13 +604,14 @@ defineExpose({
 }
 
 .search-input {
-  flex: 1;
+  width: 100%;
   height: 28px;
   padding: 4px 8px;
   border: 1px solid #e2e8f0;
   border-radius: 4px;
   font-size: 12px;
   outline: none;
+  box-sizing: border-box;
 }
 
 .search-input:focus {
@@ -648,6 +620,7 @@ defineExpose({
 
 .search-input-wrapper {
   flex: 1;
+  min-width: 0;
   position: relative;
 }
 
@@ -710,12 +683,13 @@ defineExpose({
 
 .search-mode-select {
   height: 24px;
-  padding: 2px 6px;
+  padding: 2px 4px;
   border: 1px solid #e2e8f0;
   border-radius: 4px;
   font-size: 11px;
   outline: none;
   cursor: pointer;
+  max-width: 90px;
 }
 
 .search-count {
@@ -839,16 +813,6 @@ defineExpose({
 
 :root.dark .file-path {
   color: #8b8b8b;
-}
-
-:root.dark .open-file-btn {
-  background-color: #2d2d2d;
-  border-color: #404040;
-  color: #e5e5e5;
-}
-
-:root.dark .open-file-btn:hover {
-  background-color: #3d3d3d;
 }
 
 /* 多文件列表深色主题 */

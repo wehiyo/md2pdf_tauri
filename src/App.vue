@@ -18,7 +18,6 @@
         @search-jump="search.handleSearchJump"
         @search-clear="search.handleSearchClear"
         @select-search-result="search.handleSearchResultSelect"
-        @open-file="openFile"
         @switch-file="handleSwitchFile"
         @close-file="handleCloseFile"
         @close-folder="fileMgmt.closeProject"
