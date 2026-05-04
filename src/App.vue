@@ -25,7 +25,18 @@
         class="splitter sidebar-splitter"
         @mousedown="sidebarSplitter.startResize"
       />
+      <WelcomePage
+        v-if="showWelcome"
+        @new-file="newFile"
+        @open-file="openFile"
+        @import-folder="importFolder"
+        @import-mkdocs="importMkdocs"
+        @open-recent-file="openRecentFile"
+        @open-recent-folder="openRecentFolder"
+        @open-recent-mkdocs="openRecentMkdocs"
+      />
       <Editor
+        v-if="!showWelcome"
         ref="editorRef"
         v-show="!previewOnlyMode"
         v-model="fileMgmt.content.value"
@@ -39,11 +50,13 @@
         @toggle-preview="togglePreview"
       />
       <div
+        v-if="!showWelcome"
         v-show="showPreview && !previewOnlyMode"
         class="splitter"
         @mousedown="editorSplitter.startResize"
       />
       <Preview
+        v-if="!showWelcome"
         v-show="showPreview || previewOnlyMode"
         ref="previewRef"
         :html="renderedHtml"
@@ -103,6 +116,7 @@
 import { ref, computed, onMounted, onUnmounted, nextTick, watch } from 'vue'
 import Editor from './components/Editor.vue'
 import Preview from './components/Preview.vue'
+import WelcomePage from './components/WelcomePage.vue'
 import LeftSidebar from './components/LeftSidebar.vue'
 import OutlinePanel from './components/OutlinePanel.vue'
 import ExportProgress from './components/ExportProgress.vue'
@@ -182,6 +196,24 @@ const search = useSearch(
 
 const showPreview = ref(true)
 const previewOnlyMode = ref(false)
+
+// 欢迎页面：仅在单文件模式且无打开文件时显示
+const showWelcome = computed(() =>
+  fileMgmt.workState.value === 'file' && fileMgmt.openedFiles.value.length === 0
+)
+
+// 从最近记录打开
+async function openRecentFile(path: string) {
+  await fileMgmt.openFileFromPath(path, nav.pushNavigationState)
+}
+
+async function openRecentFolder(path: string) {
+  await fileMgmt.importFolderByPath(path, saveConfirm.checkAllUnsavedFiles, nav.resetNavigation, openFileFromTree)
+}
+
+async function openRecentMkdocs(path: string) {
+  await fileMgmt.importMkdocsByPath(path, saveConfirm.checkAllUnsavedFiles, nav.resetNavigation, openFileFromTree)
+}
 const editorWidth = ref(50)
 const editorSplitter = useSplitter({ value: editorWidth, min: 20, max: 80 })
 const { primaryStyle: editorPaneStyle, secondaryStyle: previewPaneStyle } =

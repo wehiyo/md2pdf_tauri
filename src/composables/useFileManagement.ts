@@ -61,6 +61,38 @@ import { extractH1TitleFromContent } from './useMkdocsExport'
 
 // ── Composable ─────────────────────────────────────────
 
+// ── Recent items ────────────────────────────────────────
+
+const RECENT_KEY = 'markrefine-recent-items'
+const MAX_RECENT = 10
+
+export interface RecentItem {
+  type: 'file' | 'folder' | 'mkdocs'
+  name: string
+  path: string
+  timestamp: number
+}
+
+export function addRecentItem(item: RecentItem) {
+  try {
+    const raw = localStorage.getItem(RECENT_KEY)
+    const items: RecentItem[] = raw ? JSON.parse(raw) : []
+    // 同名同路径的项移除旧记录，用新的时间戳替换
+    const filtered = items.filter(i => !(i.path === item.path && i.type === item.type))
+    filtered.unshift(item)
+    localStorage.setItem(RECENT_KEY, JSON.stringify(filtered.slice(0, MAX_RECENT)))
+  } catch { /* ignore */ }
+}
+
+export function getRecentItems(): RecentItem[] {
+  try {
+    const raw = localStorage.getItem(RECENT_KEY)
+    return raw ? JSON.parse(raw) : []
+  } catch { return [] }
+}
+
+// ── File management ─────────────────────────────────────
+
 export function useFileManagement() {
   const { handleError } = useErrorHandling()
 
@@ -232,6 +264,7 @@ export function useFileManagement() {
         const [text, encoding] = await invoke<[string, string]>('read_file_with_encoding', { path })
         const normalizedText = text.replace(/\r\n/g, '\n')
         addFileToList(path, normalizedText)
+        addRecentItem({ type: 'file', name: getFileName(path), path, timestamp: Date.now() })
         console.log('Opened file:', path, 'Encoding:', encoding)
       }
       const lastIndex = openedFiles.value.length - 1
@@ -242,61 +275,190 @@ export function useFileManagement() {
     }
   }
 
-  async function saveFile(): Promise<boolean> {
-    if (currentFileIndex.value < 0 || openedFiles.value.length === 0) return false
+  // 通过绝对路径打开文件（跳过文件对话框，用于最近记录）
+  async function openFileFromPath(path: string, pushNav?: (path: string) => void): Promise<void> {
     try {
-      const currentFile = openedFiles.value[currentFileIndex.value]
-      if (currentFile.path) {
-        await writeTextFile(currentFile.path, content.value)
-        openedFiles.value[currentFileIndex.value].savedContent = content.value
-        savedContent.value = content.value
-        return true
+      const [text, encoding] = await invoke<[string, string]>('read_file_with_encoding', { path })
+      const normalizedText = text.replace(/\r\n/g, '\n')
+      const existingIndex = findFileIndex(path)
+      if (existingIndex >= 0) {
+        switchToFile(existingIndex)
+      } else {
+        addFileToList(path, normalizedText)
+        const lastIndex = openedFiles.value.length - 1
+        content.value = normalizedText
+        savedContent.value = normalizedText
+        switchToFile(lastIndex)
       }
-      const filePath = await save({
+      addRecentItem({ type: 'file', name: getFileName(path), path, timestamp: Date.now() })
+      if (pushNav) pushNav(path)
+      console.log('Opened file from path:', path, 'Encoding:', encoding)
+    } catch (error) {
+      await handleError(error, '打开文件')
+    }
+  }
+
+  // 通过绝对路径导入文件夹（跳过对话框，用于最近记录）
+  async function importFolderByPath(
+    folderPath: string,
+    checkAllUnsaved?: () => Promise<boolean>,
+    resetNav?: () => void,
+    onFirstFile?: (path: string) => Promise<void>,
+  ) {
+    const canContinue = checkAllUnsaved ? await checkAllUnsaved() : true
+    if (!canContinue) return
+    try {
+      importedFolderPath.value = folderPath
+      resetNav?.()
+      openedFiles.value = []
+      currentFileIndex.value = -1
+      content.value = ''
+      savedContent.value = ''
+      currentFilePath.value = null
+      currentFileDir.value = null
+      mdFiles.value = await readFolderRecursive(folderPath)
+      workState.value = 'folder'
+      addRecentItem({ type: 'folder', name: getFileName(folderPath), path: folderPath, timestamp: Date.now() })
+      console.log('导入文件夹(路径):', folderPath, '文件数:', countMdFiles(mdFiles.value))
+      const firstFilePath = findFirstMdFilePath(mdFiles.value)
+      if (firstFilePath && onFirstFile) {
+        await onFirstFile(firstFilePath)
+      }
+    } catch (error) {
+      await handleError(error, '导入文件夹')
+    }
+  }
+
+  // 通过绝对路径导入 MkDocs（跳过对话框，用于最近记录）
+  async function importMkdocsByPath(
+    mkdocsPath: string,
+    checkAllUnsaved?: () => Promise<boolean>,
+    resetNav?: () => void,
+    onFirstFile?: (path: string) => Promise<void>,
+  ) {
+    const canContinue = checkAllUnsaved ? await checkAllUnsaved() : true
+    if (!canContinue) return
+    try {
+      // mkdocsPath 是项目根目录，需要拼接 mkdocs.yml
+      const ymlPath = mkdocsPath + '/mkdocs.yml'
+      // 也尝试 .yaml 扩展名
+      let ymlContent: string
+      try {
+        ymlContent = await readTextFile(ymlPath)
+      } catch {
+        const yamlPath = mkdocsPath + '/mkdocs.yaml'
+        ymlContent = await readTextFile(yamlPath)
+      }
+      const config = parseYaml(ymlContent) as {
+        nav?: any[]; docs_dir?: string; site_name?: string; plugins?: any
+      }
+      const siteName = config.site_name || getFileName(mkdocsPath)
+      const docsDir = config.docs_dir || 'docs'
+      const docsPath = mkdocsPath + '/' + docsDir
+
+      let coverTitle: string | undefined
+      let coverSubtitle: string | undefined
+      let author: string | undefined
+      let copyright: string | undefined
+      if (config.plugins) {
+        const withPdfConfig = Array.isArray(config.plugins)
+          ? config.plugins.find((p: any) => typeof p === 'object' && p['with-pdf'])
+          : config.plugins['with-pdf']
+        if (withPdfConfig) {
+          coverTitle = withPdfConfig.cover_title
+          coverSubtitle = withPdfConfig.cover_subtitle
+          author = withPdfConfig.author
+          copyright = withPdfConfig.copyright
+        }
+      }
+      mkdocsConfig.value = { siteName, coverTitle, coverSubtitle, author, copyright }
+
+      resetNav?.()
+      importedFolderPath.value = mkdocsPath
+      openedFiles.value = []
+      currentFileIndex.value = -1
+      content.value = ''
+      savedContent.value = ''
+      currentFilePath.value = null
+      currentFileDir.value = null
+
+      if (config.nav && Array.isArray(config.nav) && config.nav.length > 0) {
+        mdFiles.value = extractMdFilesFromNav(config.nav, docsPath)
+        await updateMdFileNamesFromH1(mdFiles.value)
+      } else {
+        mdFiles.value = []
+      }
+      workState.value = 'mkdocs'
+      addRecentItem({ type: 'mkdocs', name: siteName, path: mkdocsPath, timestamp: Date.now() })
+      console.log('导入 Mkdocs(路径):', mkdocsPath, 'docs_dir:', docsDir, '文件数:', mdFiles.value.length)
+
+      const firstFilePath = findFirstMdFilePath(mdFiles.value)
+      if (firstFilePath && onFirstFile) {
+        await onFirstFile(firstFilePath)
+      }
+    } catch (error) {
+      await handleError(error, '导入 Mkdocs')
+    }
+  }
+
+  async function saveFile(): Promise<boolean> {
+    // MkDocs 模式下从文件树直接打开的文件也在 openedFiles 中
+    const hasOpenedFile = currentFileIndex.value >= 0 && openedFiles.value.length > 0
+    const filePath = hasOpenedFile
+      ? openedFiles.value[currentFileIndex.value].path
+      : currentFilePath.value
+
+    if (!filePath) {
+      // 新建未保存文件：弹出保存对话框
+      const newPath = await save({
         filters: [{ name: 'Markdown', extensions: ['md'] }]
       })
-      if (filePath) {
-        await writeTextFile(filePath, content.value)
-        const lastSep = Math.max(filePath.lastIndexOf('/'), filePath.lastIndexOf('\\'))
-        openedFiles.value[currentFileIndex.value].path = filePath
+      if (!newPath) return false
+      return saveContentToPath(newPath)
+    }
+
+    try {
+      await writeTextFile(filePath, content.value)
+      if (hasOpenedFile) {
         openedFiles.value[currentFileIndex.value].savedContent = content.value
-        openedFiles.value[currentFileIndex.value].dir = lastSep > 0 ? filePath.substring(0, lastSep) : null
-        openedFiles.value[currentFileIndex.value].name = getFileName(filePath)
-        savedContent.value = content.value
-        currentFilePath.value = filePath
-        currentFileDir.value = lastSep > 0 ? filePath.substring(0, lastSep) : null
-        return true
       }
-      return false
+      savedContent.value = content.value
+      return true
     } catch (error) {
       await handleError(error, '保存文件')
       return false
     }
   }
 
-  async function saveFileAs(): Promise<boolean> {
-    if (currentFileIndex.value < 0 || openedFiles.value.length === 0) return false
-    try {
-      const filePath = await save({
-        filters: [{ name: 'Markdown', extensions: ['md'] }]
-      })
-      if (filePath) {
-        await writeTextFile(filePath, content.value)
-        const lastSep = Math.max(filePath.lastIndexOf('/'), filePath.lastIndexOf('\\'))
-        openedFiles.value[currentFileIndex.value].path = filePath
-        openedFiles.value[currentFileIndex.value].savedContent = content.value
-        openedFiles.value[currentFileIndex.value].dir = lastSep > 0 ? filePath.substring(0, lastSep) : null
-        openedFiles.value[currentFileIndex.value].name = getFileName(filePath)
+  function saveContentToPath(newPath: string): Promise<boolean> {
+    return (async () => {
+      try {
+        await writeTextFile(newPath, content.value)
+        const lastSep = Math.max(newPath.lastIndexOf('/'), newPath.lastIndexOf('\\'))
+        currentFilePath.value = newPath
+        currentFileDir.value = lastSep > 0 ? newPath.substring(0, lastSep) : null
         savedContent.value = content.value
-        currentFilePath.value = filePath
-        currentFileDir.value = lastSep > 0 ? filePath.substring(0, lastSep) : null
+        const hasOpenedFile = currentFileIndex.value >= 0 && openedFiles.value.length > 0
+        if (hasOpenedFile) {
+          openedFiles.value[currentFileIndex.value].path = newPath
+          openedFiles.value[currentFileIndex.value].savedContent = content.value
+          openedFiles.value[currentFileIndex.value].dir = currentFileDir.value
+          openedFiles.value[currentFileIndex.value].name = getFileName(newPath)
+        }
         return true
+      } catch (error) {
+        await handleError(error, '保存文件')
+        return false
       }
-      return false
-    } catch (error) {
-      await handleError(error, '另存为')
-      return false
-    }
+    })()
+  }
+
+  async function saveFileAs(): Promise<boolean> {
+    const filePath = await save({
+      filters: [{ name: 'Markdown', extensions: ['md'] }]
+    })
+    if (!filePath) return false
+    return saveContentToPath(filePath)
   }
 
   // ── File tree ───────────────────────────────────────
@@ -410,6 +572,7 @@ export function useFileManagement() {
         currentFileDir.value = null
         mdFiles.value = await readFolderRecursive(selected)
         workState.value = 'folder'
+        addRecentItem({ type: 'folder', name: getFileName(selected), path: selected, timestamp: Date.now() })
         console.log('导入文件夹:', selected, '文件数:', countMdFiles(mdFiles.value))
         const firstFilePath = findFirstMdFilePath(mdFiles.value)
         if (firstFilePath && onFirstFile) {
@@ -529,6 +692,7 @@ export function useFileManagement() {
       }
 
       workState.value = 'mkdocs'
+      addRecentItem({ type: 'mkdocs', name: siteName, path: mkdocsPath, timestamp: Date.now() })
       console.log('导入 Mkdocs:', selected, 'docs_dir:', docsPath, '文件数:', mdFiles.value.length)
 
       const firstFilePath = findFirstMdFilePath(mdFiles.value)
@@ -578,6 +742,9 @@ export function useFileManagement() {
     countMdFiles,
     findFirstMdFilePath,
     importFolder,
+    importFolderByPath,
+    importMkdocsByPath,
+    openFileFromPath,
     // MkDocs import
     extractMdFilesFromNav,
     updateMdFileNamesFromH1,
