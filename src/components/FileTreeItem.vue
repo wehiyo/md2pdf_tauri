@@ -55,7 +55,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref } from 'vue'
+import { ref, watch } from 'vue'
 
 interface MdFile {
   name: string
@@ -74,8 +74,28 @@ const emit = defineEmits<{
   'select': [path: string]
 }>()
 
-// 文件夹默认关闭
-const isExpanded = ref(false)
+// 文件夹默认关闭，若当前激活文件在此文件夹下则自动展开
+const isExpanded = ref(
+  props.item.isFolder && props.currentFile
+    ? isInFolder(props.item, props.currentFile)
+    : false
+)
+
+function isInFolder(folder: { path?: string; children?: any[] }, filePath: string): boolean {
+  if (!folder.children) return false
+  for (const child of folder.children) {
+    if (child.path === filePath) return true
+    if (child.isFolder && isInFolder(child, filePath)) return true
+  }
+  return false
+}
+
+// 当 currentFile 变化时（如恢复工作区），自动展开包含该文件的文件夹
+watch(() => props.currentFile, (newFile) => {
+  if (props.item.isFolder && newFile && isInFolder(props.item, newFile)) {
+    isExpanded.value = true
+  }
+})
 
 function toggleFolder() {
   isExpanded.value = !isExpanded.value

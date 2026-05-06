@@ -462,8 +462,90 @@ let windowCloseUnlisten: (() => void) | null = null
 async function handleCloseRequest() {
   const canContinue = await saveConfirm.checkAllUnsavedFiles()
   if (!canContinue) return
+  saveWorkspace()
   const appWindow = getCurrentWindow()
   await appWindow.destroy()
+}
+
+// ── Workspace persistence ──────────────────────────────
+
+const WORKSPACE_KEY = 'markrefine-workspace'
+
+interface WorkspaceState {
+  workState: 'file' | 'folder' | 'mkdocs'
+  openedFilePaths: string[]
+  activeFilePath: string | null
+  importedFolderPath: string | null
+  showPreview: boolean
+  previewOnlyMode: boolean
+  sidebarWidth: number
+  editorWidth: number
+}
+
+function saveWorkspace() {
+  try {
+    const state: WorkspaceState = {
+      workState: fileMgmt.workState.value,
+      openedFilePaths: fileMgmt.openedFiles.value
+        .map(f => f.path).filter((p): p is string => !!p),
+      activeFilePath: fileMgmt.currentFilePath.value,
+      importedFolderPath: fileMgmt.importedFolderPath.value,
+      showPreview: showPreview.value,
+      previewOnlyMode: previewOnlyMode.value,
+      sidebarWidth: sidebarWidth.value,
+      editorWidth: editorWidth.value,
+    }
+    localStorage.setItem(WORKSPACE_KEY, JSON.stringify(state))
+  } catch { /* ignore */ }
+}
+
+async function restoreWorkspace() {
+  try {
+    const raw = localStorage.getItem(WORKSPACE_KEY)
+    if (!raw) return false
+    const state: WorkspaceState = JSON.parse(raw)
+
+    // 恢复 UI 状态
+    showPreview.value = state.showPreview
+    previewOnlyMode.value = state.previewOnlyMode
+    if (state.sidebarWidth) sidebarWidth.value = state.sidebarWidth
+    if (state.editorWidth) editorWidth.value = state.editorWidth
+
+    // 恢复工作区状态
+    if (state.workState === 'folder' && state.importedFolderPath) {
+      await fileMgmt.importFolderByPath(state.importedFolderPath)
+      // 恢复上次打开的文件
+      if (state.activeFilePath) {
+        await fileMgmt.openFileFromTreeNoHistory(state.activeFilePath)
+      }
+      return true
+    }
+
+    if (state.workState === 'mkdocs' && state.importedFolderPath) {
+      await fileMgmt.importMkdocsByPath(state.importedFolderPath)
+      if (state.activeFilePath) {
+        await fileMgmt.openFileFromTreeNoHistory(state.activeFilePath)
+      }
+      return true
+    }
+
+    // 单文件模式：恢复打开的文件
+    if (state.openedFilePaths.length > 0) {
+      for (let i = 0; i < state.openedFilePaths.length; i++) {
+        await fileMgmt.openFileFromPath(state.openedFilePaths[i])
+      }
+      // 切换到上次活跃的文件
+      if (state.activeFilePath) {
+        const idx = fileMgmt.openedFiles.value.findIndex(f => f.path === state.activeFilePath)
+        if (idx >= 0) fileMgmt.switchToFile(idx)
+      }
+      return true
+    }
+    return false
+  } catch {
+    localStorage.removeItem(WORKSPACE_KEY)
+    return false
+  }
 }
 
 onMounted(async () => {
@@ -486,6 +568,9 @@ onMounted(async () => {
   } catch (e) {
     console.error('加载配置或字体失败，使用默认值:', e)
   }
+
+  // 尝试恢复上次的工作区状态
+  await restoreWorkspace()
 
   // 无论前面是否出错，都关闭 splash 显示主窗口
   try {

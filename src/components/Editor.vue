@@ -342,9 +342,7 @@ async function handleDragDropPaths(paths: string[]) {
 onMounted(async () => {
   unlistenDragDrop = await getCurrentWebview().onDragDropEvent((event) => {
     if (event.payload.type === 'drop') {
-      const { paths, position } = event.payload
-      // 转换为物理像素坐标（WebView 中的 clientX/clientY）
-      handleDragDropPaths(paths)
+      handleDragDropPaths(event.payload.paths)
     }
   })
 })

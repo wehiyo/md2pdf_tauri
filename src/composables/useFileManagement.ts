@@ -5,6 +5,7 @@ import { invoke } from '@tauri-apps/api/core'
 import { getCurrentWindow } from '@tauri-apps/api/window'
 import { parse as parseYaml } from 'yaml'
 import { useErrorHandling } from './useErrorHandling'
+import { normalizePath } from '../utils/normalizePath'
 import type { Metadata } from './useMarkdown'
 import type { OpenedFile, MdFile, WorkState, MkdocsConfig } from '../types'
 
@@ -366,22 +367,32 @@ export function useFileManagement() {
     const canContinue = checkAllUnsaved ? await checkAllUnsaved() : true
     if (!canContinue) return
     try {
-      // mkdocsPath 是项目根目录，需要拼接 mkdocs.yml
-      const ymlPath = mkdocsPath + '/mkdocs.yml'
-      // 也尝试 .yaml 扩展名
-      let ymlContent: string
-      try {
-        ymlContent = await readTextFile(ymlPath)
-      } catch {
-        const yamlPath = mkdocsPath + '/mkdocs.yaml'
-        ymlContent = await readTextFile(yamlPath)
+      // mkdocsPath 可能包含 Windows 反斜杠，统一规范化
+      const givenBase = mkdocsPath.replace(/\\/g, '/')
+
+      // 尝试从给定路径及父目录找到 mkdocs.yml（可能保存在 docs 子目录下）
+      let base = givenBase
+      let ymlContent: string | null = null
+      for (const candidate of [givenBase, givenBase + '/..']) {
+        for (const name of ['mkdocs.yml', 'mkdocs.yaml']) {
+          try {
+            const p = normalizePath(candidate + '/' + name)
+            ymlContent = await readTextFile(p)
+            // 如果是父目录找到的，base 需调整为父目录
+            base = candidate === givenBase ? givenBase : normalizePath(givenBase + '/..')
+            break
+          } catch { /* try next */ }
+        }
+        if (ymlContent) break
       }
+      if (!ymlContent) throw new Error('未找到 mkdocs.yml')
+
       const config = parseYaml(ymlContent) as {
         nav?: any[]; docs_dir?: string; site_name?: string; plugins?: any
       }
-      const siteName = config.site_name || getFileName(mkdocsPath)
+      const siteName = config.site_name || getFileName(base)
       const docsDir = config.docs_dir || 'docs'
-      const docsPath = mkdocsPath + '/' + docsDir
+      const docsPath = base + '/' + docsDir
 
       let coverTitle: string | undefined
       let coverSubtitle: string | undefined
@@ -401,7 +412,7 @@ export function useFileManagement() {
       mkdocsConfig.value = { siteName, coverTitle, coverSubtitle, author, copyright }
 
       resetNav?.()
-      importedFolderPath.value = mkdocsPath
+      importedFolderPath.value = base
       openedFiles.value = []
       currentFileIndex.value = -1
       content.value = ''
