@@ -204,6 +204,24 @@ onBeforeUnmount(() => document.removeEventListener('click', handleClickOutside))
         })
       })
     },
+    // Cursor position
+    getCursorPos: () => {
+      const view = (mdEditorRef.value as any)?.getEditorView?.()
+      if (!view) return null
+      const pos = view.state.selection.main.head
+      const line = view.state.doc.lineAt(pos)
+      return { pos, line: line.number - 1, ch: pos - line.from }
+    },
+    setCursorPos: (pos: number) => {
+      const view = (mdEditorRef.value as any)?.getEditorView?.()
+      if (view && pos >= 0) {
+        const clamped = Math.min(pos, view.state.doc.length)
+        view.dispatch({
+          selection: { anchor: clamped },
+          scrollIntoView: true
+        })
+      }
+    },
     // Search interface (mirrors Preview.vue)
     highlightSearchResults: highlightSearchResultsInEditor,
     clearSearchHighlights: clearEditorSearchHighlights,

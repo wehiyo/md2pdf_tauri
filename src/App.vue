@@ -306,6 +306,38 @@ async function applyProjectConfig() {
   await loadFonts(merged)
 }
 
+// 恢复光标位置或预览滚动位置
+async function restoreCursorPos(pos: number | null, previewRatio: number | null) {
+  // 仅预览模式：恢复预览滚动位置
+  if (previewOnlyMode.value && previewRatio != null) {
+    await nextTick()
+    await new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r)))
+    const scroller = previewRef.value?.getScrollContainer?.()
+    if (scroller) {
+      const maxScroll = scroller.scrollHeight - scroller.clientHeight
+      if (maxScroll > 0) scroller.scrollTop = previewRatio * maxScroll
+    }
+    return
+  }
+
+  // 编辑器模式：恢复光标位置，并同步预览区滚动
+  if (pos != null) {
+    await nextTick()
+    await new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r)))
+    editorRef.value?.setCursorPos?.(pos)
+
+    await nextTick()
+    await new Promise(r => setTimeout(r, 150))
+    const editorScroller = editorRef.value?.getScrollContainer?.()
+    const previewScroller = previewRef.value?.getScrollContainer?.()
+    if (editorScroller && previewScroller && editorScroller.scrollHeight > editorScroller.clientHeight) {
+      const ratio = editorScroller.scrollTop / (editorScroller.scrollHeight - editorScroller.clientHeight)
+      const previewMax = previewScroller.scrollHeight - previewScroller.clientHeight
+      if (previewMax > 0) previewScroller.scrollTop = ratio * previewMax
+    }
+  }
+}
+
 async function handleCloseFile(index: number) {
   await fileMgmt.closeFile(index, saveConfirm.checkUnsavedChanges, fileMgmt.saveFile, nav.pushNavigationState)
 }
@@ -463,12 +495,23 @@ const { startSync } = useScrollSync(editorScrollContainer, previewScrollContaine
 
 async function initScrollSync() {
   await nextTick()
-  setTimeout(() => {
+  // 等待 Editor/Preview 组件渲染完成后获取滚动容器
+  await nextTick()
+  if (editorRef.value) editorScrollContainer.value = editorRef.value.getScrollContainer()
+  if (previewRef.value) previewScrollContainer.value = previewRef.value.getScrollContainer()
+  if (editorScrollContainer.value || previewScrollContainer.value) startSync()
+}
+
+// 欢迎页关闭后编辑器才渲染，需重新初始化滚动同步
+watch(showWelcome, async (welcome) => {
+  if (!welcome) {
+    await nextTick()
+    await nextTick()
     if (editorRef.value) editorScrollContainer.value = editorRef.value.getScrollContainer()
     if (previewRef.value) previewScrollContainer.value = previewRef.value.getScrollContainer()
     startSync()
-  }, 100)
-}
+  }
+})
 
 let windowCloseUnlisten: (() => void) | null = null
 
@@ -488,6 +531,8 @@ interface WorkspaceState {
   workState: 'file' | 'folder' | 'mkdocs'
   openedFilePaths: string[]
   activeFilePath: string | null
+  cursorPos: number | null
+  previewScrollRatio: number | null
   importedFolderPath: string | null
   showPreview: boolean
   previewOnlyMode: boolean
@@ -497,11 +542,19 @@ interface WorkspaceState {
 
 function saveWorkspace() {
   try {
+    const cursorPos = editorRef.value?.getCursorPos?.()?.pos ?? null
+    let previewScrollRatio: number | null = null
+    const previewScroller = previewRef.value?.getScrollContainer?.()
+    if (previewScroller && previewScroller.scrollHeight > previewScroller.clientHeight) {
+      previewScrollRatio = previewScroller.scrollTop / (previewScroller.scrollHeight - previewScroller.clientHeight)
+    }
     const state: WorkspaceState = {
       workState: fileMgmt.workState.value,
       openedFilePaths: fileMgmt.openedFiles.value
         .map(f => f.path).filter((p): p is string => !!p),
       activeFilePath: fileMgmt.currentFilePath.value,
+      cursorPos,
+      previewScrollRatio,
       importedFolderPath: fileMgmt.importedFolderPath.value,
       showPreview: showPreview.value,
       previewOnlyMode: previewOnlyMode.value,
@@ -531,6 +584,7 @@ async function restoreWorkspace() {
       if (state.activeFilePath) {
         await fileMgmt.openFileFromTreeNoHistory(state.activeFilePath)
       }
+      await restoreCursorPos(state.cursorPos, state.previewScrollRatio)
       return true
     }
 
@@ -540,6 +594,7 @@ async function restoreWorkspace() {
       if (state.activeFilePath) {
         await fileMgmt.openFileFromTreeNoHistory(state.activeFilePath)
       }
+      await restoreCursorPos(state.cursorPos, state.previewScrollRatio)
       return true
     }
 
@@ -553,6 +608,8 @@ async function restoreWorkspace() {
         const idx = fileMgmt.openedFiles.value.findIndex(f => f.path === state.activeFilePath)
         if (idx >= 0) fileMgmt.switchToFile(idx)
       }
+      // 恢复光标位置
+      await restoreCursorPos(state.cursorPos, state.previewScrollRatio)
       return true
     }
     return false
