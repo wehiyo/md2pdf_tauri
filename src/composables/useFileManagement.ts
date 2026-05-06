@@ -76,11 +76,13 @@ export interface RecentItem {
 
 export function addRecentItem(item: RecentItem) {
   try {
+    // 统一路径分隔符，避免同一路径因 \ 和 / 差异产生重复
+    const normalizedPath = item.path.replace(/\\/g, '/')
     const raw = localStorage.getItem(RECENT_KEY)
     const items: RecentItem[] = raw ? JSON.parse(raw) : []
     // 同名同路径的项移除旧记录，用新的时间戳替换
-    const filtered = items.filter(i => !(i.path === item.path && i.type === item.type))
-    filtered.unshift(item)
+    const filtered = items.filter(i => !(i.path.replace(/\\/g, '/') === normalizedPath && i.type === item.type))
+    filtered.unshift({ ...item, path: normalizedPath })
     localStorage.setItem(RECENT_KEY, JSON.stringify(filtered.slice(0, MAX_RECENT)))
   } catch { /* ignore */ }
 }
@@ -427,8 +429,8 @@ export function useFileManagement() {
         mdFiles.value = []
       }
       workState.value = 'mkdocs'
-      addRecentItem({ type: 'mkdocs', name: siteName, path: mkdocsPath, timestamp: Date.now() })
-      console.log('导入 Mkdocs(路径):', mkdocsPath, 'docs_dir:', docsDir, '文件数:', mdFiles.value.length)
+      addRecentItem({ type: 'mkdocs', name: siteName, path: base, timestamp: Date.now() })
+      console.log('导入 Mkdocs(路径):', base, 'docs_dir:', docsDir, '文件数:', mdFiles.value.length)
 
       const firstFilePath = findFirstMdFilePath(mdFiles.value)
       if (firstFilePath && onFirstFile) {
@@ -724,10 +726,11 @@ export function useFileManagement() {
       mkdocsConfig.value = { siteName, coverTitle, coverSubtitle, author, copyright }
 
       const mkdocsPath = selected.substring(0, Math.max(selected.lastIndexOf('/'), selected.lastIndexOf('\\')))
+      const base = mkdocsPath.replace(/\\/g, '/')
       const docsDir = config.docs_dir || 'docs'
-      const docsPath = mkdocsPath + '/' + docsDir
+      const docsPath = base + '/' + docsDir
 
-      importedFolderPath.value = docsPath
+      importedFolderPath.value = base
       resetNav?.()
       openedFiles.value = []
       currentFileIndex.value = -1
@@ -744,7 +747,7 @@ export function useFileManagement() {
       }
 
       workState.value = 'mkdocs'
-      addRecentItem({ type: 'mkdocs', name: siteName, path: mkdocsPath, timestamp: Date.now() })
+      addRecentItem({ type: 'mkdocs', name: siteName, path: base, timestamp: Date.now() })
       console.log('导入 Mkdocs:', selected, 'docs_dir:', docsPath, '文件数:', mdFiles.value.length)
 
       const firstFilePath = findFirstMdFilePath(mdFiles.value)

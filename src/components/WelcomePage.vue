@@ -44,8 +44,9 @@
             </div>
             <div class="recent-info">
               <div class="recent-name">{{ item.name }}</div>
-              <div class="recent-path">{{ item.path }}</div>
+              <div class="recent-path">{{ item.path.replace(/\//g, '\\') }}</div>
             </div>
+            <button class="recent-remove" title="从列表中移除" @click.stop="removeRecent(item)">×</button>
           </div>
         </div>
       </div>
@@ -92,6 +93,11 @@ function openRecent(item: RecentItem) {
   } else {
     emit('open-recent-mkdocs', item.path)
   }
+}
+
+function removeRecent(item: RecentItem) {
+  recentItems.value = recentItems.value.filter(i => i.path !== item.path)
+  localStorage.setItem(RECENT_KEY, JSON.stringify(recentItems.value))
 }
 </script>
 
@@ -217,5 +223,28 @@ function openRecent(item: RecentItem) {
   overflow: hidden;
   text-overflow: ellipsis;
   margin-top: 1px;
+}
+.recent-remove {
+  flex-shrink: 0;
+  margin-left: auto;
+  width: 22px;
+  height: 22px;
+  padding: 0;
+  border: none;
+  border-radius: 4px;
+  background: transparent;
+  color: #94a3b8;
+  font-size: 16px;
+  line-height: 1;
+  cursor: pointer;
+  opacity: 0;
+  transition: opacity 0.15s, color 0.15s;
+}
+.recent-item:hover .recent-remove {
+  opacity: 1;
+}
+.recent-remove:hover {
+  color: #ef4444;
+  background: #fee2e2;
 }
 </style>

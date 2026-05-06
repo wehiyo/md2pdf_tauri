@@ -128,7 +128,7 @@ import type { Metadata } from './composables/useMarkdown'
 import { usePDF, getHtmlMarkdownStyles } from './composables/usePDF'
 import { useScrollSync } from './composables/useScrollSync'
 import { useErrorHandling } from './composables/useErrorHandling'
-import { loadConfig, type FontConfig } from './composables/useConfig'
+import { loadConfig, loadProjectConfig, saveProjectConfig, type FontConfig } from './composables/useConfig'
 import { loadFonts } from './composables/useFonts'
 import {
   prepareMkdocsExport,
@@ -217,10 +217,12 @@ async function openRecentFile(path: string) {
 
 async function openRecentFolder(path: string) {
   await fileMgmt.importFolderByPath(path, saveConfirm.checkAllUnsavedFiles, nav.resetNavigation, openFileFromTree)
+  await applyProjectConfig()
 }
 
 async function openRecentMkdocs(path: string) {
   await fileMgmt.importMkdocsByPath(path, saveConfirm.checkAllUnsavedFiles, nav.resetNavigation, openFileFromTree)
+  await applyProjectConfig()
 }
 const editorWidth = ref(50)
 const editorSplitter = useSplitter({ value: editorWidth, min: 20, max: 80 })
@@ -287,10 +289,21 @@ async function openFileFromTree(path: string) {
 
 async function importFolder() {
   await fileMgmt.importFolder(saveConfirm.checkAllUnsavedFiles, nav.resetNavigation, openFileFromTree)
+  await applyProjectConfig()
 }
 
 async function importMkdocs() {
   await fileMgmt.importMkdocs(saveConfirm.checkAllUnsavedFiles, nav.resetNavigation, openFileFromTree)
+  await applyProjectConfig()
+}
+
+// 加载项目级 .markrefine.json，覆盖全局设置
+async function applyProjectConfig() {
+  const projectPath = fileMgmt.importedFolderPath.value
+  if (!projectPath) return
+  const merged = await loadProjectConfig(projectPath, fontConfig.value)
+  fontConfig.value = merged
+  await loadFonts(merged)
 }
 
 async function handleCloseFile(index: number) {
@@ -514,7 +527,7 @@ async function restoreWorkspace() {
     // 恢复工作区状态
     if (state.workState === 'folder' && state.importedFolderPath) {
       await fileMgmt.importFolderByPath(state.importedFolderPath)
-      // 恢复上次打开的文件
+      await applyProjectConfig()
       if (state.activeFilePath) {
         await fileMgmt.openFileFromTreeNoHistory(state.activeFilePath)
       }
@@ -523,6 +536,7 @@ async function restoreWorkspace() {
 
     if (state.workState === 'mkdocs' && state.importedFolderPath) {
       await fileMgmt.importMkdocsByPath(state.importedFolderPath)
+      await applyProjectConfig()
       if (state.activeFilePath) {
         await fileMgmt.openFileFromTreeNoHistory(state.activeFilePath)
       }
@@ -581,6 +595,15 @@ onMounted(async () => {
 })
 
 watch(fileMgmt.windowTitle, () => fileMgmt.updateWindowTitle())
+
+// 在文件夹/MkDocs模式下，设置变更时自动保存到项目 .markrefine.json
+watch(fontConfig, async (config) => {
+  const projectPath = fileMgmt.importedFolderPath.value
+  if (!projectPath) return
+  try {
+    await saveProjectConfig(projectPath, config)
+  } catch { /* ignore */ }
+}, { deep: true })
 
 watch(renderedHtml, async () => {
   await nextTick()

@@ -253,6 +253,30 @@ export async function saveConfig(config: FontConfig): Promise<void> {
 }
 
 /**
+ * 从 MkDocs 项目目录读取 .markrefine.json，合并到当前配置（项目设置覆盖全局设置）
+ */
+export async function loadProjectConfig(projectPath: string, currentConfig: FontConfig): Promise<FontConfig> {
+  try {
+    const configPath = projectPath.replace(/\\/g, '/') + '/.markrefine.json'
+    const bytes = await readFile(configPath)
+    const text = new TextDecoder().decode(bytes)
+    const projectConfig = JSON.parse(text) as Partial<FontConfig>
+    return { ...currentConfig, ...projectConfig }
+  } catch {
+    return currentConfig
+  }
+}
+
+/**
+ * 将当前设置保存到 MkDocs 项目目录的 .markrefine.json
+ */
+export async function saveProjectConfig(projectPath: string, config: FontConfig): Promise<void> {
+  const configPath = projectPath.replace(/\\/g, '/') + '/.markrefine.json'
+  const json = JSON.stringify(config, null, 2)
+  await writeFile(configPath, new TextEncoder().encode(json))
+}
+
+/**
  * 扫描 fonts 目录下的字体文件
  */
 export async function scanFonts(): Promise<CustomFont[]> {
