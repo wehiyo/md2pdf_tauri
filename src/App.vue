@@ -2,6 +2,7 @@
   <div class="app-container" @contextmenu.prevent>
     <div class="main-content" :style="mainContentStyle">
       <LeftSidebar
+        v-if="!showWelcome"
         ref="sidebarRef"
         :work-state="fileMgmt.workState.value"
         :folder-path="fileMgmt.importedFolderPath.value || ''"
@@ -13,6 +14,7 @@
         :opened-files="fileMgmt.openedFiles.value"
         :current-file-index="fileMgmt.currentFileIndex.value"
         :style="{ width: sidebarWidth + 'px' }"
+        :width="sidebarWidth"
         @select-file="openFileFromTree"
         @search="search.handleSearch"
         @search-jump="search.handleSearchJump"
@@ -21,8 +23,10 @@
         @switch-file="handleSwitchFile"
         @close-file="handleCloseFile"
         @close-folder="fileMgmt.closeProject"
+        @update-width="(w: number) => sidebarWidth = w"
       />
       <div
+        v-if="!showWelcome"
         class="splitter sidebar-splitter"
         @mousedown="sidebarSplitter.startResize"
       />
@@ -80,11 +84,11 @@
         @navigate-forward="nav.navigateForward"
         @font-config-change="handleFontConfigChange"
       />
-      <div class="splitter outline-splitter" />
+      <div v-if="!showWelcome" class="splitter outline-splitter" />
       <OutlinePanel
+        v-if="!showWelcome"
         ref="outlineRef"
         :preview-ref="previewElement"
-        class="outline-pane"
         @scroll-to-heading="handleOutlineScroll"
       />
     </div>

@@ -1,21 +1,18 @@
 <template>
-  <div class="left-sidebar" :style="{ width: sidebarWidth + 'px' }">
-    <!-- Tab 头部 -->
-    <div class="sidebar-tabs">
-      <button
-        class="tab-btn"
-        :class="{ active: activeTab === 'files' }"
-        @click="activeTab = 'files'"
-      >文件</button>
-      <button
-        class="tab-btn"
-        :class="{ active: activeTab === 'search' }"
-        @click="activeTab = 'search'"
-      >搜索</button>
+  <div class="left-sidebar" :style="{ width: (collapsed ? 36 : sidebarWidth) + 'px' }">
+    <!-- 左侧图标栏 -->
+    <div class="sidebar-icon-bar">
+      <button class="icon-btn" :class="{ active: activeTab === 'files' && !collapsed }" title="文件" @click="handleTabClick('files')">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+      </button>
+      <button class="icon-btn" :class="{ active: activeTab === 'search' && !collapsed }" title="搜索" @click="handleTabClick('search')">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+      </button>
+      <div class="icon-bar-spacer"></div>
     </div>
 
-    <!-- Tab 内容 -->
-    <div class="sidebar-content">
+    <!-- 右侧面板 -->
+    <div v-show="!collapsed" class="sidebar-panel">
       <!-- 文件 Tab -->
       <div v-show="activeTab === 'files'" class="tab-panel files-panel">
         <!-- 单文件模式：显示打开的文件列表 -->
@@ -194,6 +191,7 @@ const props = defineProps<{
   globalSearchResults: GlobalSearchResult[]
   openedFiles: OpenedFile[]
   currentFileIndex: number
+  width: number
 }>()
 
 const emit = defineEmits<{
@@ -210,13 +208,22 @@ const emit = defineEmits<{
 
 // 状态
 const activeTab = ref<'files' | 'search'>('files')
+const collapsed = ref(false)
 const searchText = ref('')
 const searchMode = ref<'current' | 'global'>('current')
 const searchMatchMode = ref<'case-sensitive' | 'whole-word' | 'regex'>('case-sensitive')
 const currentIndex = ref(0)
 const totalResults = ref(0)
 const hasSearched = ref(false)
-const sidebarWidth = ref(240)
+const sidebarWidth = ref(props.width || 240)
+const lastExpandedWidth = ref(props.width || 240)
+
+watch(() => props.width, (w) => {
+  if (w && w > 36) {
+    lastExpandedWidth.value = w
+    sidebarWidth.value = w
+  }
+})
 const showSearchHistory = ref(false)  // 显示搜索历史下拉
 const searchHistory = ref<string[]>([])  // 最近5次搜索词
 
@@ -278,6 +285,23 @@ function onBlurSearchInput() {
   }, 200)
 }
 
+function handleTabClick(tab: 'files' | 'search') {
+  if (collapsed.value) {
+    // 收起状态：展开并切换到该 tab
+    collapsed.value = false
+    sidebarWidth.value = lastExpandedWidth.value
+    emit('update-width', lastExpandedWidth.value)
+    activeTab.value = tab
+  } else if (activeTab.value === tab) {
+    // 展开状态且点击当前 tab：收起
+    collapsed.value = true
+    emit('update-width', 36)
+  } else {
+    // 展开状态且点击其他 tab：切换
+    activeTab.value = tab
+  }
+}
+
 function clearSearch() {
   searchText.value = ''
   totalResults.value = 0
@@ -323,11 +347,68 @@ defineExpose({
 <style scoped>
 .left-sidebar {
   display: flex;
-  flex-direction: column;
+  flex-direction: row;
   height: 100%;
   background-color: #f8fafc;
   border-right: 1px solid #e2e8f0;
   flex-shrink: 0;
+  overflow: hidden;
+}
+
+.sidebar-icon-bar {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  width: 36px;
+  min-width: 36px;
+  background-color: #e2e8f0;
+  padding-top: 4px;
+  gap: 2px;
+}
+
+.icon-btn {
+  width: 32px;
+  height: 32px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: none;
+  border-radius: 6px;
+  background: transparent;
+  color: #64748b;
+  cursor: pointer;
+  transition: color 0.15s, background 0.15s;
+}
+
+.icon-btn:hover {
+  color: #374151;
+  background: #cbd5e1;
+}
+
+.icon-btn.active {
+  color: #1e40af;
+  background: #f8fafc;
+}
+
+.icon-btn svg {
+  width: 18px;
+  height: 18px;
+}
+
+.icon-bar-spacer {
+  flex: 1;
+}
+
+.collapse-btn {
+  margin-bottom: 4px;
+}
+
+.sidebar-panel {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  min-width: 0;
 }
 
 .sidebar-tabs {

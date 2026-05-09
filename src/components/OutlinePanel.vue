@@ -1,22 +1,30 @@
 <template>
-  <div class="outline-panel">
-    <div class="outline-header">
-      <span>大纲</span>
+  <div class="outline-panel" :style="{ width: (collapsed ? 36 : panelWidth) + 'px' }">
+    <div v-show="!collapsed" class="outline-panel-content">
+      <div class="outline-header">
+        <span>大纲</span>
+      </div>
+      <div class="outline-content">
+        <div
+          v-for="item in outlineItems"
+          :key="item.id"
+          class="outline-item"
+          :class="'outline-level-' + item.level"
+          :title="item.rawText"
+          @click="scrollToHeading(item.id)"
+        >
+          {{ item.text }}
+        </div>
+        <div v-if="outlineItems.length === 0" class="outline-empty">
+          暂无标题
+        </div>
+      </div>
     </div>
-    <div class="outline-content">
-      <div
-        v-for="item in outlineItems"
-        :key="item.id"
-        class="outline-item"
-        :class="'outline-level-' + item.level"
-        :title="item.rawText"
-        @click="scrollToHeading(item.id)"
-      >
-        {{ item.text }}
-      </div>
-      <div v-if="outlineItems.length === 0" class="outline-empty">
-        暂无标题
-      </div>
+    <div class="outline-icon-bar">
+      <button class="outline-icon-btn" :class="{ active: !collapsed }" title="大纲" @click="handleOutlineClick">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/></svg>
+      </button>
+      <div class="outline-icon-spacer"></div>
     </div>
   </div>
 </template>
@@ -37,9 +45,23 @@ const props = defineProps<{
 
 const emit = defineEmits<{
   'scroll-to-heading': [id: string]
+  'update-width': [width: number]
 }>()
 
 const outlineItems = ref<OutlineItem[]>([])
+const collapsed = ref(false)
+const panelWidth = ref(240)
+const lastExpandedWidth = ref(240)
+
+function handleOutlineClick() {
+  collapsed.value = !collapsed.value
+  if (collapsed.value) {
+    emit('update-width', 36)
+  } else {
+    panelWidth.value = lastExpandedWidth.value
+    emit('update-width', lastExpandedWidth.value)
+  }
+}
 let previewElement: HTMLElement | null = null
 
 // 从 Preview 组件提取大纲
@@ -122,12 +144,64 @@ defineExpose({
 <style scoped>
 .outline-panel {
   display: flex;
-  flex-direction: column;
-  width: 240px;
+  flex-direction: row;
   height: 100%;
   background-color: #f8fafc;
   border-left: 1px solid #e2e8f0;
   flex-shrink: 0;
+  overflow: hidden;
+}
+
+.outline-icon-bar {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  width: 36px;
+  min-width: 36px;
+  background-color: #e2e8f0;
+  padding-top: 4px;
+  gap: 2px;
+}
+
+.outline-icon-btn {
+  width: 32px;
+  height: 32px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: none;
+  border-radius: 6px;
+  background: transparent;
+  color: #64748b;
+  cursor: pointer;
+  transition: color 0.15s, background 0.15s;
+}
+
+.outline-icon-btn:hover {
+  color: #374151;
+  background: #cbd5e1;
+}
+
+.outline-icon-btn.active {
+  color: #1e40af;
+  background: #f8fafc;
+}
+
+.outline-icon-btn svg {
+  width: 18px;
+  height: 18px;
+}
+
+.outline-icon-spacer {
+  flex: 1;
+}
+
+.outline-panel-content {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  min-width: 0;
 }
 
 .outline-header {
