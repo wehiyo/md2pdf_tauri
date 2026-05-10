@@ -1,5 +1,5 @@
 <template>
-  <div class="outline-panel" :style="{ width: (collapsed ? 36 : panelWidth) + 'px' }">
+  <div class="outline-panel" :class="{ collapsed }">
     <div v-show="!collapsed" class="outline-panel-content">
       <div class="outline-header">
         <span>大纲</span>
@@ -45,22 +45,13 @@ const props = defineProps<{
 
 const emit = defineEmits<{
   'scroll-to-heading': [id: string]
-  'update-width': [width: number]
 }>()
 
 const outlineItems = ref<OutlineItem[]>([])
 const collapsed = ref(false)
-const panelWidth = ref(240)
-const lastExpandedWidth = ref(240)
 
 function handleOutlineClick() {
   collapsed.value = !collapsed.value
-  if (collapsed.value) {
-    emit('update-width', 36)
-  } else {
-    panelWidth.value = lastExpandedWidth.value
-    emit('update-width', lastExpandedWidth.value)
-  }
 }
 let previewElement: HTMLElement | null = null
 
@@ -146,10 +137,16 @@ defineExpose({
   display: flex;
   flex-direction: row;
   height: 100%;
+  width: 240px;
   background-color: #f8fafc;
   border-left: 1px solid #e2e8f0;
   flex-shrink: 0;
   overflow: hidden;
+  transition: width 0.15s;
+}
+
+.outline-panel.collapsed {
+  width: 36px;
 }
 
 .outline-icon-bar {

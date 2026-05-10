@@ -1,5 +1,5 @@
 <template>
-  <div class="left-sidebar" :style="{ width: (collapsed ? 36 : sidebarWidth) + 'px' }">
+  <div class="left-sidebar" :class="{ collapsed }">
     <!-- 左侧图标栏 -->
     <div class="sidebar-icon-bar">
       <button class="icon-btn" :class="{ active: activeTab === 'files' && !collapsed }" title="文件" @click="handleTabClick('files')">
@@ -191,7 +191,6 @@ const props = defineProps<{
   globalSearchResults: GlobalSearchResult[]
   openedFiles: OpenedFile[]
   currentFileIndex: number
-  width: number
 }>()
 
 const emit = defineEmits<{
@@ -200,7 +199,6 @@ const emit = defineEmits<{
   'search-jump': [direction: 'prev' | 'next']
   'search-clear': []
   'select-search-result': [path: string]
-  'update-width': [width: number]
   'switch-file': [index: number]
   'close-file': [index: number]
   'close-folder': []
@@ -215,15 +213,6 @@ const searchMatchMode = ref<'case-sensitive' | 'whole-word' | 'regex'>('case-sen
 const currentIndex = ref(0)
 const totalResults = ref(0)
 const hasSearched = ref(false)
-const sidebarWidth = ref(props.width || 240)
-const lastExpandedWidth = ref(props.width || 240)
-
-watch(() => props.width, (w) => {
-  if (w && w > 36) {
-    lastExpandedWidth.value = w
-    sidebarWidth.value = w
-  }
-})
 const showSearchHistory = ref(false)  // 显示搜索历史下拉
 const searchHistory = ref<string[]>([])  // 最近5次搜索词
 
@@ -287,17 +276,11 @@ function onBlurSearchInput() {
 
 function handleTabClick(tab: 'files' | 'search') {
   if (collapsed.value) {
-    // 收起状态：展开并切换到该 tab
     collapsed.value = false
-    sidebarWidth.value = lastExpandedWidth.value
-    emit('update-width', lastExpandedWidth.value)
     activeTab.value = tab
   } else if (activeTab.value === tab) {
-    // 展开状态且点击当前 tab：收起
     collapsed.value = true
-    emit('update-width', 36)
   } else {
-    // 展开状态且点击其他 tab：切换
     activeTab.value = tab
   }
 }
@@ -349,10 +332,16 @@ defineExpose({
   display: flex;
   flex-direction: row;
   height: 100%;
+  width: 240px;
   background-color: #f8fafc;
   border-right: 1px solid #e2e8f0;
   flex-shrink: 0;
   overflow: hidden;
+  transition: width 0.15s;
+}
+
+.left-sidebar.collapsed {
+  width: 36px;
 }
 
 .sidebar-icon-bar {

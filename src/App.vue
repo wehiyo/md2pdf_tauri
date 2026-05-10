@@ -13,8 +13,6 @@
         :global-search-results="search.globalSearchResults.value"
         :opened-files="fileMgmt.openedFiles.value"
         :current-file-index="fileMgmt.currentFileIndex.value"
-        :style="{ width: sidebarWidth + 'px' }"
-        :width="sidebarWidth"
         @select-file="openFileFromTree"
         @search="search.handleSearch"
         @search-jump="search.handleSearchJump"
@@ -23,7 +21,6 @@
         @switch-file="handleSwitchFile"
         @close-file="handleCloseFile"
         @close-folder="fileMgmt.closeProject"
-        @update-width="(w: number) => sidebarWidth = w"
       />
       <div
         v-if="!showWelcome"
