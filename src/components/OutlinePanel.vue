@@ -1,28 +1,39 @@
 <template>
-  <div class="outline-panel" :class="{ collapsed }">
+  <div class="outline-panel" :class="{ collapsed, 'empty-bar': rightIcons.length === 0 }">
     <div v-show="!collapsed" class="outline-panel-content">
-      <div class="outline-header">
-        <span>大纲</span>
-      </div>
-      <div class="outline-content">
-        <div
-          v-for="item in outlineItems"
-          :key="item.id"
-          class="outline-item"
-          :class="'outline-level-' + item.level"
-          :title="item.rawText"
-          @click="scrollToHeading(item.id)"
-        >
-          {{ item.text }}
-        </div>
-        <div v-if="outlineItems.length === 0" class="outline-empty">
-          暂无标题
-        </div>
-      </div>
+      <FilesPanel v-if="rightIcons.includes('files')" v-show="activeTab === 'files'"
+        :work-state="workState || 'file'" :opened-files="openedFiles || []" :current-file-index="currentFileIndex || 0"
+        :folder-path="folderPath || ''" :site-name="siteName"
+        @switch-file="$emit('switch-file', $event)"
+        @close-file="$emit('close-file', $event)"
+        @close-folder="$emit('close-folder')"
+      />
+      <SearchPanel v-if="rightIcons.includes('search')" v-show="activeTab === 'search'"
+        :has-multiple-files="hasMultipleFiles" :global-search-results="globalSearchResults || []"
+        @search="(t,m,mm) => $emit('search', t, m, mm)"
+        @search-jump="(d) => $emit('search-jump', d)"
+        @search-clear="$emit('search-clear')"
+        @select-search-result="(p) => $emit('select-search-result', p)"
+      />
+      <OutlinePanelContent v-if="rightIcons.includes('outline')" v-show="activeTab === 'outline'"
+        :preview-element="previewRef"
+        @scroll-to-heading="(id) => scrollToHeading(id)"
+      />
     </div>
-    <div class="outline-icon-bar">
-      <button class="outline-icon-btn" :class="{ active: !collapsed }" title="大纲" @click="handleOutlineClick">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/></svg>
+    <div class="outline-icon-bar" @pointerup="onDropZone('right')">
+      <button
+        v-for="(icon, idx) in rightIcons"
+        :key="icon"
+        class="outline-icon-btn"
+        :class="{ active: activeTab === icon && !collapsed }"
+        :title="iconTitle(icon)"
+        @click="handleTabClick(icon)"
+        @pointerdown.prevent="setStartIdx(idx); startDrag($event, icon, 'right')"
+        @pointerup="onIconDrop('right', idx)"
+      >
+        <svg v-if="icon === 'outline'" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/></svg>
+        <svg v-else-if="icon === 'files'" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+        <svg v-else viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
       </button>
       <div class="outline-icon-spacer"></div>
     </div>
@@ -31,6 +42,11 @@
 
 <script setup lang="ts">
 import { ref, watch, onMounted, onUnmounted } from 'vue'
+import { useIconDrag, setStartIdx } from '../composables/useIconDrag'
+import FilesPanel from './FilesPanel.vue'
+import SearchPanel from './SearchPanel.vue'
+import OutlinePanelContent from './OutlinePanelContent.vue'
+import type { MdFile } from '../types'
 
 interface OutlineItem {
   id: string
@@ -39,20 +55,75 @@ interface OutlineItem {
   level: number
 }
 
+interface OpenedFile { path: string | null; content: string; savedContent: string; dir: string | null; name: string }
+interface GlobalSearchResult { path: string; matches: number; context?: string }
+
 const props = defineProps<{
   previewRef: HTMLElement | null
+  leftIcons: string[]
+  rightIcons: string[]
+  activeTab: string
+  workState?: string
+  folderPath?: string
+  siteName?: string
+  files?: MdFile[]
+  currentFile?: string | null
+  hasMultipleFiles?: boolean
+  globalSearchResults?: GlobalSearchResult[]
+  openedFiles?: OpenedFile[]
+  currentFileIndex?: number
 }>()
 
 const emit = defineEmits<{
   'scroll-to-heading': [id: string]
+  'move-icon': [id: string, toSide: 'left' | 'right']
+  'reorder-icons': [side: 'left' | 'right', fromIdx: number, toIdx: number]
+  'switch-file': [index: number]
+  'close-file': [index: number]
+  'close-folder': []
+  'search': [text: string, mode: string, matchMode: string]
+  'search-jump': [direction: 'prev' | 'next']
+  'search-clear': []
+  'select-search-result': [path: string]
+  'select-file': [path: string]
+  'update:active-tab': [tab: string]
 }>()
 
 const outlineItems = ref<OutlineItem[]>([])
 const collapsed = ref(false)
 
-function handleOutlineClick() {
-  collapsed.value = !collapsed.value
+const { startDrag, onDropZone, onIconDrop } = useIconDrag(
+  (icon, to) => emit('move-icon', icon, to),
+  (side, fromIdx, toIdx) => emit('reorder-icons', side, fromIdx, toIdx)
+)
+
+const iconTitle = (id: string) => ({ files: '文件', search: '搜索', outline: '大纲' }[id] || id)
+const activeTab = ref(props.activeTab || 'outline')
+
+function handleTabClick(tab: string) {
+  if (collapsed.value) {
+    collapsed.value = false
+    activeTab.value = tab
+  } else if (activeTab.value === tab) {
+    collapsed.value = true
+  } else {
+    activeTab.value = tab
+  }
+  emit('update:active-tab', activeTab.value)
 }
+
+// 图标离开时自动切换到剩余的第一个
+watch(() => [...props.rightIcons], (icons, oldIcons) => {
+  if (icons.length === 0) {
+    collapsed.value = true
+  } else {
+    if (!icons.includes(activeTab.value)) activeTab.value = icons[0]
+    if (oldIcons) {
+      const added = icons.find(i => !oldIcons.includes(i))
+      if (added) activeTab.value = added
+    }
+  }
+}, { deep: true, immediate: true })
 let previewElement: HTMLElement | null = null
 
 // 从 Preview 组件提取大纲
@@ -149,6 +220,16 @@ defineExpose({
   width: 36px;
 }
 
+.outline-panel.empty-bar, .outline-panel.collapsed.empty-bar {
+  width: 12px;
+}
+
+.outline-panel.empty-bar .outline-icon-bar {
+  width: 12px;
+  min-width: 12px;
+  padding-top: 0;
+}
+
 .outline-icon-bar {
   display: flex;
   flex-direction: column;
@@ -170,8 +251,13 @@ defineExpose({
   border-radius: 6px;
   background: transparent;
   color: #64748b;
-  cursor: pointer;
+  cursor: grab;
+  touch-action: none;
   transition: color 0.15s, background 0.15s;
+}
+
+.outline-icon-btn:active {
+  cursor: grabbing;
 }
 
 .outline-icon-btn:hover {

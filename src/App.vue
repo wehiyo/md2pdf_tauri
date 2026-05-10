@@ -13,14 +13,21 @@
         :global-search-results="search.globalSearchResults.value"
         :opened-files="fileMgmt.openedFiles.value"
         :current-file-index="fileMgmt.currentFileIndex.value"
+        :left-icons="leftIcons"
+        :right-icons="rightIcons"
+        :active-tab="leftActiveTab"
+        :preview-element="previewElement"
         @select-file="openFileFromTree"
-        @search="search.handleSearch"
+        @scroll-to-heading="handleOutlineScroll"
+        @search="(t: string, m: string, mm: string) => search.handleSearch(t, m as any, mm as any)"
         @search-jump="search.handleSearchJump"
         @search-clear="search.handleSearchClear"
         @select-search-result="search.handleSearchResultSelect"
         @switch-file="handleSwitchFile"
         @close-file="handleCloseFile"
         @close-folder="fileMgmt.closeProject"
+        @update:active-tab="(t: string) => leftActiveTab = t as IconId"
+        @move-icon="(id: string, to: 'left'|'right') => moveIcon(id, to)" @reorder-icons="(s: 'left'|'right', f: number, t: number) => reorderIcons(s, f, t)"
       />
       <div
         v-if="!showWelcome"
@@ -86,7 +93,29 @@
         v-if="!showWelcome"
         ref="outlineRef"
         :preview-ref="previewElement"
+        :left-icons="leftIcons"
+        :right-icons="rightIcons"
+        :active-tab="rightActiveTab"
+        :work-state="fileMgmt.workState.value"
+        :folder-path="fileMgmt.importedFolderPath.value || ''"
+        :site-name="fileMgmt.mkdocsConfig.value.siteName"
+        :files="fileMgmt.mdFiles.value"
+        :current-file="fileMgmt.currentFilePath.value"
+        :has-multiple-files="fileMgmt.mdFiles.value.length > 0 || fileMgmt.openedFiles.value.length > 1"
+        :global-search-results="search.globalSearchResults.value"
+        :opened-files="fileMgmt.openedFiles.value"
+        :current-file-index="fileMgmt.currentFileIndex.value"
         @scroll-to-heading="handleOutlineScroll"
+        @switch-file="handleSwitchFile"
+        @close-file="handleCloseFile"
+        @close-folder="fileMgmt.closeProject"
+        @search="(t: string, m: string, mm: string) => search.handleSearch(t, m as any, mm as any)"
+        @search-jump="search.handleSearchJump"
+        @search-clear="search.handleSearchClear"
+        @select-search-result="search.handleSearchResultSelect"
+        @select-file="openFileFromTree"
+        @update:active-tab="(t: string) => rightActiveTab = t as IconId"
+        @move-icon="(id: string, to: 'left'|'right') => moveIcon(id, to)" @reorder-icons="(s: 'left'|'right', f: number, t: number) => reorderIcons(s, f, t)"
       />
     </div>
     <ExportProgress />
@@ -173,6 +202,34 @@ const saveConfirm = useSaveConfirm(
 
 const editorRef = ref<InstanceType<typeof Editor>>()
 const previewRef = ref<InstanceType<typeof Preview>>()
+
+// 侧边栏图标拖拽：管理图标归属
+type IconId = 'files' | 'search' | 'outline'
+const leftIcons = ref<IconId[]>(['files', 'search'])
+const rightIcons = ref<IconId[]>(['outline'])
+const leftActiveTab = ref<IconId>('files')
+const rightActiveTab = ref<IconId>('outline')
+
+function moveIcon(id: string, toSide: 'left' | 'right') {
+  if (!['files', 'search', 'outline'].includes(id)) return
+  const fromList = toSide === 'left' ? rightIcons : leftIcons
+  const toList = toSide === 'left' ? leftIcons : rightIcons
+  // 确保图标不在目标侧（防止重复）
+  const toIdx = toList.value.indexOf(id as IconId)
+  if (toIdx >= 0) return
+  const fromIdx = fromList.value.indexOf(id as IconId)
+  if (fromIdx >= 0) {
+    fromList.value.splice(fromIdx, 1)
+    toList.value.push(id as IconId)
+  }
+}
+
+function reorderIcons(side: 'left' | 'right', fromIdx: number, toIdx: number) {
+  const list = side === 'left' ? leftIcons : rightIcons
+  if (fromIdx < 0 || fromIdx >= list.value.length || toIdx < 0 || toIdx >= list.value.length) return
+  const item = list.value.splice(fromIdx, 1)[0]
+  list.value.splice(toIdx, 0, item)
+}
 const sidebarRef = ref<InstanceType<typeof LeftSidebar>>()
 const outlineRef = ref<InstanceType<typeof OutlinePanel>>()
 const previewElement = ref<HTMLElement | null>(null)
@@ -192,7 +249,7 @@ const search = useSearch(
   fileMgmt.openFileFromTree,
   previewRef,
   editorRef,
-  sidebarRef,
+  sidebarRef as any,
   nav.pushNavigationState,
 )
 
@@ -539,6 +596,10 @@ interface WorkspaceState {
   previewOnlyMode: boolean
   sidebarWidth: number
   editorWidth: number
+  leftIcons: string[]
+  rightIcons: string[]
+  leftActiveTab: string
+  rightActiveTab: string
 }
 
 function saveWorkspace() {
@@ -561,6 +622,10 @@ function saveWorkspace() {
       previewOnlyMode: previewOnlyMode.value,
       sidebarWidth: sidebarWidth.value,
       editorWidth: editorWidth.value,
+      leftIcons: [...leftIcons.value],
+      rightIcons: [...rightIcons.value],
+      leftActiveTab: leftActiveTab.value,
+      rightActiveTab: rightActiveTab.value,
     }
     localStorage.setItem(WORKSPACE_KEY, JSON.stringify(state))
   } catch { /* ignore */ }
@@ -577,6 +642,13 @@ async function restoreWorkspace() {
     previewOnlyMode.value = state.previewOnlyMode
     if (state.sidebarWidth) sidebarWidth.value = state.sidebarWidth
     if (state.editorWidth) editorWidth.value = state.editorWidth
+    if (state.leftIcons?.length || state.rightIcons?.length) {
+      const valid = (i: string): i is IconId => ['files', 'search', 'outline'].includes(i)
+      leftIcons.value = (state.leftIcons || []).filter(valid) as IconId[]
+      rightIcons.value = (state.rightIcons || []).filter(valid) as IconId[]
+      if (state.leftActiveTab) leftActiveTab.value = state.leftActiveTab as IconId
+      if (state.rightActiveTab) rightActiveTab.value = state.rightActiveTab as IconId
+    }
 
     // 恢复工作区状态
     if (state.workState === 'folder' && state.importedFolderPath) {

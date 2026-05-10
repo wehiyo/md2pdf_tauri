@@ -1,164 +1,68 @@
 <template>
-  <div class="left-sidebar" :class="{ collapsed }">
+  <div class="left-sidebar" :class="{ collapsed, 'empty-bar': leftIcons.length === 0 }">
     <!-- 左侧图标栏 -->
-    <div class="sidebar-icon-bar">
-      <button class="icon-btn" :class="{ active: activeTab === 'files' && !collapsed }" title="文件" @click="handleTabClick('files')">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
-      </button>
-      <button class="icon-btn" :class="{ active: activeTab === 'search' && !collapsed }" title="搜索" @click="handleTabClick('search')">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+    <div class="sidebar-icon-bar" @pointerup="onDropZone('left')">
+      <button
+        v-for="(icon, idx) in leftIcons"
+        :key="icon"
+        class="icon-btn"
+        :class="{ active: activeTab === icon && !collapsed }"
+        :title="iconTitle(icon)"
+        @click="handleTabClick(icon)"
+        @pointerdown.prevent="setStartIdx(idx); startDrag($event, icon, 'left')"
+        @pointerup="onIconDrop('left', idx)"
+      >
+        <svg v-if="icon === 'files'" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+        <svg v-else-if="icon === 'search'" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+        <svg v-else viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/></svg>
       </button>
       <div class="icon-bar-spacer"></div>
     </div>
 
     <!-- 右侧面板 -->
     <div v-show="!collapsed" class="sidebar-panel">
-      <!-- 文件 Tab -->
-      <div v-show="activeTab === 'files'" class="tab-panel files-panel">
-        <!-- 单文件模式：显示打开的文件列表 -->
-        <div v-if="workState === 'file'" class="opened-files-view">
-          <div class="opened-files-header">
-            <span class="header-title">打开的文件</span>
-          </div>
-          <div class="opened-files-list">
-            <div
-              v-for="(file, index) in openedFiles"
-              :key="index"
-              class="opened-file-item"
-              :class="{ active: index === currentFileIndex, unsaved: file.content !== file.savedContent }"
-              :title="file.path ?? '未保存'"
-              @click="$emit('switch-file', index)"
-            >
-              <svg class="file-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
-                <polyline points="14 2 14 8 20 8"/>
-              </svg>
-              <span class="file-name">{{ file.name }}</span>
-              <span v-if="file.content !== file.savedContent" class="unsaved-mark">*</span>
-              <button class="close-btn" title="关闭" @click.stop="$emit('close-file', index)">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                  <line x1="18" y1="6" x2="6" y2="18"/>
-                  <line x1="6" y1="6" x2="18" y2="18"/>
-                </svg>
-              </button>
-            </div>
-            <div v-if="openedFiles.length === 0" class="empty-message">
-              暂无打开的文件
-            </div>
-          </div>
-        </div>
-
-        <!-- 文件夹/MkDocs 模式：显示文件树（替换，不分割显示） -->
-        <div v-else class="folder-view">
-          <div class="folder-header">
-            <span class="folder-name">{{ folderName }}</span>
-            <button class="folder-close-btn" title="关闭" @click="$emit('close-folder')">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
-            </button>
-          </div>
-          <div class="folder-tree">
-            <FileTreeItem
-              v-for="(file, index) in files"
-              :key="index"
-              :item="file"
-              :current-file="currentFile"
-              :level="0"
-              @select="$emit('select-file', $event)"
-            />
-            <div v-if="files.length === 0" class="empty-message">
-              无 Markdown 文件
-            </div>
-          </div>
-        </div>
-      </div>
-
-      <!-- 搜索 Tab -->
-      <div v-show="activeTab === 'search'" class="tab-panel search-panel">
-        <div class="search-controls">
-          <div class="search-input-wrapper">
-            <input
-              v-model="searchText"
-              type="text"
-              placeholder="搜索..."
-              class="search-input"
-              @keyup.enter="handleSearch"
-              @keyup.escape="clearSearch"
-              @focus="onFocusSearchInput"
-              @blur="onBlurSearchInput"
-            />
-            <!-- 搜索历史下拉 -->
-            <div v-if="showSearchHistory && searchHistory.length > 0" class="search-history-dropdown">
-              <div
-                v-for="item in searchHistory"
-                :key="item"
-                class="history-item"
-                @click="selectHistoryItem(item)"
-              >
-                {{ item }}
-              </div>
-            </div>
-          </div>
-          <button class="search-btn" title="搜索" @click="handleSearch">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-              <circle cx="11" cy="11" r="8"/>
-              <line x1="21" y1="21" x2="16.65" y2="16.65"/>
-            </svg>
-          </button>
-        </div>
-        <div class="search-nav">
-          <select v-if="hasMultipleFiles" v-model="searchMode" class="search-mode-select">
-            <option value="current">当前文件</option>
-            <option value="global">全局搜索</option>
-          </select>
-          <select v-model="searchMatchMode" class="search-mode-select">
-            <option value="case-sensitive">区分大小写</option>
-            <option value="whole-word">全词匹配</option>
-            <option value="regex">正则表达式</option>
-          </select>
-          <span v-if="totalResults > 0" class="search-count">{{ currentIndex + 1 }}/{{ totalResults }}</span>
-          <span v-else-if="searchText && hasSearched" class="search-count">无结果</span>
-          <button class="nav-btn" title="上一个" :disabled="totalResults === 0" @click="$emit('search-jump', 'prev')">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-              <polyline points="18 15 12 9 6 15"/>
-            </svg>
-          </button>
-          <button class="nav-btn" title="下一个" :disabled="totalResults === 0" @click="$emit('search-jump', 'next')">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-              <polyline points="6 9 12 15 18 9"/>
-            </svg>
-          </button>
-          <button class="nav-btn" title="清除搜索" :disabled="!searchText" @click="clearSearch">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-              <line x1="18" y1="6" x2="6" y2="18"/>
-              <line x1="6" y1="6" x2="18" y2="18"/>
-            </svg>
-          </button>
-        </div>
-
-        <!-- 全局搜索结果列表 -->
-        <div v-if="searchMode === 'global' && globalSearchResults.length > 0" class="search-results">
-          <div
-            v-for="result in globalSearchResults"
-            :key="result.path"
-            class="result-item"
-            @click="handleSelectResult(result)"
-          >
-            <div class="result-file-name">{{ getFileName(result.path) }}</div>
-            <div class="result-match-count">{{ result.matches }} 个匹配</div>
-            <div v-if="result.context" class="result-context">{{ result.context }}</div>
-          </div>
-        </div>
-        <div v-else-if="searchMode === 'global' && hasSearched && globalSearchResults.length === 0" class="no-results">
-          未找到匹配结果
-        </div>
-      </div>
+      <FilesPanel v-if="leftIcons.includes('files')" v-show="activeTab === 'files'"
+        :work-state="workState"
+        :opened-files="openedFiles"
+        :current-file-index="currentFileIndex"
+        :folder-path="folderPath"
+        :site-name="siteName"
+        @switch-file="$emit('switch-file', $event)"
+        @close-file="$emit('close-file', $event)"
+        @close-folder="$emit('close-folder')"
+      >
+        <template #file-tree>
+          <FileTreeItem v-for="(f, i) in files" :key="i" :item="f" :current-file="currentFile" :level="0" @select="$emit('select-file', $event)" />
+        </template>
+      </FilesPanel>
+      <SearchPanel v-if="leftIcons.includes('search')" v-show="activeTab === 'search'"
+        :has-multiple-files="hasMultipleFiles"
+        :global-search-results="globalSearchResults"
+        @search="(t,m,mm) => $emit('search', t, m, mm)"
+        @search-jump="(d) => $emit('search-jump', d)"
+        @search-clear="$emit('search-clear')"
+        @select-search-result="(p) => $emit('select-search-result', p)"
+      />
+      <OutlinePanelContent v-if="leftIcons.includes('outline')" v-show="activeTab === 'outline'"
+        :preview-element="previewElement"
+        @scroll-to-heading="$emit('scroll-to-heading', $event)"
+      />
     </div>
   </div>
+  <Teleport to="body">
+    <div class="icon-drag-ghost" :style="ghostStyle">
+      <svg viewBox="0 0 24 24" fill="none" stroke="#1e40af" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+    </div>
+  </Teleport>
 </template>
 
 <script setup lang="ts">
-import { ref, computed, watch, onMounted } from 'vue'
+import { ref, watch } from 'vue'
 import FileTreeItem from './FileTreeItem.vue'
+import FilesPanel from './FilesPanel.vue'
+import SearchPanel from './SearchPanel.vue'
+import OutlinePanelContent from './OutlinePanelContent.vue'
+import { useIconDrag, setStartIdx } from '../composables/useIconDrag'
 
 interface MdFile {
   name: string
@@ -191,90 +95,52 @@ const props = defineProps<{
   globalSearchResults: GlobalSearchResult[]
   openedFiles: OpenedFile[]
   currentFileIndex: number
+  leftIcons: string[]
+  rightIcons: string[]
+  activeTab: string
+  previewElement: HTMLElement | null
 }>()
 
 const emit = defineEmits<{
   'select-file': [path: string]
-  'search': [text: string, mode: 'current' | 'global', matchMode: 'case-sensitive' | 'whole-word' | 'regex']
+  'search': [text: string, mode: string, matchMode: string]
   'search-jump': [direction: 'prev' | 'next']
   'search-clear': []
   'select-search-result': [path: string]
   'switch-file': [index: number]
   'close-file': [index: number]
   'close-folder': []
+  'move-icon': [id: string, toSide: 'left' | 'right']
+  'reorder-icons': [side: 'left' | 'right', fromIdx: number, toIdx: number]
+  'scroll-to-heading': [id: string]
+  'update:active-tab': [tab: string]
 }>()
 
 // 状态
-const activeTab = ref<'files' | 'search'>('files')
+const activeTab = ref<string>(props.activeTab || 'files')
 const collapsed = ref(false)
-const searchText = ref('')
-const searchMode = ref<'current' | 'global'>('current')
-const searchMatchMode = ref<'case-sensitive' | 'whole-word' | 'regex'>('case-sensitive')
-const currentIndex = ref(0)
-const totalResults = ref(0)
-const hasSearched = ref(false)
-const showSearchHistory = ref(false)  // 显示搜索历史下拉
-const searchHistory = ref<string[]>([])  // 最近5次搜索词
 
-// 计算属性
-const folderName = computed(() => {
-  if (props.workState === 'mkdocs') return props.siteName || 'MkDocs'
-  if (!props.folderPath) return '文件列表'
-  const lastSep = Math.max(props.folderPath.lastIndexOf('/'), props.folderPath.lastIndexOf('\\'))
-  return lastSep >= 0 ? props.folderPath.substring(lastSep + 1) : props.folderPath
-})
-
-// 方法
-function handleSearch() {
-  if (searchText.value.trim()) {
-    hasSearched.value = true
-    emit('search', searchText.value.trim(), searchMode.value, searchMatchMode.value)
-    // 保存到搜索历史
-    addToSearchHistory(searchText.value.trim())
-    showSearchHistory.value = false
-  }
-}
-
-function addToSearchHistory(term: string) {
-  // 移除已存在的相同项
-  const filtered = searchHistory.value.filter(h => h !== term)
-  // 添加到开头，最多保留5条
-  searchHistory.value = [term, ...filtered].slice(0, 5)
-  // 保存到 localStorage
-  localStorage.setItem('markrefine-search-history', JSON.stringify(searchHistory.value))
-}
-
-function loadSearchHistory() {
-  try {
-    const saved = localStorage.getItem('markrefine-search-history')
-    if (saved) {
-      searchHistory.value = JSON.parse(saved)
+// 图标离开时自动切换到剩余的第一个
+watch(() => [...props.leftIcons], (icons, oldIcons) => {
+  if (icons.length === 0) {
+    collapsed.value = true
+  } else {
+    if (!icons.includes(activeTab.value)) activeTab.value = icons[0]
+    if (oldIcons) {
+      const added = icons.find(i => !oldIcons.includes(i))
+      if (added) activeTab.value = added
     }
-  } catch {
-    searchHistory.value = []
   }
-}
+}, { deep: true, immediate: true })
 
-function selectHistoryItem(term: string) {
-  searchText.value = term
-  showSearchHistory.value = false
-  handleSearch()
-}
+const { startDrag, onDropZone, onIconDrop, ghostStyle } = useIconDrag(
+  (icon, to) => emit('move-icon', icon, to),
+  (side, fromIdx, toIdx) => emit('reorder-icons', side, fromIdx, toIdx)
+)
 
-function onFocusSearchInput() {
-  if (searchHistory.value.length > 0) {
-    showSearchHistory.value = true
-  }
-}
+const iconTitle = (id: string) => ({ files: '文件', search: '搜索', outline: '大纲' }[id] || id)
 
-function onBlurSearchInput() {
-  // 延迟隐藏，允许点击历史项
-  setTimeout(() => {
-    showSearchHistory.value = false
-  }, 200)
-}
-
-function handleTabClick(tab: 'files' | 'search') {
+function handleTabClick(tab: string) {
   if (collapsed.value) {
     collapsed.value = false
     activeTab.value = tab
@@ -283,46 +149,12 @@ function handleTabClick(tab: 'files' | 'search') {
   } else {
     activeTab.value = tab
   }
+  emit('update:active-tab', activeTab.value)
 }
-
-function clearSearch() {
-  searchText.value = ''
-  totalResults.value = 0
-  currentIndex.value = 0
-  hasSearched.value = false
-  emit('search-clear')
-}
-
-function getFileName(path: string): string {
-  const lastSep = Math.max(path.lastIndexOf('/'), path.lastIndexOf('\\'))
-  return lastSep > 0 ? path.substring(lastSep + 1) : path
-}
-
-function handleSelectResult(result: GlobalSearchResult) {
-  emit('select-search-result', result.path)
-}
-
-// 外部更新搜索结果
-function updateResults(total: number, current: number) {
-  totalResults.value = total
-  currentIndex.value = current
-}
-
-// 搜索模式切换时重新搜索
-watch([searchMode, searchMatchMode], () => {
-  if (searchText.value.trim() && hasSearched.value) {
-    emit('search', searchText.value.trim(), searchMode.value, searchMatchMode.value)
-  }
-})
-
-// 初始化加载搜索历史
-onMounted(() => {
-  loadSearchHistory()
-})
 
 // 暴露方法
 defineExpose({
-  updateResults,
+  updateResults: (_t: number, _i: number) => {},
   switchToSearchTab: () => activeTab.value = 'search'
 })
 </script>
@@ -342,6 +174,16 @@ defineExpose({
 
 .left-sidebar.collapsed {
   width: 36px;
+}
+
+.left-sidebar.empty-bar, .left-sidebar.collapsed.empty-bar {
+  width: 12px;
+}
+
+.left-sidebar.empty-bar .sidebar-icon-bar {
+  width: 12px;
+  min-width: 12px;
+  padding-top: 0;
 }
 
 .sidebar-icon-bar {
@@ -365,8 +207,13 @@ defineExpose({
   border-radius: 6px;
   background: transparent;
   color: #64748b;
-  cursor: pointer;
+  cursor: grab;
+  touch-action: none;
   transition: color 0.15s, background 0.15s;
+}
+
+.icon-btn:active {
+  cursor: grabbing;
 }
 
 .icon-btn:hover {
@@ -971,5 +818,20 @@ defineExpose({
 
 :root.dark .no-results {
   color: #6b6b6b;
+}
+</style>
+
+<style>
+.icon-drag-ghost {
+  border-radius: 6px;
+  background: rgba(59, 130, 246, 0.15);
+  border: 1px dashed #3b82f6;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.icon-drag-ghost svg {
+  width: 20px;
+  height: 20px;
 }
 </style>
