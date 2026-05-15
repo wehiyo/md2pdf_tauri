@@ -19,14 +19,22 @@ export function useScrollSync(
   let isUserScrolling = false
 
   /**
-   * 讻录用户开始滚动
+   * 记录用户开始滚动
    */
   function onScrollStart(): void {
     isUserScrolling = true
-    // 滚动结束后重置状态
-    setTimeout(() => {
-      isUserScrolling = false
-    }, 150)
+    setTimeout(() => { isUserScrolling = false }, 150)
+  }
+
+  /**
+   * 键盘导航键也视为用户主动滚动
+   */
+  function onKeyScroll(e: KeyboardEvent): void {
+    const navKeys = ['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'PageUp', 'PageDown', 'Home', 'End', ' ']
+    if (navKeys.includes(e.key)) {
+      isUserScrolling = true
+      setTimeout(() => { isUserScrolling = false }, 150)
+    }
   }
 
   /**
@@ -113,11 +121,18 @@ export function useScrollSync(
       editorScrollContainer.value.addEventListener('scroll', syncEditorToPreview)
       editorScrollContainer.value.addEventListener('wheel', onScrollStart)
       editorScrollContainer.value.addEventListener('touchstart', onScrollStart)
+      editorScrollContainer.value.addEventListener('keydown', onKeyScroll)
     }
     if (previewScrollContainer.value) {
       previewScrollContainer.value.addEventListener('scroll', syncPreviewToEditor)
       previewScrollContainer.value.addEventListener('wheel', onScrollStart)
       previewScrollContainer.value.addEventListener('touchstart', onScrollStart)
+      previewScrollContainer.value.addEventListener('keydown', onKeyScroll)
+      // 预览区 div 不可聚焦，需设 tabindex 才能接收键盘事件
+      if (!previewScrollContainer.value.hasAttribute('tabindex')) {
+        previewScrollContainer.value.setAttribute('tabindex', '-1')
+        ;(previewScrollContainer.value as HTMLElement).style.outline = 'none'
+      }
     }
   }
 
@@ -129,11 +144,15 @@ export function useScrollSync(
       editorScrollContainer.value.removeEventListener('scroll', syncEditorToPreview)
       editorScrollContainer.value.removeEventListener('wheel', onScrollStart)
       editorScrollContainer.value.removeEventListener('touchstart', onScrollStart)
+      editorScrollContainer.value.removeEventListener('keydown', onKeyScroll)
     }
     if (previewScrollContainer.value) {
       previewScrollContainer.value.removeEventListener('scroll', syncPreviewToEditor)
       previewScrollContainer.value.removeEventListener('wheel', onScrollStart)
       previewScrollContainer.value.removeEventListener('touchstart', onScrollStart)
+      previewScrollContainer.value.removeEventListener('keydown', onKeyScroll)
+      previewScrollContainer.value.removeAttribute('tabindex')
+      ;(previewScrollContainer.value as HTMLElement).style.outline = ''
     }
   }
 
