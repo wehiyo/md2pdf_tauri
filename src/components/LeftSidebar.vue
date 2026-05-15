@@ -21,7 +21,7 @@
 
     <!-- 右侧面板 -->
     <div v-show="!collapsed" class="sidebar-panel">
-      <FilesPanel v-if="leftIcons.includes('files')" v-show="activeTab === 'files'"
+      <FilesPanel v-if="leftIcons.includes('files') && activeTab === 'files'"
         :work-state="workState"
         :opened-files="openedFiles"
         :current-file-index="currentFileIndex"
@@ -38,7 +38,7 @@
           <FileTreeItem v-for="(f, i) in files" :key="i" :item="f" :current-file="currentFile" :level="0" :is-readonly="workState === 'mkdocs'" @select="$emit('select-file', $event)" @rename-file="(old, name) => $emit('rename-file', old, name)" @delete-file="(path) => $emit('delete-file', path)" @save-as="(path) => $emit('save-as', path)" />
         </template>
       </FilesPanel>
-      <SearchPanel v-if="leftIcons.includes('search')" v-show="activeTab === 'search'"
+      <SearchPanel v-if="leftIcons.includes('search') && activeTab === 'search'"
         :has-multiple-files="hasMultipleFiles"
         :global-search-results="globalSearchResults"
         @search="(t,m,mm) => $emit('search', t, m, mm)"
@@ -46,7 +46,7 @@
         @search-clear="$emit('search-clear')"
         @select-search-result="(p) => $emit('select-search-result', p)"
       />
-      <OutlinePanelContent v-if="leftIcons.includes('outline')" v-show="activeTab === 'outline'"
+      <OutlinePanelContent v-if="leftIcons.includes('outline') && activeTab === 'outline'"
         :preview-element="previewElement"
         @scroll-to-heading="$emit('scroll-to-heading', $event)"
       />

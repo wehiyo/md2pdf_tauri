@@ -1,21 +1,21 @@
 <template>
   <div class="outline-panel" :class="{ collapsed, 'empty-bar': rightIcons.length === 0 }">
     <div v-show="!collapsed" class="outline-panel-content">
-      <FilesPanel v-if="rightIcons.includes('files')" v-show="activeTab === 'files'"
+      <FilesPanel v-if="rightIcons.includes('files') && activeTab === 'files'"
         :work-state="workState || 'file'" :opened-files="openedFiles || []" :current-file-index="currentFileIndex || 0"
         :folder-path="folderPath || ''" :site-name="siteName"
         @switch-file="$emit('switch-file', $event)"
         @close-file="$emit('close-file', $event)"
         @close-folder="$emit('close-folder')"
       />
-      <SearchPanel v-if="rightIcons.includes('search')" v-show="activeTab === 'search'"
+      <SearchPanel v-if="rightIcons.includes('search') && activeTab === 'search'"
         :has-multiple-files="hasMultipleFiles" :global-search-results="globalSearchResults || []"
         @search="(t,m,mm) => $emit('search', t, m, mm)"
         @search-jump="(d) => $emit('search-jump', d)"
         @search-clear="$emit('search-clear')"
         @select-search-result="(p) => $emit('select-search-result', p)"
       />
-      <OutlinePanelContent v-if="rightIcons.includes('outline')" v-show="activeTab === 'outline'"
+      <OutlinePanelContent v-if="rightIcons.includes('outline') && activeTab === 'outline'"
         :preview-element="previewRef"
         @scroll-to-heading="(id) => scrollToHeading(id)"
       />
