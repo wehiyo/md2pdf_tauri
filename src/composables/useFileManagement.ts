@@ -1,6 +1,6 @@
 import { ref, computed, watch } from 'vue'
 import { save, open } from '@tauri-apps/plugin-dialog'
-import { writeTextFile, readDir, readTextFile } from '@tauri-apps/plugin-fs'
+import { writeTextFile, readDir, readTextFile, rename, remove } from '@tauri-apps/plugin-fs'
 import { invoke } from '@tauri-apps/api/core'
 import { getCurrentWindow } from '@tauri-apps/api/window'
 import { parse as parseYaml } from 'yaml'
@@ -455,6 +455,105 @@ export function useFileManagement() {
     mkdocsConfig.value = { siteName: 'Documentation' }
   }
 
+  async function saveFileAsFromPath(sourcePath: string) {
+    try {
+      const filePath = await save({ filters: [{ name: 'Markdown', extensions: ['md'] }] })
+      if (!filePath) return
+      const [text] = await invoke<[string, string]>('read_file_with_encoding', { path: sourcePath })
+      await writeTextFile(filePath, text.replace(/\r\n/g, '\n'))
+      await tryRefreshTree(filePath)
+      if (importedFolderPath.value) {
+        await openFileFromTreeNoHistory(filePath)
+      } else {
+        await openFileFromPath(filePath)
+      }
+    } catch (e) {
+      await handleError(e, '另存为')
+    }
+  }
+
+  async function saveAsOpenedFile(sourcePath: string) {
+    try {
+      const filePath = await save({ filters: [{ name: 'Markdown', extensions: ['md'] }] })
+      if (!filePath) return
+      await writeTextFile(filePath, content.value)
+      if (currentFilePath.value === sourcePath) {
+        openedFiles.value[currentFileIndex.value].savedContent = content.value
+      }
+      await tryRefreshTree(filePath)
+      if (importedFolderPath.value) {
+        await openFileFromTreeNoHistory(filePath)
+      } else {
+        await openFileFromPath(filePath)
+      }
+    } catch (e) {
+      await handleError(e, '另存为')
+    }
+  }
+
+  async function tryRefreshTree(filePath: string) {
+    if (importedFolderPath.value) {
+      const fp = normalizePath(filePath.replace(/\\/g, '/'))
+      const base = normalizePath(importedFolderPath.value.replace(/\\/g, '/'))
+      if (fp.startsWith(base)) {
+        await refreshFileTree()
+      }
+    }
+  }
+
+  async function renameFile(oldPath: string, newName: string): Promise<boolean> {
+    try {
+      const oldPathFwd = oldPath.replace(/\\/g, '/')
+      const dir = oldPathFwd.substring(0, oldPathFwd.lastIndexOf('/'))
+      const newPath = normalizePath(dir + '/' + newName)
+      await rename(oldPath, newPath)
+      // 更新文件树
+      await refreshFileTree()
+      // 如果重命名的是当前打开的文件，更新路径
+      if (currentFilePath.value === oldPath) {
+        currentFilePath.value = newPath
+        addRecentItem({ type: 'file', name: newName, path: newPath, timestamp: Date.now() })
+      }
+      return true
+    } catch (e) {
+      await handleError(e, '重命名文件')
+      return false
+    }
+  }
+
+  async function deleteFile(filePath: string): Promise<boolean> {
+    try {
+      await remove(filePath)
+      // 如果删除的是当前打开的文件，关闭它
+      if (currentFilePath.value === filePath) {
+        const idx = openedFiles.value.findIndex(f => f.path === filePath)
+        if (idx >= 0) {
+          openedFiles.value.splice(idx, 1)
+          if (openedFiles.value.length === 0) {
+            currentFileIndex.value = -1; content.value = ''; savedContent.value = ''
+            currentFilePath.value = null; currentFileDir.value = null
+          } else {
+            currentFileIndex.value = Math.min(idx, openedFiles.value.length - 1)
+            switchToFile(currentFileIndex.value)
+          }
+        } else {
+          currentFilePath.value = null; content.value = ''; savedContent.value = ''
+        }
+      }
+      await refreshFileTree()
+      return true
+    } catch (e) {
+      await handleError(e, '删除文件')
+      return false
+    }
+  }
+
+  async function refreshFileTree() {
+    if (importedFolderPath.value) {
+      mdFiles.value = await readFolderRecursive(importedFolderPath.value)
+    }
+  }
+
   async function saveFile(): Promise<boolean> {
     // MkDocs 模式下从文件树直接打开的文件也在 openedFiles 中
     const hasOpenedFile = currentFileIndex.value >= 0 && openedFiles.value.length > 0
@@ -805,6 +904,10 @@ export function useFileManagement() {
     openFileFromPath,
     // Close project
     closeProject,
+    renameFile,
+    deleteFile,
+    saveFileAsFromPath,
+    saveAsOpenedFile,
     // MkDocs import
     extractMdFilesFromNav,
     updateMdFileNamesFromH1,

@@ -178,6 +178,19 @@ fn extract_font_name(path: &std::path::Path) -> Option<String> {
     None
 }
 
+/// 在 Windows 资源管理器中打开文件目录
+#[tauri::command]
+fn open_in_explorer(path: String) -> Result<(), String> {
+    #[cfg(target_os = "windows")]
+    {
+        std::process::Command::new("explorer")
+            .args(["/select,", &path])
+            .spawn()
+            .map_err(|e| format!("打开资源管理器失败: {}", e))?;
+    }
+    Ok(())
+}
+
 /// 关闭 splash 窗口并显示主窗口
 #[tauri::command]
 fn close_splash_window(app: AppHandle) -> Result<(), String> {
@@ -219,7 +232,8 @@ fn main() {
             scan_fonts_dir,
             subset_chinese_font,
             subset_font_to_base64,
-            close_splash_window
+            close_splash_window,
+            open_in_explorer
         ])
         .on_window_event(|window, event| {
             if let tauri::WindowEvent::CloseRequested { api, .. } = event {

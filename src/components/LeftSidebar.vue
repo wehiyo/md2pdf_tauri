@@ -30,9 +30,12 @@
         @switch-file="$emit('switch-file', $event)"
         @close-file="$emit('close-file', $event)"
         @close-folder="$emit('close-folder')"
+        @rename-file="(o,n) => $emit('rename-file', o, n)"
+        @delete-file="(p) => $emit('delete-file', p)"
+        @save-as-file="(p) => $emit('save-as-opened', p)"
       >
         <template #file-tree>
-          <FileTreeItem v-for="(f, i) in files" :key="i" :item="f" :current-file="currentFile" :level="0" @select="$emit('select-file', $event)" />
+          <FileTreeItem v-for="(f, i) in files" :key="i" :item="f" :current-file="currentFile" :level="0" :is-readonly="workState === 'mkdocs'" @select="$emit('select-file', $event)" @rename-file="(old, name) => $emit('rename-file', old, name)" @delete-file="(path) => $emit('delete-file', path)" @save-as="(path) => $emit('save-as', path)" />
         </template>
       </FilesPanel>
       <SearchPanel v-if="leftIcons.includes('search')" v-show="activeTab === 'search'"
@@ -114,6 +117,10 @@ const emit = defineEmits<{
   'reorder-icons': [side: 'left' | 'right', fromIdx: number, toIdx: number]
   'scroll-to-heading': [id: string]
   'update:active-tab': [tab: string]
+  'rename-file': [oldPath: string, newName: string]
+  'delete-file': [path: string]
+  'save-as': [path: string]
+  'save-as-opened': [path: string]
 }>()
 
 // 状态

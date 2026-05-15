@@ -5,7 +5,8 @@
       <div class="opened-files-list">
         <div v-for="(file, index) in openedFiles" :key="index" class="opened-file-item"
           :class="{ active: index === currentFileIndex, unsaved: file.content !== file.savedContent }"
-          :title="file.path ?? '未保存'" @click="$emit('switch-file', index)">
+          :title="file.path ?? '未保存'" @click="$emit('switch-file', index)"
+          @contextmenu.prevent="showMenu($event, file.path, file.name)">
           <svg class="file-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
           <span class="file-name">{{ file.name }}</span>
           <span v-if="file.content !== file.savedContent" class="unsaved-mark">*</span>
@@ -29,10 +30,37 @@
       </div>
     </div>
   </div>
+
+  <Teleport to="body">
+    <div v-if="ctx.menuVisible.value" class="file-context-menu" :style="ctx.menuStyle.value" @click.stop>
+      <div class="menu-item" @click="ctx.openInExplorer">在资源管理器打开</div>
+      <div class="menu-item" @click="ctx.copyFileName">复制文件名</div>
+      <div class="menu-item" @click="ctx.copyFilePath">复制文件路径</div>
+      <div class="menu-separator"></div>
+      <div class="menu-item" @click="ctx.startRename">重命名</div>
+      <div class="menu-item" @click="ctx.saveAs">另存为</div>
+      <div class="menu-separator"></div>
+      <div class="menu-item menu-danger" @click="ctx.confirmDelete">删除</div>
+    </div>
+  </Teleport>
+
+  <Teleport to="body">
+    <div v-if="ctx.renaming.value" class="rename-overlay" @click="ctx.cancelRename">
+      <div class="rename-dialog" @click.stop>
+        <div class="rename-title">重命名</div>
+        <input :value="ctx.newName.value" @input="ctx.newName.value = ($event.target as HTMLInputElement).value" class="rename-input" @keyup.enter="ctx.doRename" @keyup.escape="ctx.cancelRename" ref="ctx.renameInput" />
+        <div class="rename-btns">
+          <button class="rename-btn cancel" @click="ctx.cancelRename">取消</button>
+          <button class="rename-btn confirm" @click="ctx.doRename">确定</button>
+        </div>
+      </div>
+    </div>
+  </Teleport>
 </template>
 
 <script setup lang="ts">
 import { computed } from 'vue'
+import { useFileContextMenu } from '../composables/useFileContextMenu'
 
 interface OpenedFile { path: string | null; content: string; savedContent: string; dir: string | null; name: string }
 
@@ -44,11 +72,26 @@ const props = defineProps<{
   siteName?: string
 }>()
 
-defineEmits<{
+const emit = defineEmits<{
   'switch-file': [index: number]
   'close-file': [index: number]
   'close-folder': []
+  'rename-file': [oldPath: string, newName: string]
+  'delete-file': [path: string]
+  'save-as-file': [path: string]
 }>()
+
+// ── 右键菜单 ──────────────────────────────────────────
+
+const ctx = useFileContextMenu(
+  (old, name) => emit('rename-file', old, name),
+  (path) => emit('delete-file', path),
+  (path) => emit('save-as-file', path),
+)
+
+function showMenu(e: MouseEvent, path: string | null, name: string) {
+  ctx.showMenu(e, path, name)
+}
 
 const folderName = computed(() => {
   if (props.workState === 'mkdocs') return props.siteName || 'MkDocs'
@@ -84,4 +127,21 @@ const folderName = computed(() => {
 .folder-close-btn svg { width: 14px; height: 14px; }
 .folder-tree { flex: 1; overflow-y: auto; padding: 4px 0; }
 .empty-message { padding: 16px 12px; text-align: center; color: #9ca3af; font-size: 12px; }
+
+.file-context-menu { background: #fff; border: 1px solid #e2e8f0; border-radius: 6px; box-shadow: 0 4px 12px rgba(0,0,0,.12); min-width: 160px; padding: 4px 0; }
+.menu-item { padding: 6px 14px; font-size: 12px; color: #374151; cursor: pointer; transition: background .1s; }
+.menu-item:hover { background: #f1f5f9; }
+.menu-separator { height: 1px; background: #e2e8f0; margin: 4px 0; }
+.menu-danger { color: #dc2626; }
+.menu-danger:hover { background: #fee2e2; }
+
+.rename-overlay { position: fixed; inset: 0; background: rgba(0,0,0,.3); display: flex; align-items: center; justify-content: center; z-index: 10001; }
+.rename-dialog { background: #fff; border-radius: 8px; padding: 20px 24px; min-width: 320px; box-shadow: 0 8px 24px rgba(0,0,0,.15); }
+.rename-title { font-size: 14px; font-weight: 600; color: #1e293b; margin-bottom: 12px; }
+.rename-input { width: 100%; padding: 6px 10px; border: 1px solid #e2e8f0; border-radius: 4px; font-size: 13px; outline: none; box-sizing: border-box; }
+.rename-input:focus { border-color: #3b82f6; }
+.rename-btns { display: flex; justify-content: flex-end; gap: 8px; margin-top: 14px; }
+.rename-btn { padding: 5px 16px; border: 1px solid #e2e8f0; border-radius: 4px; font-size: 12px; cursor: pointer; background: #fff; color: #374151; }
+.rename-btn.confirm { background: #3b82f6; color: #fff; border-color: #3b82f6; }
+.rename-btn.confirm:hover { background: #2563eb; }
 </style>
