@@ -30,6 +30,8 @@
         @switch-file="handleSwitchFile"
         @close-file="handleCloseFile"
         @close-folder="fileMgmt.closeProject"
+        @add-bookmark="handleAddBookmark"
+        @jump-bookmark="handleJumpBookmark"
         @update:active-tab="(t: string) => leftActiveTab = t as IconId"
         @move-icon="(id: string, to: 'left'|'right') => moveIcon(id, to)" @reorder-icons="(s: 'left'|'right', f: number, t: number) => reorderIcons(s, f, t)"
       />
@@ -77,11 +79,13 @@
         :preview-only-mode="previewOnlyMode"
         :can-navigate-back="nav.canNavigateBack.value"
         :can-navigate-forward="nav.canNavigateForward.value"
+        :show-bookmark-btn="fileMgmt.workState.value !== 'file'"
         :md-files="fileMgmt.mdFiles.value"
         class="preview-pane"
         :style="previewPaneStyle"
         @preview-only="togglePreviewOnly"
         @close-preview="showPreview = false"
+        @add-bookmark="handleAddBookmark"
         @import-folder="importFolder"
         @import-mkdocs="importMkdocs"
         @export-html="exportHTML"
@@ -149,7 +153,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted, onUnmounted, nextTick, watch } from 'vue'
+import { ref, computed, onMounted, onUnmounted, nextTick, watch, provide } from 'vue'
 import Editor from './components/Editor.vue'
 import Preview from './components/Preview.vue'
 import WelcomePage from './components/WelcomePage.vue'
@@ -193,6 +197,8 @@ const { render, getHeadingLine } = useMarkdown()
 const { exportToPDF } = usePDF()
 const { handleError } = useErrorHandling()
 const { applyTheme } = useTheme()
+const bookmarksRefresh = ref(0)
+provide('bookmarksRefresh', bookmarksRefresh)
 
 const fileMgmt = useFileManagement()
 
@@ -210,14 +216,14 @@ const editorRef = ref<InstanceType<typeof Editor>>()
 const previewRef = ref<InstanceType<typeof Preview>>()
 
 // 侧边栏图标拖拽：管理图标归属
-type IconId = 'files' | 'search' | 'outline'
-const leftIcons = ref<IconId[]>(['files', 'search'])
+type IconId = 'files' | 'search' | 'outline' | 'bookmarks'
+const leftIcons = ref<IconId[]>(['files', 'search', 'bookmarks'])
 const rightIcons = ref<IconId[]>(['outline'])
 const leftActiveTab = ref<IconId>('files')
 const rightActiveTab = ref<IconId>('outline')
 
 function moveIcon(id: string, toSide: 'left' | 'right') {
-  if (!['files', 'search', 'outline'].includes(id)) return
+  if (!['files', 'search', 'outline', 'bookmarks'].includes(id)) return
   const fromList = toSide === 'left' ? rightIcons : leftIcons
   const toList = toSide === 'left' ? leftIcons : rightIcons
   // 确保图标不在目标侧（防止重复）
@@ -227,6 +233,101 @@ function moveIcon(id: string, toSide: 'left' | 'right') {
   if (fromIdx >= 0) {
     fromList.value.splice(fromIdx, 1)
     toList.value.push(id as IconId)
+  }
+}
+
+async function handleAddBookmark() {
+  const fp = fileMgmt.currentFilePath.value
+  if (!fp || fileMgmt.workState.value !== 'mkdocs') return
+  const projectPath = fileMgmt.importedFolderPath.value
+  if (!projectPath) return
+
+  let anchorId = ''
+  let headingText = ''
+  let scrollRatio = 0
+  const container = previewRef.value?.getScrollContainer?.()
+  if (container) {
+    const headings = container.querySelectorAll('h1[id],h2[id],h3[id],h4[id]')
+    for (const h of headings) {
+      const rect = (h as HTMLElement).getBoundingClientRect()
+      if (rect.top >= 0 && rect.top < container.clientHeight * 0.6) {
+        anchorId = h.id
+        headingText = h.textContent || ''
+        break
+      }
+    }
+    const maxScroll = container.scrollHeight - container.clientHeight
+    scrollRatio = maxScroll > 0 ? container.scrollTop / maxScroll : 0
+  }
+
+  // 从 .markrefine.json 读取已有书签
+  let config: any = {}
+  try {
+    const configPath = projectPath.replace(/\\/g, '/') + '/.markrefine.json'
+    const { readTextFile } = await import('@tauri-apps/plugin-fs')
+    const raw = await readTextFile(configPath)
+    config = JSON.parse(raw)
+  } catch { /* file doesn't exist yet */ }
+
+  const bookmarks = config.bookmarks || []
+  if (bookmarks.some((b: any) => b.filePath === fp && b.anchorId === anchorId && Math.abs((b.scrollRatio ?? 0) - (scrollRatio ?? 0)) < 0.01)) return
+  bookmarks.push({
+    id: Date.now().toString(36) + Math.random().toString(36).slice(2, 6),
+    name: headingText || fp.replace(/\\/g, '/').split('/').pop()?.replace('.md', '') || '书签',
+    filePath: fp,
+    anchorId,
+    headingText,
+    scrollRatio,
+    timestamp: Date.now(),
+  })
+  config.bookmarks = bookmarks
+  try {
+    const { writeTextFile } = await import('@tauri-apps/plugin-fs')
+    const configPath = projectPath.replace(/\\/g, '/') + '/.markrefine.json'
+    await writeTextFile(configPath, JSON.stringify(config, null, 2))
+  } catch { /* ignore */ }
+  bookmarksRefresh.value++
+}
+
+function handleJumpBookmark(item: { filePath: string; anchorId: string; scrollRatio?: number }) {
+  const sameFile = fileMgmt.currentFilePath.value === item.filePath
+  if (!sameFile) {
+    if (fileMgmt.workState.value === 'mkdocs' || fileMgmt.workState.value === 'folder') {
+      fileMgmt.openFileFromTreeNoHistory(item.filePath)
+    } else {
+      fileMgmt.openFileFromPath(item.filePath)
+    }
+  }
+  // 滚动到书签位置，并同步编辑器
+  const doScroll = () => {
+    const previewScroller = previewRef.value?.getScrollContainer?.()
+    const editorScroller = editorRef.value?.getScrollContainer?.()
+
+    if (item.scrollRatio != null) {
+      if (previewScroller) {
+        const max = previewScroller.scrollHeight - previewScroller.clientHeight
+        if (max > 0) previewScroller.scrollTop = item.scrollRatio * max
+      }
+      if (editorScroller) {
+        const emax = editorScroller.scrollHeight - editorScroller.clientHeight
+        const targetTop = emax > 0 ? item.scrollRatio * emax : 0
+        // 使用双重 rAF + target 避免内容变化后 scrollTop 被重置
+        requestAnimationFrame(() => {
+          requestAnimationFrame(() => {
+            editorScroller.scrollTop = targetTop
+          })
+        })
+      }
+      return
+    }
+    const el = document.getElementById(item.anchorId)
+    if (el) el.scrollIntoView({ behavior: 'smooth', block: 'center' })
+  }
+
+  if (sameFile) {
+    doScroll()
+  } else {
+    setTimeout(doScroll, 300)
   }
 }
 
@@ -652,10 +753,12 @@ async function restoreWorkspace() {
     if (state.sidebarWidth) sidebarWidth.value = state.sidebarWidth
     if (state.editorWidth) editorWidth.value = state.editorWidth
     if (state.leftIcons?.length || state.rightIcons?.length) {
-      const valid = (i: string): i is IconId => ['files', 'search', 'outline'].includes(i)
-      leftIcons.value = (state.leftIcons || []).filter(valid) as IconId[]
-      rightIcons.value = (state.rightIcons || []).filter(valid) as IconId[]
-      if (state.leftActiveTab) leftActiveTab.value = state.leftActiveTab as IconId
+      const valid = (i: string): i is IconId => ['files', 'search', 'outline', 'bookmarks'].includes(i)
+      const left = (state.leftIcons || ['files', 'search', 'bookmarks']).filter(valid) as IconId[]
+      if (!left.includes('bookmarks')) left.push('bookmarks')
+      leftIcons.value = left
+      rightIcons.value = (state.rightIcons || ['outline']).filter(valid).filter(i => !left.includes(i)) as IconId[]
+      if (state.leftActiveTab && valid(state.leftActiveTab)) leftActiveTab.value = state.leftActiveTab as IconId
       if (state.rightActiveTab) rightActiveTab.value = state.rightActiveTab as IconId
     }
 

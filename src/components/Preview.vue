@@ -4,6 +4,7 @@
       :preview-only-mode="previewOnlyMode"
       :can-navigate-back="canNavigateBack"
       :can-navigate-forward="canNavigateForward"
+      :show-bookmark-btn="showBookmarkBtn"
       @preview-only="emit('preview-only')"
       @import-folder="emit('import-folder')"
       @import-mkdocs="emit('import-mkdocs')"
@@ -13,6 +14,7 @@
       @navigate-forward="emit('navigate-forward')"
       @open-settings="showSettings = true"
       @close-preview="emit('close-preview')"
+      @add-bookmark="emit('add-bookmark')"
     />
     <div class="preview-body">
       <div class="preview-content-wrapper">
@@ -53,12 +55,14 @@ const props = defineProps<{
   previewOnlyMode?: boolean
   canNavigateBack?: boolean
   canNavigateForward?: boolean
+  showBookmarkBtn?: boolean
   mdFiles?: MdFile[]
 }>()
 
 const emit = defineEmits<{
   'preview-only': []
   'close-preview': []
+  'add-bookmark': []
   'import-folder': []
   'import-mkdocs': []
   'export-html': []

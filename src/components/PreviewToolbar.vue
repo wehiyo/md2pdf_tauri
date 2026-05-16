@@ -106,6 +106,9 @@
       </button>
     </div>
     <div class="toolbar-edge">
+      <button v-if="showBookmarkBtn" class="toolbar-btn" title="添加书签" @click="$emit('add-bookmark')">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z"/></svg>
+      </button>
       <button class="toolbar-btn" title="关闭预览" @click="$emit('close-preview')">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
           <line x1="18" y1="6" x2="6" y2="18"/>
@@ -129,12 +132,14 @@ const emit = defineEmits<{
   'navigate-forward': []
   'open-settings': []
   'close-preview': []
+  'add-bookmark': []
 }>()
 
 defineProps<{
   previewOnlyMode?: boolean
   canNavigateBack?: boolean
   canNavigateForward?: boolean
+  showBookmarkBtn?: boolean
 }>()
 
 const dropdownOpen = ref(false)
