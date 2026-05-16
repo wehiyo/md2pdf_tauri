@@ -265,6 +265,20 @@
               </div>
             </div>
           </div>
+          <div class="settings-item">
+            <label>预览主题</label>
+            <div class="font-select-row">
+              <div class="custom-select" @click="toggleThemeDropdown">
+                <span class="selected-font-name">{{ themeLabel }}</span>
+                <svg class="select-arrow" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 12 15 18 9"/></svg>
+              </div>
+              <div v-if="themeDropdownOpen" class="dropdown-menu">
+                <div v-for="opt in themeOptions" :key="opt.value" class="dropdown-item"
+                  :class="{ selected: localConfig.previewTheme === opt.value }"
+                  @click="selectTheme(opt.value)">{{ opt.label }}</div>
+              </div>
+            </div>
+          </div>
         </div>
 
         <!-- PDF设置 Tab -->
@@ -465,6 +479,17 @@ const lineHeightOptions = LINE_HEIGHT_OPTIONS
 const paragraphSpacingOptions = PARAGRAPH_SPACING_OPTIONS
 const previewWidthOptions = PREVIEW_WIDTH_OPTIONS
 const previewBgColorOptions = PREVIEW_BACKGROUND_COLORS
+const themeDropdownOpen = ref(false)
+const themeOptions = [
+  { value: 'default', label: '默认主题' },
+  { value: 'github', label: 'GitHub 主题' },
+  { value: 'academic', label: '学术主题' },
+  { value: 'minimal', label: '极简主题' },
+]
+const themeLabel = computed(() => themeOptions.find(o => o.value === localConfig.value.previewTheme)?.label || '默认主题')
+
+function toggleThemeDropdown() { themeDropdownOpen.value = !themeDropdownOpen.value; closeOtherDropdowns('theme') }
+function selectTheme(value: string) { localConfig.value.previewTheme = value; themeDropdownOpen.value = false }
 const pageSizeOptions = PAGE_SIZE_OPTIONS
 
 // 页边距预设自动检测：匹配预设值则显示对应标签，否则显示"自定义"
@@ -499,6 +524,7 @@ watch(() => props.config, (newConfig) => {
     paragraphSpacing: newConfig.paragraphSpacing || 1,
     previewWidth: newConfig.previewWidth || 900,
     previewBackgroundColor: newConfig.previewBackgroundColor || '#ffffff',
+    previewTheme: newConfig.previewTheme || 'default',
     pageSize: newConfig.pageSize || 'A4',
     marginTop: newConfig.marginTop || 20,
     marginBottom: newConfig.marginBottom || 20,
@@ -551,6 +577,9 @@ onMounted(() => {
   if (localConfig.value.showHeadingNumbers === undefined) {
     localConfig.value.showHeadingNumbers = true
   }
+  if (!localConfig.value.previewTheme) {
+    localConfig.value.previewTheme = 'default'
+  }
 })
 
 function handleSave() {
@@ -564,6 +593,7 @@ function handleSave() {
     paragraphSpacing: localConfig.value.paragraphSpacing || 1,
     previewWidth: localConfig.value.previewWidth || 900,
     previewBackgroundColor: localConfig.value.previewBackgroundColor || '#ffffff',
+    previewTheme: localConfig.value.previewTheme || 'default',
     pageSize: localConfig.value.pageSize || 'A4',
     marginTop: localConfig.value.marginTop || 20,
     marginBottom: localConfig.value.marginBottom || 20,
@@ -645,6 +675,7 @@ function closeAllDropdowns() {
   previewWidthDropdownOpen.value = false
   pageSizeDropdownOpen.value = false
   marginPresetDropdownOpen.value = false
+  themeDropdownOpen.value = false
 }
 
 // 检查字体是否已添加到列表
@@ -764,6 +795,7 @@ function closeOtherDropdowns(except: string) {
   if (except !== 'previewWidth') previewWidthDropdownOpen.value = false
   if (except !== 'pageSize') pageSizeDropdownOpen.value = false
   if (except !== 'marginPreset') marginPresetDropdownOpen.value = false
+  if (except !== 'theme') themeDropdownOpen.value = false
 }
 
 // 选择字体

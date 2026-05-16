@@ -1,8 +1,8 @@
 /* Markdown 基础样式 */
 .markdown-body {
   line-height: var(--line-height);
-  color: #1f2937;
-  font-family: var(--body-font);
+  color: var(--theme-body-color, #1f2937);
+  font-family: var(--theme-body-font), var(--body-font);
   font-size: var(--body-font-size);
 }
 
@@ -22,20 +22,28 @@
   margin-bottom: 0.75em;
   font-weight: 600;
   line-height: 1.25;
-  color: #111827;
+  color: var(--theme-heading-color, #111827);
   clear: both;
 }
 
 .markdown-body h1 {
-  font-size: 2em;
-  border-bottom: 2px solid #e5e7eb;
+  font-size: var(--theme-h1-size, 2em);
+  font-family: var(--theme-heading-font, inherit);
+  border-bottom: var(--theme-h1-border, 2px solid var(--theme-h-border-color, #93c5fd));
+  border-color: var(--theme-h-border-color, #93c5fd);
   padding-bottom: 0.3em;
 }
 
 .markdown-body h2 {
-  font-size: 1.5em;
-  border-bottom: 1px solid #e5e7eb;
+  font-size: var(--theme-h2-size, 1.5em);
+  font-family: var(--theme-heading-font, inherit);
+  border-bottom: var(--theme-h2-border, 1px solid var(--theme-h-border-color, #93c5fd));
+  border-color: var(--theme-h-border-color, #93c5fd);
   padding-bottom: 0.3em;
+}
+
+.markdown-body h3, .markdown-body h4, .markdown-body h5, .markdown-body h6 {
+  font-family: var(--theme-heading-font, inherit);
 }
 
 .markdown-body h3 {
@@ -61,7 +69,7 @@
 }
 
 .markdown-body a {
-  color: #3b82f6;
+  color: var(--theme-link-color, #3b82f6);
   text-decoration: none;
 }
 
@@ -131,8 +139,8 @@
   padding: 0.2em 0.4em;
   margin: 0;
   font-size: 85%;
-  background-color: #f3f4f6;
-  border-radius: 3px;
+  background-color: var(--theme-code-bg, #f3f4f6);
+  border-radius: var(--theme-code-radius, 3px);
 }
 
 .markdown-body pre {
@@ -142,8 +150,8 @@
   overflow: auto;
   font-size: 85%;
   line-height: 1.45;
-  background-color: #f3f4f6;
-  border-radius: 6px;
+  background-color: var(--theme-code-bg, #f3f4f6);
+  border-radius: var(--theme-pre-radius, 6px);
 }
 
 /* 代码高亮 */
@@ -212,8 +220,8 @@
 .markdown-body blockquote {
   margin: 0 0 1em;
   padding: 0 1em;
-  color: #6b7280;
-  border-left: 0.25em solid #e5e7eb;
+  color: var(--theme-blockquote-color, #6b7280);
+  border-left: 0.25em var(--theme-blockquote-style, solid) var(--theme-blockquote-border, #e5e7eb);
 }
 
 .markdown-body blockquote > :first-child {
@@ -247,13 +255,13 @@
 
 .markdown-body table th {
   font-weight: 600;
-  background-color: #c2dfff;
+  background-color: var(--theme-table-header-bg, #c2dfff);
 }
 
 .markdown-body table th,
 .markdown-body table td {
   padding: 0.5em 1em;
-  border: 1px solid #d1d5db;
+  border: 1px solid var(--theme-table-border, #d1d5db);
 }
 
 .markdown-body table tr {

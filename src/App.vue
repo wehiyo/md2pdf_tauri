@@ -163,6 +163,7 @@ import { usePDF, getHtmlMarkdownStyles } from './composables/usePDF'
 import { useScrollSync } from './composables/useScrollSync'
 import { useErrorHandling } from './composables/useErrorHandling'
 import { loadConfig, loadProjectConfig, saveProjectConfig, type FontConfig } from './composables/useConfig'
+import { useTheme } from './composables/useTheme'
 import { loadFonts } from './composables/useFonts'
 import {
   prepareMkdocsExport,
@@ -191,6 +192,7 @@ import highlightStyles from './assets/github.min.css?raw'
 const { render, getHeadingLine } = useMarkdown()
 const { exportToPDF } = usePDF()
 const { handleError } = useErrorHandling()
+const { applyTheme } = useTheme()
 
 const fileMgmt = useFileManagement()
 
@@ -310,7 +312,7 @@ const fontConfig = ref<FontConfig>({
   chineseFont: 'DengXian', englishFont: 'Arial', codeFont: 'SourceCodePro',
   bodyFontSize: 16, chineseCustomFonts: [], englishCustomFonts: [], codeCustomFonts: [],
   lineHeight: 1.6, paragraphSpacing: 1, previewWidth: 900,
-  previewBackgroundColor: '#ffffff', pageSize: 'A4',
+  previewBackgroundColor: '#ffffff', previewTheme: 'default', pageSize: 'A4',
   marginTop: 20, marginBottom: 20, marginLeft: 25, marginRight: 25,
   showHeadingNumbers: true
 })
@@ -326,6 +328,8 @@ const mkdocsCombinedHtml = ref('')
 const currentMetadata = fileMgmt.currentMetadata
 const renderedHtml = computed(() => {
   setShowHeadingNumbers(fontConfig.value.showHeadingNumbers !== false)
+  // eslint-disable-next-line @typescript-eslint/no-unused-expressions
+  fontConfig.value.previewTheme // 主题变化时触发重新渲染
   const result = render(fileMgmt.content.value)
   currentMetadata.value = result.metadata
   return result.html
@@ -410,6 +414,7 @@ function handleSwitchFile(index: number) {
 
 function handleFontConfigChange(config: FontConfig) {
   fontConfig.value = config
+  applyTheme(config.previewTheme || 'default')
 }
 
 function handleOutlineScroll(id: string) {
@@ -712,6 +717,7 @@ onMounted(async () => {
   try {
     const config = await loadConfig()
     fontConfig.value = config
+    applyTheme(config.previewTheme || 'default')
     await loadFonts(config)
   } catch (e) {
     console.error('加载配置或字体失败，使用默认值:', e)

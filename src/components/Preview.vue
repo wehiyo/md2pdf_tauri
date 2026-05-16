@@ -104,7 +104,8 @@ const fontConfig = ref<FontConfig>({
   marginBottom: 20,
   marginLeft: 25,
   marginRight: 25,
-  showHeadingNumbers: true
+  showHeadingNumbers: true,
+  previewTheme: 'default'
 })
 
 // 处理设置保存

@@ -57,6 +57,7 @@ export interface FontConfig {
   paragraphSpacing: number      // 段落间距（em），默认 1
   previewWidth: number          // 预览宽度（px），默认 900
   previewBackgroundColor: string  // 预览背景色，默认 '#ffffff'
+  previewTheme: string           // 预览主题，默认 'default'
   // 页面设置
   pageSize: 'A4' | 'B5' | 'Letter'  // 页面尺寸预设
   marginTop: number     // 上边距 mm
@@ -78,6 +79,7 @@ const DEFAULT_CONFIG: FontConfig = {
   paragraphSpacing: 1,
   previewWidth: 900,
   previewBackgroundColor: '#ffffff',
+  previewTheme: 'default',
   // 页面设置默认值
   pageSize: 'A4',
   marginTop: 20,
