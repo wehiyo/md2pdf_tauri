@@ -5,6 +5,10 @@
       :can-navigate-back="canNavigateBack"
       :can-navigate-forward="canNavigateForward"
       :show-bookmark-btn="showBookmarkBtn"
+      :show-annotation-btn="showAnnotationBtn"
+      :has-selection="hasSelection"
+      :has-selected-annotation="selectedAnnotationId !== null"
+      :annotations-visible="annotationsVisible"
       @preview-only="emit('preview-only')"
       @import-folder="emit('import-folder')"
       @import-mkdocs="emit('import-mkdocs')"
@@ -15,6 +19,9 @@
       @open-settings="showSettings = true"
       @close-preview="emit('close-preview')"
       @add-bookmark="emit('add-bookmark')"
+      @add-annotation-type="addAnnotationType"
+      @delete-annotation="handleDeleteSelectedAnnotation"
+      @toggle-annotations="$emit('toggle-annotations')"
     />
     <div class="preview-body">
       <div class="preview-content-wrapper">
@@ -22,7 +29,7 @@
           ref="previewRef"
           class="preview-content markdown-body"
           v-html="html"
-          @click.stop="handleLinkClick"
+          @click="handleLinkClick"
         />
       </div>
     </div>
@@ -32,11 +39,36 @@
       @close="showSettings = false"
       @save="handleSettingsSave"
     />
+    <Teleport to="body">
+      <div v-if="annoMenuVisible" class="anno-context-menu" :style="annoMenuStyle" @click.stop>
+        <template v-if="annoMenuMode === 'selection'">
+          <div class="menu-item" @click="addAnnotationType('highlight')">高亮</div>
+          <div class="menu-item" @click="addAnnotationType('underline')">下划线</div>
+          <div class="menu-item" @click="addAnnotationType('wavy')">波浪线</div>
+          <div class="menu-item" @click="addAnnotationType('comment')">批注</div>
+        </template>
+        <template v-else>
+          <div class="menu-item menu-danger" @click="deleteAnnoFromMenu">删除标注</div>
+        </template>
+      </div>
+    </Teleport>
+    <Teleport to="body">
+      <div v-if="commentDialogVisible" class="comment-overlay" @click="cancelComment">
+        <div class="comment-dialog" @click.stop>
+          <div class="comment-title">添加批注</div>
+          <textarea v-model="commentInput" class="comment-textarea" placeholder="输入批注内容..." rows="3"></textarea>
+          <div class="comment-btns">
+            <button class="comment-btn cancel" @click="cancelComment">取消</button>
+            <button class="comment-btn confirm" @click="confirmComment">确定</button>
+          </div>
+        </div>
+      </div>
+    </Teleport>
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted, onUpdated, watch, nextTick } from 'vue'
+import { ref, inject, onMounted, onUnmounted, onUpdated, watch, nextTick } from 'vue'
 import mermaid from 'mermaid'
 import wavedrom from 'wavedrom'
 import JSON5 from 'json5'
@@ -52,10 +84,14 @@ import { buildRegex, type SearchOptions } from '../composables/useSearch'
 const props = defineProps<{
   html: string
   fileDir?: string | null
+  currentFilePath?: string | null
   previewOnlyMode?: boolean
   canNavigateBack?: boolean
   canNavigateForward?: boolean
   showBookmarkBtn?: boolean
+  showAnnotationBtn?: boolean
+  annotationsVisible?: boolean
+  projectPath?: string | null
   mdFiles?: MdFile[]
 }>()
 
@@ -63,6 +99,9 @@ const emit = defineEmits<{
   'preview-only': []
   'close-preview': []
   'add-bookmark': []
+  'add-annotation': [anno: { type: 'highlight' | 'underline' | 'wavy' | 'comment'; filePath: string; selectedText: string; contextBefore: string; contextAfter: string; headingId: string; comment?: string }]
+  'delete-annotation': [id: string]
+  'toggle-annotations': []
   'import-folder': []
   'import-mkdocs': []
   'export-html': []
@@ -112,6 +151,53 @@ const fontConfig = ref<FontConfig>({
   previewTheme: 'default'
 })
 
+// 标注上下文菜单状态
+const annoMenuVisible = ref(false)
+const annoMenuStyle = ref<Record<string, string>>({})
+const annoMenuMode = ref<'selection' | 'existing'>('selection')
+const annoSelectedText = ref('')
+const annoContextBefore = ref('')
+const annoContextAfter = ref('')
+const annoContextHeadingId = ref('')
+const annoExistingId = ref('')
+const annoMouseX = ref(0)
+const annoMouseY = ref(0)
+
+// 批注输入对话框
+const commentDialogVisible = ref(false)
+const commentInput = ref('')
+
+// 选中的标注 ID（用于工具栏删除按钮）
+const selectedAnnotationId = ref<string | null>(null)
+
+// 跟踪预览区文本选择状态（用于工具栏按钮状态）
+const hasSelection = ref(false)
+function updateSelectionState() {
+  const sel = window.getSelection()
+  hasSelection.value = !!(sel && !sel.isCollapsed && sel.toString().trim() &&
+    previewRef.value?.contains(sel.anchorNode))
+}
+
+// 标注数据接口
+interface AnnotationData {
+  id: string
+  type: 'highlight' | 'underline' | 'wavy' | 'comment'
+  filePath: string
+  selectedText: string
+  contextBefore: string
+  contextAfter: string
+  headingId: string
+  comment?: string
+  timestamp: number
+}
+
+// 监听 annotationsRefresh 以在新标注添加后重新渲染
+const annoRefresh = inject('annotationsRefresh', ref(0))!
+watch(annoRefresh, async () => {
+  await nextTick()
+  await applyAnnotations()
+})
+
 // 处理设置保存
 async function handleSettingsSave(config: FontConfig) {
   fontConfig.value = config
@@ -129,7 +215,10 @@ defineExpose({
   clearSearchHighlights,
   jumpToSearchResult,
   getSearchIndex: () => currentSearchIndex.value,
-  getSearchTotal: () => searchHighlights.value.length
+  getSearchTotal: () => searchHighlights.value.length,
+  applyAnnotations,
+  clearSelectedAnnotation,
+  getSelectedAnnotationId: () => selectedAnnotationId.value
 })
 
 // 高亮搜索结果
@@ -243,14 +332,14 @@ function handleLinkClick(event: MouseEvent) {
 
   // 处理外部链接（http/https）：在系统浏览器中打开
   if (href.startsWith('http://') || href.startsWith('https://')) {
-    event.preventDefault()
+    event.preventDefault(); event.stopPropagation()
     open(href)
     return
   }
 
   // 处理锚点链接 #section
   if (href.startsWith('#')) {
-    event.preventDefault()
+    event.preventDefault(); event.stopPropagation()
     const targetId = href.slice(1)
     const targetElement = previewRef.value?.querySelector(`#${CSS.escape(targetId)}`)
     if (targetElement) {
@@ -267,7 +356,7 @@ function handleLinkClick(event: MouseEvent) {
   // 检查 href 是否包含 .md 文件
   const isMdLink = /\.md(?:#|$)/.test(href) || href.endsWith('.md')
   if (props.fileDir && isMdLink) {
-    event.preventDefault()
+    event.preventDefault(); event.stopPropagation()
 
     // 解析文件路径和锚点
     const hashIndex = href.indexOf('#')
@@ -283,6 +372,339 @@ function handleLinkClick(event: MouseEvent) {
     emit('navigate-to-file', filePath, anchor)
     return
   }
+}
+
+// ── 标注上下文菜单 ──────────────────────────────────────
+
+function showAnnoContextMenu(e: MouseEvent) {
+  e.preventDefault()
+  // 检查点击是否在已有标注元素上
+  const target = e.target as HTMLElement
+  const annoEl = target.closest('[data-anno-id]') as HTMLElement | null
+
+  annoMouseX.value = e.clientX
+  annoMouseY.value = e.clientY
+
+  if (annoEl) {
+    // 已有标注：显示删除菜单
+    const id = annoEl.getAttribute('data-anno-id')
+    if (id) {
+      annoExistingId.value = id
+      annoMenuMode.value = 'existing'
+      showAnnoMenuAt(e.clientX, e.clientY)
+    }
+    return
+  }
+
+  // 选区菜单
+  if (!captureCurrentSelection()) return
+  annoMenuMode.value = 'selection'
+  console.log('[anno] context menu: text="%s" before="%s" after="%s" heading="%s"',
+    annoSelectedText.value, annoContextBefore.value, annoContextAfter.value, annoContextHeadingId.value)
+  showAnnoMenuAt(e.clientX, e.clientY)
+}
+
+// 捕获当前选区（供右键菜单和工具栏按钮共用）
+function captureCurrentSelection(): boolean {
+  const sel = window.getSelection()
+  if (!sel || sel.isCollapsed || !sel.toString().trim()) return false
+  const range = sel.getRangeAt(0)
+  if (!previewRef.value?.contains(range.commonAncestorContainer)) return false
+
+  const text = sel.toString().trim()
+  if (!text) return false
+
+  const node = range.startContainer
+  const nodeText = node.textContent || ''
+  const startIdx = nodeText.indexOf(text)
+  let before = ''
+  let after = ''
+  if (startIdx >= 0) {
+    before = nodeText.substring(Math.max(0, startIdx - 50), startIdx)
+    after = nodeText.substring(startIdx + text.length, Math.min(nodeText.length, startIdx + text.length + 50))
+  }
+
+  let headingId = ''
+  let el: HTMLElement | null = node.parentElement
+  while (el && el !== previewRef.value && !headingId) {
+    let sib: HTMLElement | null = el
+    while (sib) {
+      if (/^H[1-4]$/.test(sib.tagName) && sib.id) {
+        headingId = sib.id; break
+      }
+      sib = sib.previousElementSibling as HTMLElement | null
+    }
+    el = el.parentElement
+  }
+
+  annoSelectedText.value = text
+  annoContextBefore.value = before
+  annoContextAfter.value = after
+  annoContextHeadingId.value = headingId
+  return true
+}
+
+function showAnnoMenuAt(x: number, y: number) {
+  // 先设置初始位置再显示，避免首帧出现在 (0,0)
+  annoMenuStyle.value = { position: 'fixed', left: x + 'px', top: y + 'px', zIndex: '10000' }
+  annoMenuVisible.value = true
+  nextTick(() => {
+    const menu = document.querySelector('.anno-context-menu') as HTMLElement | null
+    if (!menu) return
+    const vw = window.innerWidth
+    const vh = window.innerHeight
+    const mw = menu.offsetWidth
+    const mh = menu.offsetHeight
+    let left = x
+    let top = y
+    if (x + mw > vw) left = Math.max(0, vw - mw - 8)
+    if (y + mh > vh) top = Math.max(0, vh - mh - 8)
+    if (left !== x || top !== y) {
+      annoMenuStyle.value = { position: 'fixed', left: left + 'px', top: top + 'px', zIndex: '10000' }
+    }
+    document.addEventListener('click', hideAnnoMenu)
+  })
+}
+
+function hideAnnoMenu() {
+  annoMenuVisible.value = false
+  document.removeEventListener('click', hideAnnoMenu)
+}
+
+async function addAnnotationType(type: 'highlight' | 'underline' | 'wavy' | 'comment') {
+  hideAnnoMenu()
+  if (!captureCurrentSelection()) return
+  if (type === 'comment') {
+    commentInput.value = ''
+    commentDialogVisible.value = true
+    return
+  }
+  emitAddAnnotation(type, '')
+}
+
+function emitAddAnnotation(type: 'highlight' | 'underline' | 'wavy' | 'comment', comment: string) {
+  const filePath = (props.currentFilePath || props.fileDir || '').replace(/\\/g, '/')
+  console.log('[anno] emit add-annotation: type=%s filePath=%s text="%s"', type, filePath, annoSelectedText.value)
+  emit('add-annotation', {
+    type,
+    filePath,
+    selectedText: annoSelectedText.value,
+    contextBefore: annoContextBefore.value,
+    contextAfter: annoContextAfter.value,
+    headingId: annoContextHeadingId.value,
+    comment: comment || undefined,
+  })
+}
+
+function confirmComment() {
+  commentDialogVisible.value = false
+  emitAddAnnotation('comment', commentInput.value.trim())
+}
+
+function cancelComment() {
+  commentDialogVisible.value = false
+}
+
+async function deleteAnnoFromMenu() {
+  hideAnnoMenu()
+  if (annoExistingId.value) {
+    emit('delete-annotation', annoExistingId.value)
+    selectedAnnotationId.value = null
+  }
+}
+
+// 点击标注元素选中
+function handleAnnoClick(e: MouseEvent) {
+  const target = e.target as HTMLElement
+  const annoEl = target.closest('[data-anno-id]') as HTMLElement | null
+  if (!annoEl) {
+    // 点击非标注区域，清除选中
+    clearSelectedAnnotation()
+    return
+  }
+  const id = annoEl.getAttribute('data-anno-id')
+  if (id) {
+    // 清除之前的选中
+    const all = previewRef.value?.querySelectorAll('[data-anno-id]')
+    all?.forEach(el => el.classList.remove('anno-selected'))
+    annoEl.classList.add('anno-selected')
+    selectedAnnotationId.value = id
+  }
+}
+
+function clearSelectedAnnotation() {
+  const all = previewRef.value?.querySelectorAll('.anno-selected')
+  all?.forEach(el => el.classList.remove('anno-selected'))
+  selectedAnnotationId.value = null
+}
+
+function handleDeleteSelectedAnnotation() {
+  if (selectedAnnotationId.value) {
+    emit('delete-annotation', selectedAnnotationId.value)
+    selectedAnnotationId.value = null
+  }
+}
+
+// ── 标注渲染 ────────────────────────────────────────────
+
+// 加载当前项目的所有标注
+async function loadAnnotations(): Promise<AnnotationData[]> {
+  if (!props.projectPath || !props.currentFilePath) return []
+  const configPath = props.projectPath.replace(/\\/g, '/') + '/.markrefine.json'
+  const fp = props.currentFilePath.replace(/\\/g, '/')
+  console.log('[anno] loadAnnotations: configPath=%s fp=%s', configPath, fp)
+  try {
+    const { readTextFile } = await import('@tauri-apps/plugin-fs')
+    const raw = await readTextFile(configPath)
+    const config = JSON.parse(raw)
+    const allAnnotations = (config.annotations || []) as AnnotationData[]
+    const matched = allAnnotations.filter(a => a.filePath === fp)
+    console.log('[anno] loadAnnotations: total=%d matched=%d for fp=%s', allAnnotations.length, matched.length, fp)
+    return matched
+  } catch {
+    console.log('[anno] loadAnnotations: file not found at %s', configPath)
+    return []
+  }
+}
+
+// 应用标注到预览 DOM
+let applyLock = false
+async function applyAnnotations() {
+  if (!previewRef.value) return
+  if (!props.currentFilePath) return  // 文件未加载
+  if (applyLock) return
+  applyLock = true
+  try {
+    // 总是先清除旧的标注包裹元素，还原文本节点
+    removeAllAnnotationWrappers()
+    await nextTick()
+
+    if (!props.annotationsVisible) return
+
+    const annotations = await loadAnnotations()
+    console.log('[anno] applyAnnotations: loaded %d annotations for current file', annotations.length)
+    if (annotations.length === 0) return
+
+    // 收集所有文本节点
+    const textNodes: Text[] = []
+    const walker = document.createTreeWalker(previewRef.value, NodeFilter.SHOW_TEXT)
+    while (walker.nextNode()) textNodes.push(walker.currentNode as Text)
+
+    for (const anno of annotations) {
+      try {
+        applySingleAnnotation(anno, textNodes)
+      } catch (e) {
+        console.error('[anno] error applying annotation:', e)
+      }
+    }
+  } finally {
+    applyLock = false
+  }
+}
+
+function removeAllAnnotationWrappers() {
+  if (!previewRef.value) return
+  const wrappers = previewRef.value.querySelectorAll('.anno-highlight, .anno-underline, .anno-wavy, .anno-comment')
+  wrappers.forEach(w => {
+    const parent = w.parentNode
+    if (parent) {
+      while (w.firstChild) parent.insertBefore(w.firstChild, w)
+      parent.removeChild(w)
+    }
+  })
+}
+
+function applySingleAnnotation(anno: AnnotationData, textNodes: Text[]) {
+  const headingEl = anno.headingId ? previewRef.value?.querySelector(`#${CSS.escape(anno.headingId)}`) : null
+  const scopeNodes = headingEl ? filterNodesInScope(textNodes, headingEl as HTMLElement) : textNodes
+
+  // 连接所有作用域内文本节点的内容，记录每个节点的偏移范围
+  const fullText = scopeNodes.map(n => n.textContent || '').join('')
+  const nodeRanges: { node: Text; start: number; end: number }[] = []
+  let pos = 0
+  for (const n of scopeNodes) {
+    const len = (n.textContent || '').length
+    if (len > 0) {
+      nodeRanges.push({ node: n, start: pos, end: pos + len })
+      pos += len
+    }
+  }
+
+  // 首先用上下文精确匹配
+  const searchPattern = anno.contextBefore + anno.selectedText + anno.contextAfter
+  let matchIdx = fullText.indexOf(searchPattern)
+  let matchStart: number
+  let matchLen: number
+
+  if (matchIdx >= 0) {
+    matchStart = matchIdx + anno.contextBefore.length
+    matchLen = anno.selectedText.length
+  } else {
+    // 退化为简单文本匹配
+    matchIdx = fullText.indexOf(anno.selectedText)
+    if (matchIdx >= 0) {
+      matchStart = matchIdx
+      matchLen = anno.selectedText.length
+    } else {
+      console.log('[anno] no match for text="%s" in full scope (len=%d)', anno.selectedText, fullText.length)
+      return
+    }
+  }
+
+  // 根据偏移找到对应的文本节点并包裹
+  const matchEnd = matchStart + matchLen
+  for (const r of nodeRanges) {
+    if (matchStart >= r.end || matchEnd <= r.start) continue  // 不在此节点
+    const localStart = Math.max(0, matchStart - r.start)
+    const localLen = Math.min(r.end, matchEnd) - r.start - localStart
+    if (localLen > 0 && r.node.parentNode && (r.node.textContent?.length || 0) >= localStart + localLen) {
+      wrapTextNode(r.node, localStart, localLen, anno)
+    }
+  }
+}
+
+function filterNodesInScope(nodes: Text[], headingEl: HTMLElement): Text[] {
+  const result: Text[] = []
+  for (const node of nodes) {
+    // compareDocumentPosition: FOLLOWING(4) = 在 heading 之后, CONTAINED_BY(16) = 在 heading 内部
+    const pos = headingEl.compareDocumentPosition(node)
+    if (pos & (Node.DOCUMENT_POSITION_FOLLOWING | Node.DOCUMENT_POSITION_CONTAINED_BY)) {
+      // 遇到下一个标题时停止
+      if (node.parentElement && /^H[1-4]$/.test(node.parentElement.tagName) && node.parentElement !== headingEl) {
+        break
+      }
+      if (node.textContent?.trim()) {
+        result.push(node)
+      }
+    }
+  }
+  return result
+}
+
+function wrapTextNode(node: Text, offset: number, length: number, anno: AnnotationData) {
+  if (!node.parentNode || node.textContent!.length < offset + length) return
+
+  const before = node.splitText(offset)
+  before.splitText(length)
+
+  const wrapper = document.createElement('span')
+  wrapper.setAttribute('data-anno-id', anno.id)
+  wrapper.setAttribute('data-anno-type', anno.type)
+
+  const classMap: Record<string, string> = {
+    highlight: 'anno-highlight',
+    underline: 'anno-underline',
+    wavy: 'anno-wavy',
+    comment: 'anno-comment',
+  }
+  wrapper.className = classMap[anno.type] || 'anno-highlight'
+
+  if (anno.comment) {
+    wrapper.title = anno.comment
+  }
+
+  node.parentNode.insertBefore(wrapper, before)
+  wrapper.appendChild(before)
 }
 
 // 初始化 Mermaid 和字体配置
@@ -301,6 +723,16 @@ onMounted(async () => {
 
   // 初始化 tabbed 标签页点击事件
   initTabbedClickHandler()
+  // 标注事件
+  initAnnotationHandlers()
+})
+
+onUnmounted(() => {
+  if (previewRef.value) {
+    previewRef.value.removeEventListener('contextmenu', showAnnoContextMenu)
+    previewRef.value.removeEventListener('click', handleAnnoClick)
+  }
+  document.removeEventListener('click', hideAnnoMenu)
 })
 
 // 初始化 tabbed 标签页点击事件处理
@@ -332,6 +764,22 @@ function initTabbedClickHandler() {
         b.classList.remove('active')
       }
     })
+  })
+}
+
+// 初始化标注事件处理
+function initAnnotationHandlers() {
+  if (!previewRef.value) return
+
+  // 右键菜单
+  previewRef.value.addEventListener('contextmenu', showAnnoContextMenu)
+  // 点击选中
+  previewRef.value.addEventListener('click', handleAnnoClick)
+  // 选择状态跟踪
+  previewRef.value.addEventListener('mouseup', updateSelectionState)
+  document.addEventListener('selectionchange', () => {
+    // 延迟检查，确保 selection 已更新
+    setTimeout(updateSelectionState, 0)
   })
 }
 
@@ -438,13 +886,22 @@ watch(() => props.html, async () => {
   await renderPlantuml()
   renderWavedrom()
   fixImagePaths()
+  await nextTick()
+  await applyAnnotations()
 }, { immediate: true })
+
+watch(() => props.annotationsVisible, async () => {
+  await nextTick()
+  await applyAnnotations()
+})
 
 onUpdated(async () => {
   await renderMermaid()
   await renderPlantuml()
   renderWavedrom()
   fixImagePaths()
+  await nextTick()
+  await applyAnnotations()
 })
 </script>
 
@@ -493,5 +950,118 @@ onUpdated(async () => {
   padding: 1px 4px;
   border-radius: 3px;
   font-weight: 500;
+}
+
+/* 标注样式 */
+:deep(.anno-highlight) {
+  background-color: #fef08a;
+  border-radius: 2px;
+  padding: 1px 0;
+}
+
+:deep(.anno-underline) {
+  text-decoration: underline;
+  text-decoration-color: #3b82f6;
+  text-underline-offset: 2px;
+}
+
+:deep(.anno-wavy) {
+  text-decoration: underline wavy #dc2626;
+  text-underline-offset: 4px;
+}
+
+:deep(.anno-comment) {
+  background-color: #fef08a;
+  border-bottom: 2px dotted #f59e0b;
+  border-radius: 2px;
+  padding: 1px 0;
+}
+
+:deep(.anno-selected) {
+  outline: 2px solid #3b82f6;
+  outline-offset: 1px;
+  border-radius: 2px;
+}
+</style>
+
+<style>
+.anno-context-menu {
+  background: #fff;
+  border: 1px solid #e2e8f0;
+  border-radius: 6px;
+  box-shadow: 0 4px 12px rgba(0,0,0,.12);
+  min-width: 100px;
+  padding: 4px 0;
+}
+.anno-context-menu .menu-item {
+  padding: 6px 14px;
+  font-size: 12px;
+  color: #374151;
+  cursor: pointer;
+}
+.anno-context-menu .menu-item:hover {
+  background: #f1f5f9;
+}
+.anno-context-menu .menu-danger {
+  color: #dc2626;
+}
+.anno-context-menu .menu-danger:hover {
+  background: #fee2e2;
+}
+.comment-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0,0,0,.3);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 10001;
+}
+.comment-dialog {
+  background: #fff;
+  border-radius: 8px;
+  padding: 20px 24px;
+  min-width: 320px;
+  box-shadow: 0 8px 24px rgba(0,0,0,.15);
+}
+.comment-title {
+  font-size: 14px;
+  font-weight: 600;
+  color: #1e293b;
+  margin-bottom: 12px;
+}
+.comment-textarea {
+  width: 100%;
+  padding: 8px 10px;
+  border: 1px solid #e2e8f0;
+  border-radius: 4px;
+  font-size: 13px;
+  outline: none;
+  resize: vertical;
+  box-sizing: border-box;
+  font-family: inherit;
+}
+.comment-textarea:focus {
+  border-color: #3b82f6;
+}
+.comment-btns {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 12px;
+}
+.comment-btn {
+  padding: 5px 16px;
+  border: 1px solid #e2e8f0;
+  border-radius: 4px;
+  font-size: 12px;
+  cursor: pointer;
+  background: #fff;
+  color: #374151;
+}
+.comment-btn.confirm {
+  background: #3b82f6;
+  color: #fff;
+  border-color: #3b82f6;
 }
 </style>

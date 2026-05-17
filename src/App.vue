@@ -32,6 +32,8 @@
         @close-folder="fileMgmt.closeProject"
         @add-bookmark="handleAddBookmark"
         @jump-bookmark="handleJumpBookmark"
+        @delete-annotation="handleDeleteAnnotation"
+        @jump-annotation="handleJumpAnnotation"
         @update:active-tab="(t: string) => leftActiveTab = t as IconId"
         @move-icon="(id: string, to: 'left'|'right') => moveIcon(id, to)" @reorder-icons="(s: 'left'|'right', f: number, t: number) => reorderIcons(s, f, t)"
       />
@@ -76,16 +78,22 @@
         ref="previewRef"
         :html="renderedHtml"
         :file-dir="fileMgmt.currentFileDir.value"
+        :current-file-path="fileMgmt.currentFilePath.value"
         :preview-only-mode="previewOnlyMode"
         :can-navigate-back="nav.canNavigateBack.value"
         :can-navigate-forward="nav.canNavigateForward.value"
         :show-bookmark-btn="fileMgmt.workState.value !== 'file'"
+        :show-annotation-btn="fileMgmt.workState.value === 'mkdocs'"
+        :annotations-visible="annotationsVisible"
+        :project-path="fileMgmt.workState.value === 'mkdocs' ? fileMgmt.importedFolderPath.value : null"
         :md-files="fileMgmt.mdFiles.value"
         class="preview-pane"
         :style="previewPaneStyle"
         @preview-only="togglePreviewOnly"
         @close-preview="showPreview = false"
         @add-bookmark="handleAddBookmark"
+        @add-annotation="handleAddAnnotation"
+        @delete-annotation="handleDeleteAnnotation"
         @import-folder="importFolder"
         @import-mkdocs="importMkdocs"
         @export-html="exportHTML"
@@ -94,6 +102,7 @@
         @navigate-to-anchor="nav.navigateToAnchor"
         @navigate-back="nav.navigateBack"
         @navigate-forward="nav.navigateForward"
+        @toggle-annotations="annotationsVisible = !annotationsVisible"
         @font-config-change="handleFontConfigChange"
       />
       <div v-if="!showWelcome" class="splitter outline-splitter" />
@@ -199,6 +208,9 @@ const { handleError } = useErrorHandling()
 const { applyTheme } = useTheme()
 const bookmarksRefresh = ref(0)
 provide('bookmarksRefresh', bookmarksRefresh)
+const annotationsRefresh = ref(0)
+provide('annotationsRefresh', annotationsRefresh)
+const annotationsVisible = ref(true)
 
 const fileMgmt = useFileManagement()
 
@@ -216,14 +228,14 @@ const editorRef = ref<InstanceType<typeof Editor>>()
 const previewRef = ref<InstanceType<typeof Preview>>()
 
 // 侧边栏图标拖拽：管理图标归属
-type IconId = 'files' | 'search' | 'outline' | 'bookmarks'
-const leftIcons = ref<IconId[]>(['files', 'search', 'bookmarks'])
+type IconId = 'files' | 'search' | 'outline' | 'bookmarks' | 'annotations'
+const leftIcons = ref<IconId[]>(['files', 'search', 'bookmarks', 'annotations'])
 const rightIcons = ref<IconId[]>(['outline'])
 const leftActiveTab = ref<IconId>('files')
 const rightActiveTab = ref<IconId>('outline')
 
 function moveIcon(id: string, toSide: 'left' | 'right') {
-  if (!['files', 'search', 'outline', 'bookmarks'].includes(id)) return
+  if (!['files', 'search', 'outline', 'bookmarks', 'annotations'].includes(id)) return
   const fromList = toSide === 'left' ? rightIcons : leftIcons
   const toList = toSide === 'left' ? leftIcons : rightIcons
   // 确保图标不在目标侧（防止重复）
@@ -328,6 +340,99 @@ function handleJumpBookmark(item: { filePath: string; anchorId: string; scrollRa
     doScroll()
   } else {
     setTimeout(doScroll, 300)
+  }
+}
+
+interface Annotation {
+  id: string
+  type: 'highlight' | 'underline' | 'wavy' | 'comment'
+  filePath: string
+  selectedText: string
+  contextBefore: string
+  contextAfter: string
+  headingId: string
+  comment?: string
+  timestamp: number
+}
+
+async function getAnnotationsConfig(): Promise<{ config: any; configPath: string }> {
+  const projectPath = fileMgmt.importedFolderPath.value
+  if (!projectPath) return { config: {}, configPath: '' }
+  const configPath = projectPath.replace(/\\/g, '/') + '/.markrefine.json'
+  let config: any = {}
+  try {
+    const { readTextFile } = await import('@tauri-apps/plugin-fs')
+    const raw = await readTextFile(configPath)
+    config = JSON.parse(raw)
+  } catch { /* file doesn't exist yet */ }
+  return { config, configPath }
+}
+
+async function handleAddAnnotation(anno: Omit<Annotation, 'id' | 'timestamp'>) {
+  console.log('[anno] handleAddAnnotation called: type=%s filePath=%s text="%s"', anno.type, anno.filePath, anno.selectedText)
+  const { config, configPath } = await getAnnotationsConfig()
+  if (!configPath) { console.log('[anno] no configPath, aborting'); return }
+
+  const annotations: Annotation[] = config.annotations || []
+  // 去重：同文件+同文本+同类型不重复添加
+  if (annotations.some(a => a.filePath === anno.filePath && a.selectedText === anno.selectedText && a.type === anno.type)) {
+    console.log('[anno] duplicate, skipping')
+    return
+  }
+
+  annotations.push({
+    ...anno,
+    id: Date.now().toString(36) + Math.random().toString(36).slice(2, 6),
+    timestamp: Date.now(),
+  })
+  config.annotations = annotations
+  try {
+    const { writeTextFile } = await import('@tauri-apps/plugin-fs')
+    await writeTextFile(configPath, JSON.stringify(config, null, 2))
+    console.log('[anno] saved to %s, total: %d', configPath, annotations.length)
+  } catch { /* ignore */ }
+  annotationsRefresh.value++
+}
+
+async function handleDeleteAnnotation(id: string) {
+  const { config, configPath } = await getAnnotationsConfig()
+  if (!configPath) return
+
+  const annotations: Annotation[] = config.annotations || []
+  config.annotations = annotations.filter(a => a.id !== id)
+  try {
+    const { writeTextFile } = await import('@tauri-apps/plugin-fs')
+    await writeTextFile(configPath, JSON.stringify(config, null, 2))
+  } catch { /* ignore */ }
+  annotationsRefresh.value++
+}
+
+function handleJumpAnnotation(annotation: Annotation) {
+  const sameFile = fileMgmt.currentFilePath.value === annotation.filePath
+  if (!sameFile) {
+    if (fileMgmt.workState.value === 'mkdocs' || fileMgmt.workState.value === 'folder') {
+      fileMgmt.openFileFromTreeNoHistory(annotation.filePath)
+    }
+  }
+  const doScroll = () => {
+    // 使用 headingId 约束搜索范围，然后滚动到匹配的标记元素
+    const previewEl = previewRef.value?.getPreviewRef?.()
+    if (!previewEl) return
+    const markers = previewEl.querySelectorAll('.anno-highlight, .anno-underline, .anno-wavy, .anno-comment')
+    for (const m of markers) {
+      if (m.getAttribute('data-anno-id') === annotation.id) {
+        m.scrollIntoView({ behavior: 'smooth', block: 'center' })
+        // 高亮选中状态
+        markers.forEach(x => x.classList.remove('anno-selected'))
+        m.classList.add('anno-selected')
+        return
+      }
+    }
+  }
+  if (sameFile) {
+    doScroll()
+  } else {
+    setTimeout(doScroll, 400)
   }
 }
 
@@ -753,9 +858,10 @@ async function restoreWorkspace() {
     if (state.sidebarWidth) sidebarWidth.value = state.sidebarWidth
     if (state.editorWidth) editorWidth.value = state.editorWidth
     if (state.leftIcons?.length || state.rightIcons?.length) {
-      const valid = (i: string): i is IconId => ['files', 'search', 'outline', 'bookmarks'].includes(i)
-      const left = (state.leftIcons || ['files', 'search', 'bookmarks']).filter(valid) as IconId[]
+      const valid = (i: string): i is IconId => ['files', 'search', 'outline', 'bookmarks', 'annotations'].includes(i)
+      const left = (state.leftIcons || ['files', 'search', 'bookmarks', 'annotations']).filter(valid) as IconId[]
       if (!left.includes('bookmarks')) left.push('bookmarks')
+      if (!left.includes('annotations')) left.push('annotations')
       leftIcons.value = left
       rightIcons.value = (state.rightIcons || ['outline']).filter(valid).filter(i => !left.includes(i)) as IconId[]
       if (state.leftActiveTab && valid(state.leftActiveTab)) leftActiveTab.value = state.leftActiveTab as IconId

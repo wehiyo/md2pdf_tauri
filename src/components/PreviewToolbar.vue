@@ -97,17 +97,41 @@
         </div>
       </div>
     </div>
+    <!-- 标注按钮 + 书签（导出之后） -->
+    <div class="toolbar-annotations">
+      <template v-if="showAnnotationBtn">
+        <div class="nav-separator"></div>
+        <button class="toolbar-btn" :class="{ disabled: !hasSelection }" :disabled="!hasSelection" title="高亮" @click="$emit('add-annotation-type', 'highlight')">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/></svg>
+        </button>
+        <button class="toolbar-btn" :class="{ disabled: !hasSelection }" :disabled="!hasSelection" title="下划线" @click="$emit('add-annotation-type', 'underline')">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="4" y1="19" x2="20" y2="19"/><path d="M6 3v7a6 6 0 0 0 6 6 6 6 0 0 0 6-6V3"/></svg>
+        </button>
+        <button class="toolbar-btn" :class="{ disabled: !hasSelection }" :disabled="!hasSelection" title="波浪线" @click="$emit('add-annotation-type', 'wavy')">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M2 19c1.5-2 2.5-2 4 0s2.5 2 4 0 2.5-2 4 0 2.5 2 4 0 2.5-2 4 0"/></svg>
+        </button>
+        <button class="toolbar-btn" :class="{ disabled: !hasSelection }" :disabled="!hasSelection" title="批注" @click="$emit('add-annotation-type', 'comment')">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+        </button>
+        <button class="toolbar-btn" :class="{ disabled: !hasSelectedAnnotation }" :disabled="!hasSelectedAnnotation" title="删除标注" @click="$emit('delete-annotation')">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/><line x1="10" y1="11" x2="10" y2="17"/><line x1="14" y1="11" x2="14" y2="17"/></svg>
+        </button>
+        <div class="nav-separator"></div>
+        <button class="toolbar-btn" :class="{ active: !annotationsVisible }" :title="annotationsVisible ? '隐藏标注' : '显示标注'" @click="$emit('toggle-annotations')">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 3c-5 0-9 4-9 4v2c0 .5.5 1 1 1h2l1 7h10l1-7h2c.5 0 1-.5 1-1V7s-4-4-9-4z"/><line x1="9" y1="17" x2="15" y2="17"/><line x1="10" y1="21" x2="14" y2="21"/></svg>
+        </button>
+      </template>
+      <div v-if="showAnnotationBtn && showBookmarkBtn" class="nav-separator"></div>
+      <button v-if="showBookmarkBtn" class="toolbar-btn" title="添加书签" @click="$emit('add-bookmark')">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z"/></svg>
+      </button>
+    </div>
     <div class="toolbar-right">
       <button class="toolbar-btn" title="设置" @click="$emit('open-settings')">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
           <circle cx="12" cy="12" r="3"/>
           <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/>
         </svg>
-      </button>
-    </div>
-    <div class="toolbar-edge">
-      <button v-if="showBookmarkBtn" class="toolbar-btn" title="添加书签" @click="$emit('add-bookmark')">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z"/></svg>
       </button>
       <button class="toolbar-btn" title="关闭预览" @click="$emit('close-preview')">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -133,6 +157,9 @@ const emit = defineEmits<{
   'open-settings': []
   'close-preview': []
   'add-bookmark': []
+  'delete-annotation': []
+  'toggle-annotations': []
+  'add-annotation-type': [type: 'highlight' | 'underline' | 'wavy' | 'comment']
 }>()
 
 defineProps<{
@@ -140,6 +167,10 @@ defineProps<{
   canNavigateBack?: boolean
   canNavigateForward?: boolean
   showBookmarkBtn?: boolean
+  showAnnotationBtn?: boolean
+  hasSelection?: boolean
+  hasSelectedAnnotation?: boolean
+  annotationsVisible?: boolean
 }>()
 
 const dropdownOpen = ref(false)
@@ -147,12 +178,12 @@ const importDropdownOpen = ref(false)
 
 function toggleDropdown() {
   dropdownOpen.value = !dropdownOpen.value
-  importDropdownOpen.value = false  // 关闭另一个下拉菜单
+  importDropdownOpen.value = false
 }
 
 function toggleImportDropdown() {
   importDropdownOpen.value = !importDropdownOpen.value
-  dropdownOpen.value = false  // 关闭另一个下拉菜单
+  dropdownOpen.value = false
 }
 
 function importFolder() {
@@ -175,7 +206,6 @@ function exportPdf() {
   emit('export-pdf')
 }
 
-// 点击外部关闭下拉菜单
 function handleClickOutside(event: MouseEvent) {
   const dropdowns = document.querySelectorAll('.dropdown')
   let clickedInside = false
@@ -213,7 +243,7 @@ onUnmounted(() => {
 
 .toolbar-left,
 .toolbar-right,
-.toolbar-edge {
+.toolbar-annotations {
   display: flex;
   align-items: center;
   gap: 0;
@@ -251,7 +281,6 @@ onUnmounted(() => {
   font-weight: 400;
 }
 
-/* 导航按钮样式 */
 .toolbar-btn.nav-btn {
   padding: 4px 6px;
 }
@@ -275,7 +304,6 @@ onUnmounted(() => {
   color: #2563eb;
 }
 
-/* 下拉菜单样式 */
 .dropdown {
   position: relative;
 }
